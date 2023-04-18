@@ -443,7 +443,7 @@ export class Scrollbox extends chip.ChipBase {
       e.clientY
     );
     if (
-      !this._chipContext.app.renderer.plugins.interaction.hitTest(
+      !this._chipContext.app.renderer.events.rootBoundary.hitTest(
         globalPoint,
         this.container
       )
