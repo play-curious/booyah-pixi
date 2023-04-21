@@ -1,4 +1,5 @@
 import * as PIXI from "pixi.js";
+import * as _ from "underscore";
 
 import * as chip from "booyah/src/chip";
 
@@ -29,26 +30,27 @@ export class DisplayObjectChip<
 export class AnimatedSpriteChipOptions {
   loop = false;
 
+  animationName?: string;
   animationSpeed?: number;
   position?: PIXI.IPoint;
   anchor?: PIXI.IPoint;
+  scale?: PIXI.IPoint;
   rotation?: number;
   startingFrame?: number;
 }
 
 export class AnimatedSpriteChip extends chip.ChipBase {
-  private _spritesheetName: string;
   private _options: AnimatedSpriteChipOptions;
 
   private _sprite: PIXI.AnimatedSprite;
+  private _wasPlaying: boolean;
 
   constructor(
-    spritesheetName: string,
+    private readonly _spritesheet: PIXI.Spritesheet,
     options?: Partial<AnimatedSpriteChipOptions>
   ) {
     super();
 
-    this._spritesheetName = spritesheetName;
     this._options = chip.fillInOptions(
       options,
       new AnimatedSpriteChipOptions()
@@ -56,17 +58,24 @@ export class AnimatedSpriteChip extends chip.ChipBase {
   }
 
   _onActivate() {
-    const resource =
-      this._chipContext.app.loader.resources[this._spritesheetName];
-    if (!resource)
-      throw new Error(
-        `Cannot find resource for spritesheet: ${this._spritesheetName}`
-      );
+    this._wasPlaying = false;
 
-    this._sprite = new PIXI.AnimatedSprite(
-      Object.values(resource.textures) as PIXI.Texture[],
-      false
-    );
+    let textures: PIXI.Texture[];
+    if (this._options.animationName) {
+      // Use the specified animation
+      if (!_.has(this._spritesheet.animations, this._options.animationName)) {
+        throw new Error(
+          `Can't find animation "${this._options.animationName}" in spritesheet`
+        );
+      }
+
+      textures = this._spritesheet.animations[this._options.animationName];
+    } else {
+      // Take all the textures in the sheet
+      textures = Object.values(this._spritesheet.textures);
+    }
+
+    this._sprite = new PIXI.AnimatedSprite(textures, false);
     this._chipContext.container.addChild(this._sprite);
 
     if (!this._options.loop) {
@@ -75,7 +84,13 @@ export class AnimatedSpriteChip extends chip.ChipBase {
       this._sprite.onComplete = this._onAnimationComplete.bind(this);
     }
 
-    for (const prop of ["animationSpeed", "position", "anchor", "rotation"]) {
+    for (const prop of [
+      "animationSpeed",
+      "position",
+      "anchor",
+      "rotation",
+      "scale",
+    ]) {
       // @ts-ignore
       if (_.has(this._options, prop)) this._sprite[prop] = this._options[prop];
     }
@@ -87,19 +102,17 @@ export class AnimatedSpriteChip extends chip.ChipBase {
     }
   }
 
-  _onTick(tickInfo: chip.TickInfo) {
-    this._sprite.tick(tickInfo.timeSinceLastTick);
+  _onTick() {
+    this._sprite.update(this._lastTickInfo.timeSinceLastTick);
   }
 
-  onSignal(tickInfo: chip.TickInfo, signal: string) {
-    switch (signal) {
-      case "pause":
-        this._sprite.stop();
-        break;
-      case "play":
-        this._sprite.play();
-        break;
-    }
+  protected _onPause(): void {
+    this._wasPlaying = this._sprite.playing;
+    this._sprite.stop();
+  }
+
+  protected _onResume(): void {
+    if (this._wasPlaying) this._sprite.play();
   }
 
   _onTerminate() {
