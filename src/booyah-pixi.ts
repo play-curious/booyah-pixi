@@ -1,6 +1,6 @@
 import * as PIXI from "pixi.js";
 
-import * as chip from "./chip";
+import * as chip from "booyah/src/chip";
 
 export class DisplayObjectChip<
   DisplayObjectType extends PIXI.DisplayObject
