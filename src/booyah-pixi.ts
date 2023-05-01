@@ -28,21 +28,22 @@ export class DisplayObjectChip<
  - beforeTearDown
 */
 export class AnimatedSpriteChipOptions {
-  loop = false;
-
+  behaviorOnComplete: "loop" | "remove" | "keepLastFrame" = "remove";
+  behaviorOnStart: "play" | "stop" = "play";
   animationName?: string;
   animationSpeed?: number;
-  position?: PIXI.IPoint;
-  anchor?: PIXI.IPoint;
-  scale?: PIXI.IPoint;
+  position?: PIXI.IPointData | number;
+  anchor?: PIXI.IPointData | number;
+  scale?: PIXI.IPointData | number;
   rotation?: number;
+  alpha?: number;
   startingFrame?: number;
 }
 
 export class AnimatedSpriteChip extends chip.ChipBase {
   private _options: AnimatedSpriteChipOptions;
 
-  private _sprite: PIXI.AnimatedSprite;
+  private _pixiSprite: PIXI.AnimatedSprite;
   private _wasPlaying: boolean;
 
   constructor(
@@ -75,49 +76,67 @@ export class AnimatedSpriteChip extends chip.ChipBase {
       textures = Object.values(this._spritesheet.textures);
     }
 
-    this._sprite = new PIXI.AnimatedSprite(textures, false);
-    this._chipContext.container.addChild(this._sprite);
+    this._pixiSprite = new PIXI.AnimatedSprite(textures, false);
+    this._chipContext.container.addChild(this._pixiSprite);
 
-    if (!this._options.loop) {
+    if (this._options.behaviorOnComplete == "loop") {
+      this._pixiSprite.loop = true;
+    } else if (this._options.behaviorOnComplete == "keepLastFrame") {
       // PIXI.AnimatedSprite loops by default
-      this._sprite.loop = false;
-      this._sprite.onComplete = this._onAnimationComplete.bind(this);
+      this._pixiSprite.loop = false;
+    } else if (this._options.behaviorOnComplete == "remove") {
+      // PIXI.AnimatedSprite loops by default
+      this._pixiSprite.loop = false;
+      this._pixiSprite.onComplete = this._onAnimationComplete.bind(this);
     }
 
-    for (const prop of [
-      "animationSpeed",
-      "position",
-      "anchor",
-      "rotation",
-      "scale",
-    ]) {
+    // Set numerical properties
+    for (const prop of ["animationSpeed", "rotation", "alpha"]) {
       // @ts-ignore
-      if (_.has(this._options, prop)) this._sprite[prop] = this._options[prop];
+      if (_.has(this._options, prop))
+        // @ts-ignore
+        this._pixiSprite[prop] = this._options[prop];
     }
 
-    if (typeof this._options.startingFrame !== "undefined") {
-      this._sprite.gotoAndPlay(this._options.startingFrame);
-    } else {
-      this._sprite.play();
+    // Set Point properties
+    for (const prop of ["position", "anchor", "scale"]) {
+      // @ts-ignore
+      if (_.has(this._options, prop)) {
+        // @ts-ignore
+        const value = this._options[prop];
+        if (typeof value === "number") {
+          // @ts-ignore
+          this._pixiSprite[prop].set(value);
+        } else {
+          // @ts-ignore
+          this._pixiSprite[prop] = value;
+        }
+      }
+    }
+
+    this._pixiSprite.gotoAndStop(this._options.startingFrame ?? 0);
+
+    if (this._options.behaviorOnStart == "play") {
+      this._pixiSprite.play();
     }
   }
 
   _onTick() {
-    this._sprite.update(this._lastTickInfo.timeSinceLastTick);
+    this._pixiSprite.update(this._lastTickInfo.timeSinceLastTick);
   }
 
   protected _onPause(): void {
-    this._wasPlaying = this._sprite.playing;
-    this._sprite.stop();
+    this._wasPlaying = this._pixiSprite.playing;
+    this._pixiSprite.stop();
   }
 
   protected _onResume(): void {
-    if (this._wasPlaying) this._sprite.play();
+    if (this._wasPlaying) this._pixiSprite.play();
   }
 
   _onTerminate() {
-    this._chipContext.container.removeChild(this._sprite);
-    delete this._sprite;
+    this._chipContext.container.removeChild(this._pixiSprite);
+    delete this._pixiSprite;
   }
 
   private _onAnimationComplete() {
