@@ -1,4 +1,5 @@
 import * as PIXI from "pixi.js";
+import * as _ from "underscore";
 
 import * as chip from "booyah/src/chip";
 import * as geom from "booyah/src//geom";
@@ -50,7 +51,7 @@ export class Scrollbox extends chip.ChipBase {
   ) {
     super();
 
-    this.options = util.setupOptions({}, options, {
+    this.options = _.defaults({}, options, {
       content: null,
       boxWidth: 100,
       boxHeight: 100,
