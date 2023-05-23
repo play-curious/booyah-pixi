@@ -2,8 +2,9 @@ import * as PIXI from "pixi.js";
 import * as _ from "underscore";
 
 import * as chip from "booyah/src/chip";
-import * as geom from "booyah/src//geom";
-import * as util from "booyah/src/util";
+import * as geom from "booyah/src/geom";
+
+import * as booyahPixi from "booyah-pixi/src/booyahPixi";
 
 /**
  * Based on David Fig's pixi-scrollbox https://github.com/davidfig/pixi-scrollbox/, but adapted to Booyah
@@ -160,7 +161,7 @@ export class Scrollbox extends chip.ChipBase {
   // From the same function in pixi-scrollbox
   _drawScrollbars() {
     this.scrollbar.clear();
-    let options: any = {};
+    const options: any = {};
     options.left = 0;
     options.right =
       this.content.width +
@@ -400,13 +401,14 @@ export class Scrollbox extends chip.ChipBase {
   _dragMove(e: PIXI.InteractionEvent) {
     const local = this.container.toLocal(e.data.global) as PIXI.Point;
     if (
-      geom.distance(local, this.pointerDown.last) <= this.options.dragThreshold
+      booyahPixi.distance(local, this.pointerDown.last) <=
+      this.options.dragThreshold
     )
       return;
 
     this.content.interactiveChildren = false;
 
-    const scrollAmount = geom.subtract(local, this.pointerDown.last);
+    const scrollAmount = booyahPixi.subtract(local, this.pointerDown.last);
     if (!this.isScrollbarHorizontal) scrollAmount.x = 0;
     if (!this.isScrollbarVertical) scrollAmount.y = 0;
 
@@ -464,7 +466,7 @@ export class Scrollbox extends chip.ChipBase {
 
   scrollBy(amount: PIXI.Point, reason = "user") {
     this.scrollTo(
-      geom.add(this.content.position as PIXI.Point, amount),
+      booyahPixi.add(this.content.position as PIXI.Point, amount),
       reason
     );
   }
