@@ -296,4 +296,8 @@ export class AnimatedSpriteChip extends chip.ChipBase {
   private _onAnimationComplete() {
     this._outputSignal = chip.makeSignal();
   }
+
+  get pixiSprite() {
+    return this._pixiSprite;
+  }
 }
