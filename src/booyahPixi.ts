@@ -197,7 +197,7 @@ export class AnimatedSpriteChipOptions {
 export class AnimatedSpriteChip extends chip.ChipBase {
   private _options: AnimatedSpriteChipOptions;
 
-  private _pixiSprite: PIXI.AnimatedSprite;
+  private _pixiSprite?: PIXI.AnimatedSprite;
   private _wasPlaying: boolean;
 
   constructor(
@@ -276,16 +276,16 @@ export class AnimatedSpriteChip extends chip.ChipBase {
   }
 
   _onTick() {
-    this._pixiSprite.update(this._lastTickInfo.timeSinceLastTick);
+    this._pixiSprite!.update(this._lastTickInfo.timeSinceLastTick);
   }
 
   protected _onPause(): void {
-    this._wasPlaying = this._pixiSprite.playing;
-    this._pixiSprite.stop();
+    this._wasPlaying = this._pixiSprite!.playing;
+    this._pixiSprite!.stop();
   }
 
   protected _onResume(): void {
-    if (this._wasPlaying) this._pixiSprite.play();
+    if (this._wasPlaying) this._pixiSprite!.play();
   }
 
   _onTerminate() {
