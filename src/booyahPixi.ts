@@ -194,6 +194,8 @@ export class AnimatedSpriteChipOptions {
   behaviorOnStart: "play" | "stop" = "play";
   animationName?: string;
   animationSpeed?: number;
+  // If provided, will calculate the animation speed to achieve this number of frames-per-second
+  fps?: number;
   position?: PIXI.IPointData | number;
   anchor?: PIXI.IPointData | number;
   scale?: PIXI.IPointData | number;
@@ -226,19 +228,44 @@ export class AnimatedSpriteChip extends chip.ChipBase {
     let textures: PIXI.Texture[];
     if (this._options.animationName) {
       // Use the specified animation
-      if (!_.has(this._spritesheet.animations, this._options.animationName)) {
+      if (
+        !_.has(this._spritesheet.data.animations, this._options.animationName)
+      ) {
         throw new Error(
           `Can't find animation "${this._options.animationName}" in spritesheet`
         );
       }
 
-      textures = this._spritesheet.animations[this._options.animationName];
+      if (this._spritesheet.linkedSheets.length === 0) {
+        // PIXI will have loaded the textures directly into the spritesheet object
+        textures = this._spritesheet.animations[this._options.animationName];
+      } else {
+        // Assemble textures from the linked sheets
+        const allSheets = [
+          this._spritesheet,
+          ...this._spritesheet.linkedSheets,
+        ];
+        textures = this._spritesheet.data.animations![
+          this._options.animationName
+        ].map((imageName) => {
+          // Linear search for the texture
+          for (const sheet of allSheets) {
+            if (imageName in sheet.textures) return sheet.textures[imageName];
+          }
+
+          throw new Error(
+            `Cannot find image "${imageName}" needed for animation "${this._options.animationName}"`
+          );
+        });
+      }
     } else {
       // Take all the textures in the sheet
       textures = Object.values(this._spritesheet.textures);
     }
 
+    // Don't have the sprite auto-update
     this._pixiSprite = new PIXI.AnimatedSprite(textures, false);
+
     this._chipContext.container.addChild(this._pixiSprite);
 
     if (this._options.behaviorOnComplete == "loop") {
@@ -276,6 +303,15 @@ export class AnimatedSpriteChip extends chip.ChipBase {
       }
     }
 
+    if (_.has(this._options, "fps")) {
+      if (_.has(this._options, "animationSpeed"))
+        throw new Error(
+          `Don't specify both "animationSpeed" and "fps" options`
+        );
+
+      this._pixiSprite.animationSpeed = this._options.fps! / 1000;
+    }
+
     this._pixiSprite.gotoAndStop(this._options.startingFrame ?? 0);
 
     if (this._options.behaviorOnStart == "play") {
@@ -302,7 +338,7 @@ export class AnimatedSpriteChip extends chip.ChipBase {
   }
 
   private _onAnimationComplete() {
-    this._outputSignal = chip.makeSignal();
+    this.terminate();
   }
 
   get pixiSprite() {
