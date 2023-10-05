@@ -202,6 +202,7 @@ export class AnimatedSpriteChipOptions {
   rotation?: number;
   alpha?: number;
   startingFrame?: number;
+  prepare?: boolean;
 }
 
 export class AnimatedSpriteChip extends chip.ChipBase {
@@ -209,6 +210,7 @@ export class AnimatedSpriteChip extends chip.ChipBase {
 
   private _pixiSprite?: PIXI.AnimatedSprite;
   private _wasPlaying: boolean;
+  private _wasAdded?: boolean;
 
   constructor(
     private readonly _spritesheet: PIXI.Spritesheet,
@@ -265,6 +267,20 @@ export class AnimatedSpriteChip extends chip.ChipBase {
 
     // Don't have the sprite auto-update
     this._pixiSprite = new PIXI.AnimatedSprite(textures, false);
+
+    // If requested, use the PIXI Prepare plugin to make sure the animation is loaded before adding it to the stage
+    if (this._options.prepare) {
+      this._wasAdded = false;
+      this._chipContext.app.renderer.prepare.upload(this._pixiSprite, () => {
+        if (this._state === "inactive") return;
+
+        this._chipContext.container.addChild(this._pixiSprite);
+        this._wasAdded = true;
+      });
+    } else {
+      this._chipContext.container.addChild(this._pixiSprite);
+      this._wasAdded = true;
+    }
 
     this._chipContext.container.addChild(this._pixiSprite);
 
@@ -333,7 +349,10 @@ export class AnimatedSpriteChip extends chip.ChipBase {
   }
 
   _onTerminate() {
-    this._chipContext.container.removeChild(this._pixiSprite);
+    if (this._wasAdded) {
+      this._chipContext.container.removeChild(this._pixiSprite);
+      this._wasAdded = false;
+    }
     delete this._pixiSprite;
   }
 
