@@ -86,6 +86,8 @@ export class Dj extends chip.ChipBase {
 
     this._getSoundResource(this._playingMusic.name).volume =
       this._playingMusic.volumeScale * this._musicChannelVolume;
+
+    this.emit("change:musicChannelVolume", value);
   }
 
   async playMusic(name: string, options?: Partial<PlayingMusicOptions>) {
@@ -204,6 +206,8 @@ export class Dj extends chip.ChipBase {
       this._getSoundResource(name).volume =
         this._fxChannelVolume * this._playingFx[name].volumeScale;
     }
+
+    this.emit("change:fxChannelVolume", value);
   }
 
   private _getSoundResource(name: string): sound.Sound {
