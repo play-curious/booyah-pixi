@@ -13,13 +13,19 @@
   },
   "license": "MIT",
   "dependencies": {
+  },
+  "devDependencies": {
+    "@pixi/sound": "^5.2.2",
+    "booyah": ">= 3",
     "eslint": "^8.23.0",
     "eslint-config-prettier": "^8.5.0",
+    "pixi.js": ">= 6",
     "typescript": "^4.9.5"
   },
   "peerDependencies": {
     "booyah": ">= 3",
-    "pixi.js": ">= 6"
+    "pixi.js": ">= 6",
+    "@pixi/sound": "^5.2.2"
   },
   "author": "Jesse Himmelstein"
 }

@@ -1,7 +1,7 @@
 import * as sound from "@pixi/sound";
 import { Assets } from "@pixi/assets";
 
-import * as chip from "booyah/src/chip";
+import * as chip from "booyah/dist/chip";
 
 export class DJOptions {
   musicChannelVolume = 0.25;

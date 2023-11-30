@@ -1,10 +1,10 @@
 import * as PIXI from "pixi.js";
 import * as _ from "underscore";
 
-import * as chip from "booyah/src/chip";
-import * as geom from "booyah/src/geom";
+import * as chip from "booyah/dist/chip";
+import * as geom from "booyah/dist/geom";
 
-import * as booyahPixi from "booyah-pixi/src/booyahPixi";
+import * as booyahPixi from "./booyahPixi";
 
 /**
  * Based on David Fig's pixi-scrollbox https://github.com/davidfig/pixi-scrollbox/, but adapted to Booyah
@@ -262,7 +262,7 @@ export class Scrollbox extends chip.ChipBase {
     }
   }
 
-  _onMove(e: PIXI.InteractionEvent) {
+  _onMove(e: PIXI.FederatedPointerEvent) {
     if (!this.pointerDown) return;
 
     if (this.pointerDown.type === "scrollbar") this._scrollbarMove(e);
@@ -270,7 +270,7 @@ export class Scrollbox extends chip.ChipBase {
     else throw new Error("no such type");
   }
 
-  _onUp(e: PIXI.InteractionEvent) {
+  _onUp(e: PIXI.FederatedPointerEvent) {
     if (!this.pointerDown) return;
 
     if (this.pointerDown.type === "scrollbar") this._scrollbarUp();
@@ -280,10 +280,10 @@ export class Scrollbox extends chip.ChipBase {
 
   /**
    * handle pointer down on scrollbar
-   * @param {PIXI.InteractionEvent} e
+   * @param {PIXI.FederatedPointerEvent} e
    * @private
    */
-  _scrollbarDown(e: PIXI.InteractionEvent) {
+  _scrollbarDown(e: PIXI.FederatedPointerEvent) {
     if (this.pointerDown) return;
 
     this.content.interactiveChildren = false;
@@ -341,10 +341,10 @@ export class Scrollbox extends chip.ChipBase {
 
   /**
    * handle pointer move on scrollbar
-   * @param {PIXI.InteractionEvent} e
+   * @param {PIXI.FederatedPointerEvent} e
    * @private
    */
-  _scrollbarMove(e: PIXI.InteractionEvent) {
+  _scrollbarMove(e: PIXI.FederatedPointerEvent) {
     if (this.pointerDown.direction === "horizontal") {
       const local = this.container.toLocal(e.data.global);
       const fraction =
@@ -378,10 +378,10 @@ export class Scrollbox extends chip.ChipBase {
 
   /**
    * handle pointer down on content
-   * @param {PIXI.InteractionEvent} e
+   * @param {PIXI.FederatedPointerEvent} e
    * @private
    */
-  _dragDown(e: PIXI.InteractionEvent) {
+  _dragDown(e: PIXI.FederatedPointerEvent) {
     if (this.pointerDown) return;
 
     const local = this.container.toLocal(e.data.global);
@@ -394,11 +394,11 @@ export class Scrollbox extends chip.ChipBase {
 
   /**
    * handle pointer move on content
-   * @param {PIXI.InteractionEvent} e
+   * @param {PIXI.FederatedPointerEvent} e
    * @private
    */
 
-  _dragMove(e: PIXI.InteractionEvent) {
+  _dragMove(e: PIXI.FederatedPointerEvent) {
     const local = this.container.toLocal(e.data.global) as PIXI.Point;
     if (
       booyahPixi.distance(local, this.pointerDown.last) <=
@@ -464,9 +464,9 @@ export class Scrollbox extends chip.ChipBase {
     e.preventDefault();
   }
 
-  scrollBy(amount: PIXI.Point, reason = "user") {
+  scrollBy(amount: PIXI.IPointData, reason = "user") {
     this.scrollTo(
-      booyahPixi.add(this.content.position as PIXI.Point, amount),
+      booyahPixi.add(this.content.position as PIXI.IPointData, amount),
       reason
     );
   }

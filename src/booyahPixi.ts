@@ -1,8 +1,8 @@
 import * as PIXI from "pixi.js";
 import * as _ from "underscore";
 
-import * as chip from "booyah/src/chip";
-import * as util from "booyah/src/util";
+import * as chip from "booyah/dist/chip";
+import * as util from "booyah/dist/util";
 
 /** Returns the vector length of a a PIXI Point */
 export function magnitude(a: PIXI.IPointData): number {
