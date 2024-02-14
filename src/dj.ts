@@ -6,6 +6,7 @@ import * as chip from "booyah/dist/chip";
 export class DJOptions {
   musicChannelVolume = 0.25;
   fxChannelVolume = 1;
+  missingAssetBehavior: "exception" | "warning" | "ignore" = "exception";
 }
 
 export class PlayingMusicOptions {
@@ -67,13 +68,13 @@ export class Dj extends chip.ChipBase {
   pauseMusic(): void {
     if (!this._playingMusic) return;
 
-    this._getSoundResource(this._playingMusic.name).pause();
+    this._getSoundResource(this._playingMusic.name)?.pause();
   }
 
   resumeMusic(): void {
     if (!this._playingMusic) return;
 
-    this._getSoundResource(this._playingMusic.name).resume();
+    this._getSoundResource(this._playingMusic.name)?.resume();
   }
 
   get musicChannelVolume(): number {
@@ -84,8 +85,11 @@ export class Dj extends chip.ChipBase {
     this._musicChannelVolume = value;
     if (!this._playingMusic) return;
 
-    this._getSoundResource(this._playingMusic.name).volume =
-      this._playingMusic.volumeScale * this._musicChannelVolume;
+    const resource = this._getSoundResource(this._playingMusic.name);
+    if (resource) {
+      resource.volume =
+        this._playingMusic.volumeScale * this._musicChannelVolume;
+    }
 
     this.emit("change:musicChannelVolume", value);
   }
@@ -127,17 +131,21 @@ export class Dj extends chip.ChipBase {
 
     console.log("stopMusic() called", this._playingMusic);
 
-    this._getSoundResource(this._playingMusic.name).stop();
+    this._getSoundResource(this._playingMusic.name)?.stop();
     delete this._playingMusic;
   }
 
   /** Returns sound duration in ms */
   getDuration(name: string): number {
-    return this._getSoundResource(name).duration * 1000;
+    const resource = this._getSoundResource(name);
+    if (!resource) return 0;
+
+    return resource.duration * 1000;
   }
 
   async playFx(name: string, options?: Partial<PlayingFxOptions>) {
     const resource = this._getSoundResource(name);
+    if (!resource) return;
 
     const completeOptions = chip.fillInOptions(options, new PlayingFxOptions());
 
@@ -165,7 +173,7 @@ export class Dj extends chip.ChipBase {
   }
 
   stopFx(name: string): void {
-    this._getSoundResource(name).stop();
+    this._getSoundResource(name)?.stop();
     delete this._playingFx[name];
   }
 
@@ -176,7 +184,7 @@ export class Dj extends chip.ChipBase {
   }
 
   pauseFx(name: string): void {
-    this._getSoundResource(name).pause();
+    this._getSoundResource(name)?.pause();
   }
 
   pauseAllFx(): void {
@@ -186,7 +194,7 @@ export class Dj extends chip.ChipBase {
   }
 
   resumeFx(name: string): void {
-    this._getSoundResource(name).resume();
+    this._getSoundResource(name)?.resume();
   }
 
   resumeAllFx(): void {
@@ -203,16 +211,24 @@ export class Dj extends chip.ChipBase {
     this._fxChannelVolume = value;
 
     for (const name in this._playingFx) {
-      this._getSoundResource(name).volume =
-        this._fxChannelVolume * this._playingFx[name].volumeScale;
+      const resource = this._getSoundResource(name);
+      if (resource) {
+        resource.volume =
+          this._fxChannelVolume * this._playingFx[name].volumeScale;
+      }
     }
 
     this.emit("change:fxChannelVolume", value);
   }
 
-  private _getSoundResource(name: string): sound.Sound {
+  private _getSoundResource(name: string): sound.Sound | undefined {
     const resource = Assets.get<sound.Sound>(name);
-    if (!resource) throw new Error(`Sound fx ${name} is not loaded`);
+    if (!resource) {
+      if (this._options.missingAssetBehavior === "exception")
+        throw new Error(`Sound asset ${name} is not loaded`);
+      else if (this._options.missingAssetBehavior === "warning")
+        console.warn(`Sound asset ${name} is not loaded`);
+    }
 
     return resource;
   }
