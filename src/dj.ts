@@ -251,7 +251,7 @@ export class PlayMusic extends chip.ChipBase {
 
   _onActivate() {
     this._chipContext.dj.playMusic(this._trackName, this._options);
-    this.terminate();
+    this._terminateSelf();
   }
 }
 
@@ -272,6 +272,6 @@ export class PlayFx extends chip.ChipBase {
 
   _onActivate() {
     this._chipContext.dj.playFx(this._trackName, this._options);
-    this.terminate();
+    this._terminateSelf();
   }
 }

@@ -272,7 +272,7 @@ export class AnimatedSpriteChip extends chip.ChipBase {
     if (this._options.prepare) {
       this._wasAdded = false;
       this._chipContext.app.renderer.prepare.upload(this._pixiSprite, () => {
-        if (this._state === "inactive") return;
+        if (this.chipState === "inactive") return;
 
         this._chipContext.container.addChild(this._pixiSprite);
         this._wasAdded = true;
@@ -357,7 +357,7 @@ export class AnimatedSpriteChip extends chip.ChipBase {
   }
 
   private _onAnimationComplete() {
-    this.terminate();
+    this._terminateSelf();
   }
 
   get pixiSprite() {
