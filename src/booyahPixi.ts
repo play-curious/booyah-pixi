@@ -165,6 +165,55 @@ export function withinDistanceOfPoints(
   return false;
 }
 
+interface PixiAppOptions {
+  /* Provide either a parent element or a canvas */
+  parentElement?: HTMLElement;
+  canvas?: PIXI.ICanvas;
+
+  appOptions?: Partial<PIXI.IApplicationOptions | PIXI.IRendererOptions>;
+  childChipOptions?: Array<chip.ActivateChildChipOptions | chip.ChipResolvable>;
+}
+
+export class PixiApp extends chip.Composite {
+  private _app: PIXI.Application;
+  private _parallel: chip.Parallel;
+
+  constructor(private readonly _options?: PixiAppOptions) {
+    super();
+  }
+
+  protected _onActivate(): void {
+    const appOptions = this._options?.appOptions || {};
+    if (this._options.canvas) {
+      appOptions.view = this._options.canvas;
+    }
+
+    this._app = new PIXI.Application(appOptions);
+    if (!this._options.canvas) {
+      const parent = this._options?.parentElement || document.body;
+      parent.appendChild(this._app.view as unknown as Node);
+    }
+
+    this._parallel = new chip.Parallel(this._options?.childChipOptions || []);
+    this._activateChildChip(this._parallel);
+  }
+
+  protected _onTerminate(): void {
+    this._app.destroy(true);
+  }
+
+  get defaultChildChipContext(): chip.ChipContextResolvable {
+    return {
+      pixiApp: this._app,
+      container: this._app.stage,
+    };
+  }
+
+  get parallel(): chip.Parallel {
+    return this._parallel;
+  }
+}
+
 export class DisplayObjectChip<
   DisplayObjectType extends PIXI.DisplayObject
 > extends chip.ChipBase {
