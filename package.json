@@ -12,7 +12,10 @@
     "prettier": "npx prettier ./src --write"
   },
   "license": "MIT",
-  "dependencies": {},
+  "dependencies": {
+    "@types/underscore": "~1.11.14",
+    "underscore": "~1.13"
+  },
   "devDependencies": {
     "eslint": "^8.23.0",
     "eslint-config-prettier": "^8.5.0",
