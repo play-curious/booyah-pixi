@@ -22,7 +22,7 @@
     "typescript": "^5.4.5"
   },
   "peerDependencies": {
-    "@pixi/sound": ">= 6 < 8",
+    "@pixi/sound": ">= 5 < 6",
     "booyah": ">= 4",
     "pixi.js": ">= 6 < 8"
   },
