@@ -1,5 +1,5 @@
 import * as sound from "@pixi/sound";
-import { Assets } from "@pixi/assets";
+import * as PIXI from "pixi.js";
 
 import * as chip from "booyah/dist/chip";
 
@@ -100,7 +100,7 @@ export class Dj extends chip.ChipBase {
     this._lastRequestedMusicName = name;
 
     // Wait for the music to load, if not already loaded
-    const resource = await Assets.load(name);
+    const resource = await PIXI.Assets.load(name);
 
     // Some other music must have been requested in the meantime
     if (this._lastRequestedMusicName !== name) return;
@@ -222,7 +222,7 @@ export class Dj extends chip.ChipBase {
   }
 
   private _getSoundResource(name: string): sound.Sound | undefined {
-    const resource = Assets.get<sound.Sound>(name);
+    const resource = PIXI.Assets.get<sound.Sound>(name);
     if (!resource) {
       if (this._options.missingAssetBehavior === "exception")
         throw new Error(`Sound asset ${name} is not loaded`);
