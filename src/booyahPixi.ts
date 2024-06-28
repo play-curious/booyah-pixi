@@ -165,20 +165,18 @@ export function withinDistanceOfPoints(
   return false;
 }
 
-interface PixiAppOptions {
+interface PixiAppChipOptions {
   /* Provide either a parent element or a canvas */
   parentElement?: HTMLElement;
   canvas?: PIXI.ICanvas;
 
   appOptions?: Partial<PIXI.IApplicationOptions | PIXI.IRendererOptions>;
-  childChipOptions?: Array<chip.ActivateChildChipOptions | chip.ChipResolvable>;
 }
 
-export class PixiApp extends chip.Composite {
+export class PixiAppChip extends chip.Composite {
   private _app: PIXI.Application;
-  private _parallel: chip.Parallel;
 
-  constructor(private readonly _options?: PixiAppOptions) {
+  constructor(private readonly _options?: PixiAppChipOptions) {
     super();
   }
 
@@ -194,39 +192,208 @@ export class PixiApp extends chip.Composite {
       parent.appendChild(this._app.view as unknown as Node);
     }
 
-    this._parallel = new chip.Parallel(this._options?.childChipOptions || []);
-    this._activateChildChip(this._parallel);
+    this._subscribe(window, "resize", this._onResize);
   }
 
   protected _onTerminate(): void {
     this._app.destroy(true);
   }
 
-  get defaultChildChipContext(): chip.ChipContextResolvable {
+  get contextModification(): chip.ChipContextResolvable {
     return {
-      pixiApp: this._app,
+      pixiAppChip: this,
+      pixiApplication: this._app,
       container: this._app.stage,
     };
   }
 
-  get parallel(): chip.Parallel {
-    return this._parallel;
+  private _onResize() {
+    this.emit("resize");
   }
+
+  get renderSize() {
+    const renderer = this._app.renderer;
+    return new PIXI.Point(renderer.width, renderer.height);
+  }
+}
+
+/** Options provided to all the value functions on resize */
+export interface DisplayObjectValueFunctionOptions<
+  DisplayObjectType extends PIXI.DisplayObject
+> {
+  displayObject: DisplayObjectType;
+  pixiAppChip: PixiAppChip;
+}
+
+/**
+ * The acceptable values for the property.
+ * Points can be set with a single number.
+ */
+export type DisplayObjectValueType<
+  DisplayObjectType extends PIXI.DisplayObject,
+  Property extends keyof DisplayObjectType
+> = DisplayObjectType[Property] extends PIXI.ObservablePoint
+  ? PIXI.IPointData | number
+  : DisplayObjectType[Property];
+
+export type DisplayObjectValueFunction<
+  DisplayObjectType extends PIXI.DisplayObject,
+  Property extends keyof DisplayObjectType
+> = (
+  options: DisplayObjectValueFunctionOptions<DisplayObjectType>
+) => DisplayObjectValueType<DisplayObjectType, Property>;
+
+export type DisplayObjectValueResolvable<
+  DisplayObjectType extends PIXI.DisplayObject,
+  Property extends keyof DisplayObjectType
+> =
+  | DisplayObjectValueType<DisplayObjectType, Property>
+  | DisplayObjectValueFunction<DisplayObjectType, Property>;
+
+export function isDisplayObjectValueFunction<
+  DisplayObjectType extends PIXI.DisplayObject,
+  Property extends keyof DisplayObjectType
+>(
+  resolvable: DisplayObjectValueResolvable<DisplayObjectType, Property>
+): resolvable is DisplayObjectValueFunction<DisplayObjectType, Property> {
+  return typeof resolvable === "function";
+}
+
+export type DisplayObjectProperties<
+  DisplayObjectType extends PIXI.DisplayObject
+> = {
+  [Property in keyof DisplayObjectType]?: DisplayObjectValueResolvable<
+    DisplayObjectType,
+    Property
+  >;
+};
+
+export class DisplayObjectChipOptions<
+  DisplayObjectType extends PIXI.DisplayObject
+> {
+  properties?: DisplayObjectProperties<DisplayObjectType> = {};
+  onResize?: (
+    options: DisplayObjectValueFunctionOptions<DisplayObjectType>
+  ) => unknown;
+  addToContainer = true;
 }
 
 export class DisplayObjectChip<
   DisplayObjectType extends PIXI.DisplayObject
 > extends chip.ChipBase {
-  constructor(public readonly displayObject: DisplayObjectType) {
+  private readonly _options: DisplayObjectChipOptions<DisplayObjectType>;
+
+  private _propertiesToUpdateOnResize: Array<keyof DisplayObjectType>;
+
+  constructor(
+    public readonly displayObject: DisplayObjectType,
+    options?: Partial<DisplayObjectChipOptions<DisplayObjectType>>
+  ) {
     super();
+
+    this._options = chip.fillInOptions(
+      options,
+      new DisplayObjectChipOptions<DisplayObjectType>()
+    );
   }
 
   _onActivate() {
-    this._chipContext.container.addChild(this.displayObject);
+    this._propertiesToUpdateOnResize = [];
+
+    for (const property in this._options.properties) {
+      const resolvable = this._options.properties[
+        property
+      ] as DisplayObjectValueResolvable<
+        DisplayObjectType,
+        keyof DisplayObjectType
+      >;
+      let value: DisplayObjectValueType<
+        DisplayObjectType,
+        keyof DisplayObjectType
+      >;
+      if (isDisplayObjectValueFunction(resolvable)) {
+        this._propertiesToUpdateOnResize.push(property);
+        value = (
+          resolvable as DisplayObjectValueFunction<
+            DisplayObjectType,
+            keyof DisplayObjectType
+          >
+        )({
+          displayObject: this.displayObject,
+          pixiAppChip: this.pixiAppChip,
+        });
+      } else {
+        value = resolvable;
+      }
+
+      this._updateProperty(property as keyof DisplayObjectType, value);
+    }
+
+    if (
+      !this._options.hasOwnProperty("addToContainer") ||
+      this._options.addToContainer
+    ) {
+      this._chipContext.container.addChild(this.displayObject);
+    }
+
+    this._options.onResize?.({
+      displayObject: this.displayObject,
+      pixiAppChip: this.pixiAppChip,
+    });
+
+    this._subscribe(this.pixiAppChip, "resize", this._onResize);
   }
 
   _onTerminate() {
-    this._chipContext.container.removeChild(this.displayObject);
+    if (
+      !this._options.hasOwnProperty("addToContainer") ||
+      this._options.addToContainer
+    ) {
+      this._chipContext.container.removeChild(this.displayObject);
+    }
+  }
+
+  private _updateProperty(
+    property: keyof DisplayObjectType,
+    value: DisplayObjectValueType<DisplayObjectType, typeof property>
+  ) {
+    if (this.displayObject[property] instanceof PIXI.ObservablePoint) {
+      if (typeof value === "number") {
+        (this.displayObject[property] as PIXI.ObservablePoint).set(
+          value as number
+        );
+      } else {
+        // Assume it's a point
+        (this.displayObject[property] as PIXI.ObservablePoint).copyFrom(
+          value as PIXI.IPointData
+        );
+      }
+    } else {
+      // @ts-ignore
+      this.displayObject[property] = value;
+    }
+  }
+
+  private _onResize() {
+    const valueFunctionOptions = {
+      displayObject: this.displayObject,
+      pixiAppChip: this.pixiAppChip,
+    };
+
+    for (const property of this._propertiesToUpdateOnResize) {
+      const f = this._options.properties[
+        property
+      ] as DisplayObjectValueFunction<
+        DisplayObjectType,
+        keyof DisplayObjectType
+      >;
+      const value = f(valueFunctionOptions);
+      this._updateProperty(property, value);
+    }
+  }
+
+  get pixiAppChip() {
+    return this._chipContext.pixiAppChip;
   }
 }
 
