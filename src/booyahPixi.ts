@@ -170,11 +170,11 @@ interface PixiAppChipOptions {
   parentElement?: HTMLElement;
   canvas?: PIXI.ICanvas;
 
-  appOptions?: Partial<PIXI.IApplicationOptions | PIXI.IRendererOptions>;
+  appOptions?: Partial<PIXI.IApplicationOptions & PIXI.IRendererOptions>;
 }
 
 export class PixiAppChip extends chip.Composite {
-  private _app: PIXI.Application;
+  private _pixiApplication: PIXI.Application;
 
   constructor(private readonly _options?: PixiAppChipOptions) {
     super();
@@ -182,28 +182,33 @@ export class PixiAppChip extends chip.Composite {
 
   protected _onActivate(): void {
     const appOptions = this._options?.appOptions || {};
+    appOptions.autoStart = false;
     if (this._options.canvas) {
       appOptions.view = this._options.canvas;
     }
 
-    this._app = new PIXI.Application(appOptions);
+    this._pixiApplication = new PIXI.Application(appOptions);
     if (!this._options.canvas) {
       const parent = this._options?.parentElement || document.body;
-      parent.appendChild(this._app.view as unknown as Node);
+      parent.appendChild(this._pixiApplication.view as unknown as Node);
     }
 
     this._subscribe(window, "resize", this._onResize);
   }
 
+  protected _onTick(): void {
+    this._pixiApplication.render();
+  }
+
   protected _onTerminate(): void {
-    this._app.destroy(true);
+    this._pixiApplication.destroy(true);
   }
 
   get contextModification(): chip.ChipContextResolvable {
     return {
       pixiAppChip: this,
-      pixiApplication: this._app,
-      container: this._app.stage,
+      pixiApplication: this._pixiApplication,
+      container: this._pixiApplication.stage,
     };
   }
 
@@ -212,8 +217,12 @@ export class PixiAppChip extends chip.Composite {
   }
 
   get renderSize() {
-    const renderer = this._app.renderer;
+    const renderer = this._pixiApplication.renderer;
     return new PIXI.Point(renderer.width, renderer.height);
+  }
+
+  get pixiApplication() {
+    return this._pixiApplication;
   }
 }
 
@@ -223,6 +232,7 @@ export interface DisplayObjectValueFunctionOptions<
 > {
   displayObject: DisplayObjectType;
   pixiAppChip: PixiAppChip;
+  renderSize: PIXI.IPointData;
 }
 
 /**
@@ -300,6 +310,12 @@ export class DisplayObjectChip<
   _onActivate() {
     this._propertiesToUpdateOnResize = [];
 
+    const valueFunctionOptions = {
+      displayObject: this.displayObject,
+      pixiAppChip: this.pixiAppChip,
+      renderSize: this.pixiAppChip.renderSize,
+    };
+
     for (const property in this._options.properties) {
       const resolvable = this._options.properties[
         property
@@ -318,15 +334,16 @@ export class DisplayObjectChip<
             DisplayObjectType,
             keyof DisplayObjectType
           >
-        )({
-          displayObject: this.displayObject,
-          pixiAppChip: this.pixiAppChip,
-        });
+        )(valueFunctionOptions);
       } else {
         value = resolvable;
       }
 
-      this._updateProperty(property as keyof DisplayObjectType, value);
+      updateProperty(
+        this.displayObject,
+        property as keyof DisplayObjectType,
+        value
+      );
     }
 
     if (
@@ -339,6 +356,7 @@ export class DisplayObjectChip<
     this._options.onResize?.({
       displayObject: this.displayObject,
       pixiAppChip: this.pixiAppChip,
+      renderSize: this.pixiAppChip.renderSize,
     });
 
     this._subscribe(this.pixiAppChip, "resize", this._onResize);
@@ -353,31 +371,11 @@ export class DisplayObjectChip<
     }
   }
 
-  private _updateProperty(
-    property: keyof DisplayObjectType,
-    value: DisplayObjectValueType<DisplayObjectType, typeof property>
-  ) {
-    if (this.displayObject[property] instanceof PIXI.ObservablePoint) {
-      if (typeof value === "number") {
-        (this.displayObject[property] as PIXI.ObservablePoint).set(
-          value as number
-        );
-      } else {
-        // Assume it's a point
-        (this.displayObject[property] as PIXI.ObservablePoint).copyFrom(
-          value as PIXI.IPointData
-        );
-      }
-    } else {
-      // @ts-ignore
-      this.displayObject[property] = value;
-    }
-  }
-
   private _onResize() {
     const valueFunctionOptions = {
       displayObject: this.displayObject,
       pixiAppChip: this.pixiAppChip,
+      renderSize: this.pixiAppChip.renderSize,
     };
 
     for (const property of this._propertiesToUpdateOnResize) {
@@ -388,7 +386,7 @@ export class DisplayObjectChip<
         keyof DisplayObjectType
       >;
       const value = f(valueFunctionOptions);
-      this._updateProperty(property, value);
+      updateProperty(this.displayObject, property, value);
     }
   }
 
@@ -409,24 +407,24 @@ export class AnimatedSpriteChipOptions {
   behaviorOnComplete: "loop" | "remove" | "keepLastFrame" = "remove";
   behaviorOnStart: "play" | "stop" = "play";
   animationName?: string;
-  animationSpeed?: number;
   // If provided, will calculate the animation speed to achieve this number of frames-per-second
   fps?: number;
-  position?: PIXI.IPointData | number;
-  anchor?: PIXI.IPointData | number;
-  scale?: PIXI.IPointData | number;
-  rotation?: number;
-  alpha?: number;
   startingFrame?: number;
   prepare?: boolean;
+
+  properties: DisplayObjectProperties<PIXI.AnimatedSprite> = {};
+  onResize?: (
+    options: DisplayObjectValueFunctionOptions<PIXI.AnimatedSprite>
+  ) => unknown;
 }
 
 export class AnimatedSpriteChip extends chip.ChipBase {
-  private _options: AnimatedSpriteChipOptions;
+  private readonly _options: AnimatedSpriteChipOptions;
 
-  private _pixiSprite?: PIXI.AnimatedSprite;
+  private _animatedSprite?: PIXI.AnimatedSprite;
   private _wasPlaying: boolean;
   private _wasAdded?: boolean;
+  private _propertiesToUpdateOnResize: Array<keyof PIXI.AnimatedSprite>;
 
   constructor(
     private readonly _spritesheet: PIXI.Spritesheet,
@@ -482,102 +480,147 @@ export class AnimatedSpriteChip extends chip.ChipBase {
     }
 
     // Don't have the sprite auto-update
-    this._pixiSprite = new PIXI.AnimatedSprite(textures, false);
+    this._animatedSprite = new PIXI.AnimatedSprite(textures, false);
+
+    // Update properties and keep track of which ones to update on resize
+    this._propertiesToUpdateOnResize = [];
+
+    const valueFunctionOptions = {
+      displayObject: this._animatedSprite,
+      pixiAppChip: this.pixiAppChip,
+      renderSize: this.pixiAppChip.renderSize,
+    };
+    for (const property in this._options.properties) {
+      const resolvable = this._options.properties[
+        property as keyof PIXI.AnimatedSprite
+      ] as DisplayObjectValueResolvable<
+        PIXI.AnimatedSprite,
+        keyof PIXI.AnimatedSprite
+      >;
+      let value: DisplayObjectValueType<
+        PIXI.AnimatedSprite,
+        keyof PIXI.AnimatedSprite
+      >;
+      if (isDisplayObjectValueFunction(resolvable)) {
+        this._propertiesToUpdateOnResize.push(
+          property as keyof PIXI.AnimatedSprite
+        );
+        value = (
+          resolvable as DisplayObjectValueFunction<
+            PIXI.AnimatedSprite,
+            keyof PIXI.AnimatedSprite
+          >
+        )(valueFunctionOptions);
+      } else {
+        value = resolvable;
+      }
+
+      updateProperty(
+        this._animatedSprite,
+        property as keyof PIXI.AnimatedSprite,
+        value
+      );
+    }
 
     // If requested, use the PIXI Prepare plugin to make sure the animation is loaded before adding it to the stage
     if (this._options.prepare) {
       this._wasAdded = false;
-      this._chipContext.app.renderer.prepare.upload(this._pixiSprite, () => {
-        if (this.chipState === "inactive") return;
+      this._chipContext.app.renderer.prepare.upload(
+        this._animatedSprite,
+        () => {
+          if (this.chipState === "inactive") return;
 
-        this._chipContext.container.addChild(this._pixiSprite);
-        this._wasAdded = true;
-      });
+          this._chipContext.container.addChild(this._animatedSprite);
+          this._wasAdded = true;
+        }
+      );
     } else {
-      this._chipContext.container.addChild(this._pixiSprite);
+      this._chipContext.container.addChild(this._animatedSprite);
       this._wasAdded = true;
     }
 
-    this._chipContext.container.addChild(this._pixiSprite);
+    this._chipContext.container.addChild(this._animatedSprite);
 
     if (this._options.behaviorOnComplete == "loop") {
-      this._pixiSprite.loop = true;
+      this._animatedSprite.loop = true;
     } else if (this._options.behaviorOnComplete == "keepLastFrame") {
       // PIXI.AnimatedSprite loops by default
-      this._pixiSprite.loop = false;
+      this._animatedSprite.loop = false;
     } else if (this._options.behaviorOnComplete == "remove") {
       // PIXI.AnimatedSprite loops by default
-      this._pixiSprite.loop = false;
-      this._pixiSprite.onComplete = this._onAnimationComplete.bind(this);
+      this._animatedSprite.loop = false;
+      this._animatedSprite.onComplete = this._onAnimationComplete.bind(this);
     }
 
-    // Set numerical properties
-    for (const prop of ["animationSpeed", "rotation", "alpha"]) {
-      // @ts-ignore
-      if (_.has(this._options, prop))
-        // @ts-ignore
-        this._pixiSprite[prop] = this._options[prop];
+    if ("fps" in this._options) {
+      this._animatedSprite.animationSpeed = this._options.fps / 1000;
     }
 
-    // Set Point properties
-    for (const prop of ["position", "anchor", "scale"]) {
-      // @ts-ignore
-      if (_.has(this._options, prop)) {
-        // @ts-ignore
-        const value = this._options[prop];
-        if (typeof value === "number") {
-          // @ts-ignore
-          this._pixiSprite[prop].set(value);
-        } else {
-          // @ts-ignore
-          this._pixiSprite[prop] = value;
-        }
-      }
-    }
-
-    if (_.has(this._options, "fps")) {
-      if (_.has(this._options, "animationSpeed"))
-        throw new Error(
-          `Don't specify both "animationSpeed" and "fps" options`
-        );
-
-      this._pixiSprite.animationSpeed = this._options.fps! / 1000;
-    }
-
-    this._pixiSprite.gotoAndStop(this._options.startingFrame ?? 0);
+    this._animatedSprite.gotoAndStop(this._options.startingFrame ?? 0);
 
     if (this._options.behaviorOnStart == "play") {
-      this._pixiSprite.play();
+      this._animatedSprite.play();
     }
+
+    this._options.onResize?.({
+      displayObject: this._animatedSprite,
+      pixiAppChip: this.pixiAppChip,
+      renderSize: this.pixiAppChip.renderSize,
+    });
+
+    this._subscribe(this.pixiAppChip, "resize", this._onResize);
   }
 
   _onTick() {
-    this._pixiSprite!.update(this._lastTickInfo.timeSinceLastTick);
+    this._animatedSprite!.update(this._lastTickInfo.timeSinceLastTick);
   }
 
   protected _onPause(): void {
-    this._wasPlaying = this._pixiSprite!.playing;
-    this._pixiSprite!.stop();
+    this._wasPlaying = this._animatedSprite!.playing;
+    this._animatedSprite!.stop();
   }
 
   protected _onResume(): void {
-    if (this._wasPlaying) this._pixiSprite!.play();
+    if (this._wasPlaying) this._animatedSprite!.play();
   }
 
   _onTerminate() {
     if (this._wasAdded) {
-      this._chipContext.container.removeChild(this._pixiSprite);
+      this._chipContext.container.removeChild(this._animatedSprite);
       this._wasAdded = false;
     }
-    delete this._pixiSprite;
+    delete this._animatedSprite;
   }
 
   private _onAnimationComplete() {
     this._terminateSelf();
   }
 
-  get pixiSprite() {
-    return this._pixiSprite;
+  private _onResize() {
+    const valueFunctionOptions = {
+      displayObject: this._animatedSprite,
+      pixiAppChip: this.pixiAppChip,
+      renderSize: this.pixiAppChip.renderSize,
+    };
+
+    for (const property of this._propertiesToUpdateOnResize) {
+      const f = this._options.properties[
+        property
+      ] as DisplayObjectValueFunction<
+        PIXI.AnimatedSprite,
+        keyof PIXI.AnimatedSprite
+      >;
+      const value = f(valueFunctionOptions);
+      updateProperty(this.animatedSprite, property, value);
+    }
+  }
+
+  get animatedSprite() {
+    return this._animatedSprite;
+  }
+
+  get pixiAppChip() {
+    return this._chipContext.pixiAppChip;
   }
 }
 
@@ -617,5 +660,28 @@ export class Loader extends chip.Composite {
 
   private _onProgress(progress: number) {
     this.emit("progress", progress);
+  }
+}
+
+function updateProperty<
+  DisplayObjectType extends PIXI.DisplayObject,
+  Property extends keyof DisplayObjectType
+>(
+  displayObject: DisplayObjectType,
+  property: Property,
+  value: DisplayObjectValueType<DisplayObjectType, Property>
+) {
+  if (displayObject[property] instanceof PIXI.ObservablePoint) {
+    if (typeof value === "number") {
+      (displayObject[property] as PIXI.ObservablePoint).set(value as number);
+    } else {
+      // Assume it's a point
+      (displayObject[property] as PIXI.ObservablePoint).copyFrom(
+        value as PIXI.IPointData
+      );
+    }
+  } else {
+    // @ts-ignore
+    displayObject[property] = value;
   }
 }
