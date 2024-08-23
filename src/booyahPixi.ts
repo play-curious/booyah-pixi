@@ -1,8 +1,7 @@
-import * as PIXI from "pixi.js";
-import * as _ from "underscore";
-
 import * as chip from "booyah/dist/chip";
 import * as util from "booyah/dist/util";
+import * as PIXI from "pixi.js";
+import * as _ from "underscore";
 
 /** Returns the vector length of a a PIXI Point */
 export function magnitude(a: PIXI.IPointData): number {
@@ -13,7 +12,7 @@ export function magnitude(a: PIXI.IPointData): number {
 export function clampMagnitude(
   a: PIXI.IPointData,
   min: number,
-  max: number
+  max: number,
 ): PIXI.Point {
   const mag = magnitude(a);
   if (mag < min) {
@@ -36,7 +35,7 @@ export function distance(a: PIXI.IPointData, b: PIXI.IPointData): number {
 export function lerpPoint(
   a: PIXI.IPointData,
   b: PIXI.IPointData,
-  p: number
+  p: number,
 ): PIXI.Point {
   const x = b.x - a.x;
   const y = b.y - a.y;
@@ -107,7 +106,7 @@ export function max(...points: PIXI.IPointData[]): PIXI.Point {
 export function inRectangle(
   p: PIXI.IPointData,
   min: PIXI.IPointData,
-  max: PIXI.IPointData
+  max: PIXI.IPointData,
 ) {
   return p.x >= min.x && p.x <= max.x && p.y >= min.y && p.y <= max.y;
 }
@@ -126,7 +125,7 @@ export function average(...points: PIXI.IPointData[]): PIXI.Point {
 export function moveTowards(
   a: PIXI.IPointData,
   b: PIXI.IPointData,
-  speed: number
+  speed: number,
 ): PIXI.Point {
   const d = distance(a, b);
   return lerpPoint(a, b, util.clamp(speed / d, 0, 1));
@@ -137,11 +136,11 @@ export const moveTowardsPoint = moveTowards;
 /** Returns a random point between a amd b, with each component considered separately */
 export function randomPointInRange(
   min: PIXI.IPointData,
-  max: PIXI.IPointData
+  max: PIXI.IPointData,
 ): PIXI.Point {
   return new PIXI.Point(
     util.randomInRange(min.x, max.x),
-    util.randomInRange(min.y, max.y)
+    util.randomInRange(min.y, max.y),
   );
 }
 
@@ -149,7 +148,7 @@ export function randomPointInRange(
 export function vectorFromAngle(angle: number, magnitude = 1): PIXI.IPointData {
   return new PIXI.Point(
     Math.cos(angle) * magnitude,
-    Math.sin(angle) * magnitude
+    Math.sin(angle) * magnitude,
   );
 }
 
@@ -157,7 +156,7 @@ export function vectorFromAngle(angle: number, magnitude = 1): PIXI.IPointData {
 export function withinDistanceOfPoints(
   point: PIXI.IPointData,
   d: number,
-  otherPoints: PIXI.IPointData[]
+  otherPoints: PIXI.IPointData[],
 ): boolean {
   for (const otherPoint of otherPoints) {
     if (distance(point, otherPoint) <= d) return true;
@@ -228,7 +227,7 @@ export class PixiAppChip extends chip.Composite {
 
 /** Options provided to all the value functions on resize */
 export interface DisplayObjectValueFunctionOptions<
-  DisplayObjectType extends PIXI.DisplayObject
+  DisplayObjectType extends PIXI.DisplayObject,
 > {
   displayObject: DisplayObjectType;
   pixiAppChip: PixiAppChip;
@@ -241,36 +240,36 @@ export interface DisplayObjectValueFunctionOptions<
  */
 export type DisplayObjectValueType<
   DisplayObjectType extends PIXI.DisplayObject,
-  Property extends keyof DisplayObjectType
+  Property extends keyof DisplayObjectType,
 > = DisplayObjectType[Property] extends PIXI.ObservablePoint
   ? PIXI.IPointData | number
   : DisplayObjectType[Property];
 
 export type DisplayObjectValueFunction<
   DisplayObjectType extends PIXI.DisplayObject,
-  Property extends keyof DisplayObjectType
+  Property extends keyof DisplayObjectType,
 > = (
-  options: DisplayObjectValueFunctionOptions<DisplayObjectType>
+  options: DisplayObjectValueFunctionOptions<DisplayObjectType>,
 ) => DisplayObjectValueType<DisplayObjectType, Property>;
 
 export type DisplayObjectValueResolvable<
   DisplayObjectType extends PIXI.DisplayObject,
-  Property extends keyof DisplayObjectType
+  Property extends keyof DisplayObjectType,
 > =
   | DisplayObjectValueType<DisplayObjectType, Property>
   | DisplayObjectValueFunction<DisplayObjectType, Property>;
 
 export function isDisplayObjectValueFunction<
   DisplayObjectType extends PIXI.DisplayObject,
-  Property extends keyof DisplayObjectType
+  Property extends keyof DisplayObjectType,
 >(
-  resolvable: DisplayObjectValueResolvable<DisplayObjectType, Property>
+  resolvable: DisplayObjectValueResolvable<DisplayObjectType, Property>,
 ): resolvable is DisplayObjectValueFunction<DisplayObjectType, Property> {
   return typeof resolvable === "function";
 }
 
 export type DisplayObjectProperties<
-  DisplayObjectType extends PIXI.DisplayObject
+  DisplayObjectType extends PIXI.DisplayObject,
 > = {
   [Property in keyof DisplayObjectType]?: DisplayObjectValueResolvable<
     DisplayObjectType,
@@ -279,17 +278,17 @@ export type DisplayObjectProperties<
 };
 
 export class DisplayObjectChipOptions<
-  DisplayObjectType extends PIXI.DisplayObject
+  DisplayObjectType extends PIXI.DisplayObject,
 > {
   properties?: DisplayObjectProperties<DisplayObjectType> = {};
   onResize?: (
-    options: DisplayObjectValueFunctionOptions<DisplayObjectType>
+    options: DisplayObjectValueFunctionOptions<DisplayObjectType>,
   ) => unknown;
   addToContainer = true;
 }
 
 export class DisplayObjectChip<
-  DisplayObjectType extends PIXI.DisplayObject
+  DisplayObjectType extends PIXI.DisplayObject,
 > extends chip.ChipBase {
   private readonly _options: DisplayObjectChipOptions<DisplayObjectType>;
 
@@ -297,13 +296,13 @@ export class DisplayObjectChip<
 
   constructor(
     public readonly displayObject: DisplayObjectType,
-    options?: Partial<DisplayObjectChipOptions<DisplayObjectType>>
+    options?: Partial<DisplayObjectChipOptions<DisplayObjectType>>,
   ) {
     super();
 
     this._options = chip.fillInOptions(
       options,
-      new DisplayObjectChipOptions<DisplayObjectType>()
+      new DisplayObjectChipOptions<DisplayObjectType>(),
     );
   }
 
@@ -342,7 +341,7 @@ export class DisplayObjectChip<
       updateProperty(
         this.displayObject,
         property as keyof DisplayObjectType,
-        value
+        value,
       );
     }
 
@@ -414,7 +413,7 @@ export class AnimatedSpriteChipOptions {
 
   properties: DisplayObjectProperties<PIXI.AnimatedSprite> = {};
   onResize?: (
-    options: DisplayObjectValueFunctionOptions<PIXI.AnimatedSprite>
+    options: DisplayObjectValueFunctionOptions<PIXI.AnimatedSprite>,
   ) => unknown;
 }
 
@@ -428,13 +427,13 @@ export class AnimatedSpriteChip extends chip.ChipBase {
 
   constructor(
     private readonly _spritesheet: PIXI.Spritesheet,
-    options?: Partial<AnimatedSpriteChipOptions>
+    options?: Partial<AnimatedSpriteChipOptions>,
   ) {
     super();
 
     this._options = chip.fillInOptions(
       options,
-      new AnimatedSpriteChipOptions()
+      new AnimatedSpriteChipOptions(),
     );
   }
 
@@ -448,7 +447,7 @@ export class AnimatedSpriteChip extends chip.ChipBase {
         !_.has(this._spritesheet.data.animations, this._options.animationName)
       ) {
         throw new Error(
-          `Can't find animation "${this._options.animationName}" in spritesheet`
+          `Can't find animation "${this._options.animationName}" in spritesheet`,
         );
       }
 
@@ -470,7 +469,7 @@ export class AnimatedSpriteChip extends chip.ChipBase {
           }
 
           throw new Error(
-            `Cannot find image "${imageName}" needed for animation "${this._options.animationName}"`
+            `Cannot find image "${imageName}" needed for animation "${this._options.animationName}"`,
           );
         });
       }
@@ -503,7 +502,7 @@ export class AnimatedSpriteChip extends chip.ChipBase {
       >;
       if (isDisplayObjectValueFunction(resolvable)) {
         this._propertiesToUpdateOnResize.push(
-          property as keyof PIXI.AnimatedSprite
+          property as keyof PIXI.AnimatedSprite,
         );
         value = (
           resolvable as DisplayObjectValueFunction<
@@ -518,21 +517,21 @@ export class AnimatedSpriteChip extends chip.ChipBase {
       updateProperty(
         this._animatedSprite,
         property as keyof PIXI.AnimatedSprite,
-        value
+        value,
       );
     }
 
     // If requested, use the PIXI Prepare plugin to make sure the animation is loaded before adding it to the stage
     if (this._options.prepare) {
       this._wasAdded = false;
-      this._chipContext.app.renderer.prepare.upload(
+      this._chipContext.pixiApplication.renderer.prepare.upload(
         this._animatedSprite,
         () => {
           if (this.chipState === "inactive") return;
 
           this._chipContext.container.addChild(this._animatedSprite);
           this._wasAdded = true;
-        }
+        },
       );
     } else {
       this._chipContext.container.addChild(this._animatedSprite);
@@ -647,7 +646,7 @@ export class Loader extends chip.Composite {
     if (this._options.bundlesToLoad) {
       await PIXI.Assets.loadBundle(
         this._options.bundlesToLoad,
-        this._onProgress.bind(this)
+        this._onProgress.bind(this),
       );
     }
 
@@ -665,11 +664,11 @@ export class Loader extends chip.Composite {
 
 function updateProperty<
   DisplayObjectType extends PIXI.DisplayObject,
-  Property extends keyof DisplayObjectType
+  Property extends keyof DisplayObjectType,
 >(
   displayObject: DisplayObjectType,
   property: Property,
-  value: DisplayObjectValueType<DisplayObjectType, Property>
+  value: DisplayObjectValueType<DisplayObjectType, Property>,
 ) {
   if (displayObject[property] instanceof PIXI.ObservablePoint) {
     if (typeof value === "number") {
@@ -677,7 +676,7 @@ function updateProperty<
     } else {
       // Assume it's a point
       (displayObject[property] as PIXI.ObservablePoint).copyFrom(
-        value as PIXI.IPointData
+        value as PIXI.IPointData,
       );
     }
   } else {
