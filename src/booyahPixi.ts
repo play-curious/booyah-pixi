@@ -525,7 +525,7 @@ export class AnimatedSpriteChip extends chip.ChipBase {
     // If requested, use the PIXI Prepare plugin to make sure the animation is loaded before adding it to the stage
     if (this._options.prepare) {
       this._wasAdded = false;
-      this._chipContext.app.renderer.prepare.upload(
+      this._chipContext.pixiApplication.renderer.prepare.upload(
         this._animatedSprite,
         () => {
           if (this.chipState === "inactive") return;
