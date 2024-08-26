@@ -193,7 +193,12 @@ export class PixiAppChip extends chip.Composite {
       parent.appendChild(this._pixiApplication.view as unknown as Node);
     }
 
-    this._subscribe(window, "resize", this._onResize);
+    // If PIXI handles resizing, listen to that event. Otherwise listen to the window
+    if (this._pixiApplication.resizeTo) {
+      this._subscribe(this._pixiApplication.renderer, "resize", this._onResize);
+    } else {
+      this._subscribe(window, "resize", this._onResize);
+    }
   }
 
   protected _onTick(): void {
