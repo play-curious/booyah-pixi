@@ -5,6 +5,11 @@ import * as _ from "underscore";
 
 import * as booyahPixi from "./booyahPixi";
 
+type ResolvingContext = { renderSize: number };
+type Resolvable<Type, Context extends ResolvingContext> =
+  | Type
+  | ((context: Context) => Type);
+
 function isTexture(object: any): object is PIXI.Texture {
   return object.baseTexture;
 }
