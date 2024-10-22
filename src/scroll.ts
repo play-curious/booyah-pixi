@@ -20,8 +20,8 @@ export class ScrollboxOptions {
   direction: Direction = "horizontal";
   scrollbarOffset: number = 10;
   scrollbarWidth: number = 20;
-  scrollbarBackground: PIXI.Texture | PIXI.ColorSource;
-  scrollbarHandle: PIXI.Texture | PIXI.ColorSource;
+  scrollbarBackground: PIXI.Texture | PIXI.ColorSource = 0xaaaaaa;
+  scrollbarHandle: PIXI.Texture | PIXI.ColorSource = 0x555555;
   dragScroll: boolean = true;
   dragThreshold: number = 5;
   stopPropagation: boolean = true;
@@ -191,7 +191,7 @@ export class Scrollbox extends chip.Composite {
     }
 
     this._scrollbarAnchor.visible = true;
-    const ratio = boxSize / contentSize;
+    const ratio = geom.clamp(boxSize / contentSize, 0, 1);
 
     switch (this.options.direction) {
       case "horizontal": {
