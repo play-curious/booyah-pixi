@@ -33,17 +33,15 @@ export class ScrollboxOptions {
  **/
 export class Scrollbox extends chip.Composite {
   public readonly options: ScrollboxOptions;
-  public container: PIXI.Container;
-  public pointerDown: any;
   public onWheelHandler: () => void;
 
+  private _pointerDown: any;
+  private _container: PIXI.Container;
   private _content: PIXI.Container;
-
+  private _ratio: number;
   private _scrollbarAnchor: PIXI.Container;
   private _scrollbarBackground: PIXI.NineSlicePlane;
   private _scrollbarHandle: PIXI.NineSlicePlane;
-
-  private _ratio: number;
 
   /**
    * Can be provided with an existing container
@@ -55,25 +53,25 @@ export class Scrollbox extends chip.Composite {
 
   protected _onActivate() {
     // Last pointerdown event
-    this.pointerDown = null;
+    this._pointerDown = null;
 
-    this.container = new PIXI.Container();
-    this._activateChildChip(new booyahPixi.DisplayObjectChip(this.container));
-    this.container.eventMode = "static";
-    this._subscribe(this.container, "globalpointermove", this._onMove as any);
-    this._subscribe(this.container, "pointerup", this._onUp as any);
-    this._subscribe(this.container, "pointercancel", this._onUp as any);
-    this._subscribe(this.container, "pointerupoutside", this._onUp as any);
+    this._container = new PIXI.Container();
+    this._activateChildChip(new booyahPixi.DisplayObjectChip(this._container));
+    this._container.eventMode = "static";
+    this._subscribe(this._container, "globalpointermove", this._onMove as any);
+    this._subscribe(this._container, "pointerup", this._onUp as any);
+    this._subscribe(this._container, "pointercancel", this._onUp as any);
+    this._subscribe(this._container, "pointerupoutside", this._onUp as any);
 
     this._content = new PIXI.Container();
     if (this.options.content) this._content.addChild(this.options.content);
-    this.container.addChild(this._content);
+    this._container.addChild(this._content);
 
     const mask = new PIXI.Sprite(PIXI.Texture.WHITE);
     mask.width = this.options.boxWidth;
     mask.height = this.options.boxHeight;
     this._content.mask = mask;
-    this.container.addChild(mask);
+    this._container.addChild(mask);
 
     if (this.options.dragScroll) {
       const dragBackground = new PIXI.Graphics();
@@ -87,7 +85,7 @@ export class Scrollbox extends chip.Composite {
       this._subscribe(dragBackground, "pointerdown", this._dragDown as any);
       this._subscribe(this._content, "pointerdown", this._dragDown as any);
       this._content.eventMode = "static";
-      this.container.addChildAt(dragBackground, 0);
+      this._container.addChildAt(dragBackground, 0);
     }
 
     if (this.options.wheelScroll) {
@@ -99,7 +97,7 @@ export class Scrollbox extends chip.Composite {
     }
 
     this._scrollbarAnchor = new PIXI.Container();
-    this.container.addChild(this._scrollbarAnchor);
+    this._container.addChild(this._scrollbarAnchor);
 
     if (isTexture(this.options.scrollbarBackground)) {
       this._scrollbarBackground = new PIXI.NineSlicePlane(
@@ -190,18 +188,18 @@ export class Scrollbox extends chip.Composite {
   }
 
   private _onMove(e: PIXI.FederatedPointerEvent) {
-    if (!this.pointerDown) return;
+    if (!this._pointerDown) return;
 
-    if (this.pointerDown.type === "scrollbar") this._scrollbarMove(e);
-    else if (this.pointerDown.type === "drag") this._dragMove(e);
+    if (this._pointerDown.type === "scrollbar") this._scrollbarMove(e);
+    else if (this._pointerDown.type === "drag") this._dragMove(e);
     else throw new Error("no such type");
   }
 
   private _onUp(e: PIXI.FederatedPointerEvent) {
-    if (!this.pointerDown) return;
+    if (!this._pointerDown) return;
 
-    if (this.pointerDown.type === "scrollbar") this._scrollbarUp();
-    else if (this.pointerDown.type === "drag") this._dragUp();
+    if (this._pointerDown.type === "scrollbar") this._scrollbarUp();
+    else if (this._pointerDown.type === "drag") this._dragUp();
     else throw new Error("no such type");
   }
 
@@ -211,10 +209,10 @@ export class Scrollbox extends chip.Composite {
    * @private
    */
   private _scrollbarDown(e: PIXI.FederatedPointerEvent) {
-    if (this.pointerDown) return;
+    if (this._pointerDown) return;
 
     const local = this._scrollbarAnchor.toLocal(e.global);
-    this.pointerDown = {
+    this._pointerDown = {
       type: "scrollbar",
       last: local,
     };
@@ -234,8 +232,8 @@ export class Scrollbox extends chip.Composite {
     const local = this._scrollbarAnchor.toLocal(e.global);
     const deltaPosition =
       this.options.direction === "horizontal"
-        ? local.x - this.pointerDown.last.x
-        : local.y - this.pointerDown.last.y;
+        ? local.x - this._pointerDown.last.x
+        : local.y - this._pointerDown.last.y;
     const fraction = deltaPosition / this._ratio;
 
     if (this.options.direction === "horizontal") {
@@ -243,7 +241,7 @@ export class Scrollbox extends chip.Composite {
     } else {
       this.scrollBy({ x: 0, y: -fraction });
     }
-    this.pointerDown.last = local;
+    this._pointerDown.last = local;
 
     if (this.options.stopPropagation) {
       e.stopPropagation();
@@ -255,7 +253,7 @@ export class Scrollbox extends chip.Composite {
    * @private
    */
   private _scrollbarUp() {
-    this.pointerDown = null;
+    this._pointerDown = null;
     this._content.interactiveChildren = true;
   }
 
@@ -265,10 +263,10 @@ export class Scrollbox extends chip.Composite {
    * @private
    */
   private _dragDown(e: PIXI.FederatedPointerEvent) {
-    if (this.pointerDown) return;
+    if (this._pointerDown) return;
 
-    const local = this.container.toLocal(e.global);
-    this.pointerDown = { type: "drag", last: local };
+    const local = this._content.toLocal(e.global);
+    this._pointerDown = { type: "drag", last: local };
 
     if (this.options.stopPropagation) {
       e.stopPropagation();
@@ -282,11 +280,11 @@ export class Scrollbox extends chip.Composite {
    */
 
   private _dragMove(e: PIXI.FederatedPointerEvent) {
-    const local = this.container.toLocal(e.global) as PIXI.Point;
+    const local = this._content.toLocal(e.global) as PIXI.Point;
     const deltaPosition =
       this.options.direction === "horizontal"
-        ? local.x - this.pointerDown.last.x
-        : local.y - this.pointerDown.last.y;
+        ? local.x - this._pointerDown.last.x
+        : local.y - this._pointerDown.last.y;
 
     if (Math.abs(deltaPosition) <= this.options.dragThreshold) return;
 
@@ -297,7 +295,7 @@ export class Scrollbox extends chip.Composite {
     } else {
       this.scrollBy({ x: 0, y: deltaPosition });
     }
-    this.pointerDown.last = local;
+    this._pointerDown.last = local;
 
     if (this.options.stopPropagation) {
       e.stopPropagation();
@@ -309,7 +307,7 @@ export class Scrollbox extends chip.Composite {
    * @private
    */
   private _dragUp() {
-    this.pointerDown = null;
+    this._pointerDown = null;
     this._content.interactiveChildren = true;
   }
 
@@ -318,7 +316,7 @@ export class Scrollbox extends chip.Composite {
    * @param {WheelEvent} e
    */
   private _onWheel(e: WheelEvent) {
-    if (!this.container.worldVisible) return;
+    if (!this._container.worldVisible) return;
 
     // Get coordinates of point and test if we touch this container
     const globalPoint = new PIXI.Point();
@@ -330,7 +328,7 @@ export class Scrollbox extends chip.Composite {
     if (
       !this._chipContext.app.renderer.events.rootBoundary.hitTest(
         globalPoint,
-        this.container,
+        this._container,
       )
     )
       return;
@@ -372,6 +370,10 @@ export class Scrollbox extends chip.Composite {
     return this.options.direction === "horizontal"
       ? this._content.x
       : this._content.y;
+  }
+
+  public get container() {
+    return this._container;
   }
 
   public get content() {
