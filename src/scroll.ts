@@ -9,13 +9,17 @@ function isTexture(object: any): object is PIXI.Texture {
   return object.baseTexture;
 }
 
+export type OverflowSettings = "auto" | "hidden" | "scroll";
+export type Direction = "vertical" | "horizontal";
+
 export class ScrollboxOptions {
   content: any = null;
   boxWidth: number = 100;
   boxHeight: number = 100;
-  overflow: number | string = "auto";
-  direction: "horizontal" | "vertical" = "horizontal";
+  overflow: OverflowSettings = "auto";
+  direction: Direction = "horizontal";
   scrollbarOffset: number = 10;
+  scrollbarWidth: number = 20;
   scrollbarBackground: PIXI.Texture | PIXI.ColorSource;
   scrollbarHandle: PIXI.Texture | PIXI.ColorSource;
   dragScroll: boolean = true;
@@ -38,7 +42,6 @@ export class Scrollbox extends chip.Composite {
   private _pointerDown: any;
   private _container: PIXI.Container;
   private _content: PIXI.Container;
-  private _ratio: number;
   private _scrollbarAnchor: PIXI.Container;
   private _scrollbarBackground: PIXI.NineSlicePlane;
   private _scrollbarHandle: PIXI.NineSlicePlane;
@@ -128,11 +131,15 @@ export class Scrollbox extends chip.Composite {
 
     switch (this.options.direction) {
       case "horizontal": {
+        this._scrollbarBackground.height = this.options.scrollbarWidth;
+        this._scrollbarHandle.height = this.options.scrollbarWidth;
         this._scrollbarAnchor.y =
           this.options.boxHeight + this.options.scrollbarOffset;
         break;
       }
       case "vertical": {
+        this._scrollbarBackground.width = this.options.scrollbarWidth;
+        this._scrollbarHandle.width = this.options.scrollbarWidth;
         this._scrollbarAnchor.x =
           this.options.boxWidth + this.options.scrollbarOffset;
         break;
@@ -153,35 +160,50 @@ export class Scrollbox extends chip.Composite {
 
   /** Call when container contents have changed  */
   public refresh() {
+    this.scrollTo(this.content.position);
     this._updateScrollbars();
-
     this.emit("refreshed");
   }
 
   private _updateScrollbars() {
+    let boxSize: number;
+    let contentSize: number;
+
     switch (this.options.direction) {
       case "horizontal": {
-        const boxSize = this.options.boxWidth;
-        const contentSize = this._content.width;
-        const contentPosition = this._content.x;
-
-        this._ratio = boxSize / contentSize;
-
-        this._scrollbarBackground.width = boxSize;
-        this._scrollbarHandle.width = boxSize * this._ratio;
-        this._scrollbarHandle.x = -contentPosition * this._ratio;
+        boxSize = this.options.boxWidth;
+        contentSize = this._content.width;
         break;
       }
       case "vertical": {
-        const boxSize = this.options.boxHeight;
-        const contentSize = this._content.height;
-        const contentPosition = this._content.y;
+        boxSize = this.options.boxHeight;
+        contentSize = this._content.height;
+        break;
+      }
+    }
 
-        this._ratio = boxSize / contentSize;
+    if (
+      this.options.overflow === "hidden" ||
+      (this.options.overflow === "auto" && boxSize > contentSize)
+    ) {
+      this._scrollbarAnchor.visible = false;
+      return;
+    }
 
+    this._scrollbarAnchor.visible = true;
+    const ratio = boxSize / contentSize;
+
+    switch (this.options.direction) {
+      case "horizontal": {
+        this._scrollbarBackground.width = boxSize;
+        this._scrollbarHandle.width = boxSize * ratio;
+        this._scrollbarHandle.x = -1 * this.currentScroll * ratio;
+        break;
+      }
+      case "vertical": {
         this._scrollbarBackground.height = boxSize;
-        this._scrollbarHandle.height = boxSize * this._ratio;
-        this._scrollbarHandle.y = -contentPosition * this._ratio;
+        this._scrollbarHandle.height = boxSize * ratio;
+        this._scrollbarHandle.y = -this._content.y * ratio;
         break;
       }
     }
@@ -230,17 +252,19 @@ export class Scrollbox extends chip.Composite {
    */
   private _scrollbarMove(e: PIXI.FederatedPointerEvent) {
     const local = this._scrollbarAnchor.toLocal(e.global);
-    const deltaPosition =
-      this.options.direction === "horizontal"
-        ? local.x - this._pointerDown.last.x
-        : local.y - this._pointerDown.last.y;
-    const fraction = deltaPosition / this._ratio;
 
     if (this.options.direction === "horizontal") {
+      const deltaPosition = local.x - this._pointerDown.last.x;
+      const ratio = this.options.boxWidth / this._content.width;
+      const fraction = deltaPosition / ratio;
       this.scrollBy({ x: -fraction, y: 0 });
     } else {
+      const deltaPosition = local.y - this._pointerDown.last.y;
+      const ratio = this.options.boxWidth / this._content.height;
+      const fraction = deltaPosition / ratio;
       this.scrollBy({ x: 0, y: -fraction });
     }
+
     this._pointerDown.last = local;
 
     if (this.options.stopPropagation) {
@@ -265,7 +289,7 @@ export class Scrollbox extends chip.Composite {
   private _dragDown(e: PIXI.FederatedPointerEvent) {
     if (this._pointerDown) return;
 
-    const local = this._content.toLocal(e.global);
+    const local = this._container.toLocal(e.global);
     this._pointerDown = { type: "drag", last: local };
 
     if (this.options.stopPropagation) {
@@ -280,22 +304,21 @@ export class Scrollbox extends chip.Composite {
    */
 
   private _dragMove(e: PIXI.FederatedPointerEvent) {
-    const local = this._content.toLocal(e.global) as PIXI.Point;
-    const deltaPosition =
-      this.options.direction === "horizontal"
-        ? local.x - this._pointerDown.last.x
-        : local.y - this._pointerDown.last.y;
-
-    if (Math.abs(deltaPosition) <= this.options.dragThreshold) return;
-
-    this._content.interactiveChildren = false;
+    const local = this._container.toLocal(e.global) as PIXI.Point;
+    const deltaPosition: PIXI.IPointData = { x: 0, y: 0 };
 
     if (this.options.direction === "horizontal") {
-      this.scrollBy({ x: deltaPosition, y: 0 });
+      deltaPosition.x = local.x - this._pointerDown.last.x;
     } else {
-      this.scrollBy({ x: 0, y: deltaPosition });
+      deltaPosition.y = local.y - this._pointerDown.last.y;
     }
+
+    if (booyahPixi.magnitude(deltaPosition) <= this.options.dragThreshold)
+      return;
+
+    this.scrollBy(deltaPosition);
     this._pointerDown.last = local;
+    this._content.interactiveChildren = false;
 
     if (this.options.stopPropagation) {
       e.stopPropagation();
