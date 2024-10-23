@@ -238,7 +238,7 @@ export class Scrollbox extends chip.Composite {
   private _scrollbarDown(e: PIXI.FederatedPointerEvent) {
     if (this._pointerDown) return;
 
-    const local = this._scrollbarAnchor.toLocal(e.global);
+    const local = this._container.toLocal(e.global);
     this._pointerDown = {
       type: "scrollbar",
       last: local,
@@ -256,7 +256,7 @@ export class Scrollbox extends chip.Composite {
    * @private
    */
   private _scrollbarMove(e: PIXI.FederatedPointerEvent) {
-    const local = this._scrollbarAnchor.toLocal(e.global);
+    const local = this._container.toLocal(e.global);
 
     if (this.options.direction === "horizontal") {
       const deltaPosition = local.x - this._pointerDown.last.x;
@@ -265,7 +265,7 @@ export class Scrollbox extends chip.Composite {
       this.scrollBy({ x: -fraction, y: 0 });
     } else {
       const deltaPosition = local.y - this._pointerDown.last.y;
-      const ratio = this.options.boxWidth / this._content.height;
+      const ratio = this.options.boxHeight / this._content.height;
       const fraction = deltaPosition / ratio;
       this.scrollBy({ x: 0, y: -fraction });
     }
