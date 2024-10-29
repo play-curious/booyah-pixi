@@ -5,10 +5,60 @@ import * as _ from "underscore";
 
 import * as booyahPixi from "./booyahPixi";
 
-type ResolvingContext = { renderSize: number };
-type Resolvable<Type, Context extends ResolvingContext> =
-  | Type
-  | ((context: Context) => Type);
+type ResolvableFunction<Type, Context> = (context: Context) => Type;
+type Resolvable<Type, Context> = Type | ResolvableFunction<Type, Context>;
+
+function isResolvableFunction<Type, Context>(
+  resolvable: Resolvable<Type, Context>,
+): resolvable is ResolvableFunction<Type, Context> {
+  return typeof resolvable === "function";
+}
+
+type ResolvableCollection<DataType, Context> = {
+  [Property in keyof DataType]: Resolvable<DataType[Property], Context>;
+};
+
+class MyResolver<DataType, Context> {
+  private _resolvableCollection: ResolvableCollection<DataType, Context>;
+  private _resolvedCollection: DataType;
+
+  constructor() {
+    //@ts-ignore
+    this._resolvedCollection = {};
+  }
+
+  public setResovableCollection(
+    newCollection: ResolvableCollection<DataType, Context>,
+  ) {
+    this._resolvableCollection = newCollection;
+  }
+
+  public resolve(resolvingContext: Context) {
+    for (const key in this._resolvableCollection) {
+      this._resolvedCollection[key] = this._resolve(
+        this._resolvableCollection[key],
+        resolvingContext,
+      ) as DataType[typeof key];
+    }
+  }
+
+  public getResolvedCollection(): DataType {
+    return this._resolvedCollection;
+  }
+
+  private _resolve<Type>(
+    resolvable: Resolvable<Type, Context>,
+    resolvingContext: Context,
+  ): Type {
+    if (isResolvableFunction(resolvable)) {
+      return resolvable(resolvingContext);
+    }
+
+    return resolvable;
+  }
+}
+
+type ResolvingContext = { renderSize: PIXI.IPointData };
 
 function isTexture(object: any): object is PIXI.Texture {
   return object.baseTexture;
@@ -41,7 +91,12 @@ export class ScrollboxOptions {
  *  refreshed
  **/
 export class Scrollbox extends chip.Composite {
-  public readonly options: ScrollboxOptions;
+  public options: ScrollboxOptions;
+  public readonly resolvableOptions: ResolvableCollection<
+    ScrollboxOptions,
+    ResolvingContext
+  >;
+  private _myResolver: MyResolver<ScrollboxOptions, ResolvingContext>;
 
   private _pointerDown: any;
   private _container: PIXI.Container;
@@ -53,12 +108,26 @@ export class Scrollbox extends chip.Composite {
   /**
    * Can be provided with an existing container
    */
-  constructor(partialOptions: Partial<ScrollboxOptions>) {
+  constructor(
+    partialOptions: Partial<
+      ResolvableCollection<ScrollboxOptions, ResolvingContext>
+    >,
+  ) {
     super();
-    this.options = chip.fillInOptions(partialOptions, new ScrollboxOptions());
+    this.resolvableOptions = chip.fillInOptions(
+      partialOptions,
+      new ScrollboxOptions(),
+    );
+    this._myResolver = new MyResolver<ScrollboxOptions, ResolvingContext>();
   }
 
   protected _onActivate() {
+    this._myResolver.setResovableCollection(this.resolvableOptions);
+    this._myResolver.resolve({
+      renderSize: this.chipContext.pixiAppChip.renderSize,
+    });
+    this.options = this._myResolver.getResolvedCollection();
+
     // Last pointerdown event
     this._pointerDown = null;
 
@@ -72,28 +141,43 @@ export class Scrollbox extends chip.Composite {
 
     this._content = new PIXI.Container();
     if (this.options.content) this._content.addChild(this.options.content);
-    this._container.addChild(this._content);
-
-    const mask = new PIXI.Sprite(PIXI.Texture.WHITE);
-    mask.width = this.options.boxWidth;
-    mask.height = this.options.boxHeight;
-    this._content.mask = mask;
-    this._container.addChild(mask);
 
     if (this.options.dragScroll) {
-      const dragBackground = new PIXI.Graphics();
+      const dragBackground = new PIXI.Sprite(PIXI.Texture.WHITE);
       dragBackground.eventMode = "static";
-      dragBackground
-        .beginFill(0)
-        .drawRect(0, 0, this.options.boxWidth, this.options.boxHeight)
-        .endFill();
       dragBackground.alpha = 0;
 
       this._subscribe(dragBackground, "pointerdown", this._dragDown as any);
       this._subscribe(this._content, "pointerdown", this._dragDown as any);
       this._content.eventMode = "static";
-      this._container.addChildAt(dragBackground, 0);
+
+      this._activateChildChip({
+        chip: new booyahPixi.DisplayObjectChip(dragBackground, {
+          properties: {
+            width: this.resolvableOptions.boxWidth,
+            height: this.resolvableOptions.boxHeight,
+          },
+        }),
+        context: { container: this._container },
+      });
     }
+
+    this._activateChildChip({
+      chip: new booyahPixi.DisplayObjectChip(this._content),
+      context: { container: this._container },
+    });
+
+    const mask = new PIXI.Sprite(PIXI.Texture.WHITE);
+    this._content.mask = mask;
+    this._activateChildChip({
+      chip: new booyahPixi.DisplayObjectChip(mask, {
+        properties: {
+          width: this.resolvableOptions.boxWidth,
+          height: this.resolvableOptions.boxHeight,
+        },
+      }),
+      context: { container: this.container },
+    });
 
     if (this.options.wheelScroll) {
       this._subscribe(this._container, "wheel", (event) =>
@@ -102,7 +186,6 @@ export class Scrollbox extends chip.Composite {
     }
 
     this._scrollbarAnchor = new PIXI.Container();
-    this._container.addChild(this._scrollbarAnchor);
 
     if (isTexture(this.options.scrollbarBackground)) {
       this._scrollbarBackground = new PIXI.NineSlicePlane(
@@ -112,7 +195,6 @@ export class Scrollbox extends chip.Composite {
       this._scrollbarBackground = new PIXI.NineSlicePlane(PIXI.Texture.WHITE);
       this._scrollbarBackground.tint = this.options.scrollbarBackground;
     }
-    this._scrollbarAnchor.addChild(this._scrollbarBackground);
 
     if (isTexture(this.options.scrollbarHandle)) {
       this._scrollbarHandle = new PIXI.NineSlicePlane(
@@ -122,7 +204,58 @@ export class Scrollbox extends chip.Composite {
       this._scrollbarHandle = new PIXI.NineSlicePlane(PIXI.Texture.WHITE);
       this._scrollbarHandle.tint = this.options.scrollbarHandle;
     }
-    this._scrollbarAnchor.addChild(this._scrollbarHandle);
+
+    let anchorProperties;
+    let backroundProperties;
+    let handleProperties;
+
+    switch (this.options.direction) {
+      case "horizontal": {
+        backroundProperties = {
+          height: this.resolvableOptions.scrollbarWidth,
+          y: this.resolvableOptions.scrollbarOffset,
+        };
+        handleProperties = {
+          height: this.resolvableOptions.scrollbarWidth,
+          y: this.resolvableOptions.scrollbarOffset,
+        };
+        anchorProperties = { y: this.resolvableOptions.boxHeight };
+        break;
+      }
+      case "vertical": {
+        backroundProperties = {
+          x: this.resolvableOptions.scrollbarOffset,
+          width: this.resolvableOptions.scrollbarWidth,
+        };
+        handleProperties = {
+          x: this.resolvableOptions.scrollbarOffset,
+          width: this.resolvableOptions.scrollbarWidth,
+        };
+        anchorProperties = { x: this.resolvableOptions.boxWidth };
+        break;
+      }
+    }
+
+    this._activateChildChip({
+      chip: new booyahPixi.DisplayObjectChip(this._scrollbarAnchor, {
+        properties: anchorProperties,
+      }),
+      context: { container: this._container },
+    });
+
+    this._activateChildChip({
+      chip: new booyahPixi.DisplayObjectChip(this._scrollbarBackground, {
+        properties: backroundProperties,
+      }),
+      context: { container: this._scrollbarAnchor },
+    });
+
+    this._activateChildChip({
+      chip: new booyahPixi.DisplayObjectChip(this._scrollbarHandle, {
+        properties: handleProperties,
+      }),
+      context: { container: this._scrollbarAnchor },
+    });
 
     this._scrollbarHandle.eventMode = "static";
     this._subscribe(
@@ -131,24 +264,16 @@ export class Scrollbox extends chip.Composite {
       this._scrollbarDown as any,
     );
 
-    switch (this.options.direction) {
-      case "horizontal": {
-        this._scrollbarBackground.height = this.options.scrollbarWidth;
-        this._scrollbarHandle.height = this.options.scrollbarWidth;
-        this._scrollbarAnchor.y =
-          this.options.boxHeight + this.options.scrollbarOffset;
-        break;
-      }
-      case "vertical": {
-        this._scrollbarBackground.width = this.options.scrollbarWidth;
-        this._scrollbarHandle.width = this.options.scrollbarWidth;
-        this._scrollbarAnchor.x =
-          this.options.boxWidth + this.options.scrollbarOffset;
-        break;
-      }
-    }
-
     this.refresh();
+
+    this._subscribe(this.chipContext.pixiAppChip, "resize", () => {
+      this._myResolver.setResovableCollection(this.resolvableOptions);
+      this._myResolver.resolve({
+        renderSize: this.chipContext.pixiAppChip.renderSize,
+      });
+      this.options = this._myResolver.getResolvedCollection();
+      this.refresh();
+    });
   }
 
   /** Call when container contents have changed  */
