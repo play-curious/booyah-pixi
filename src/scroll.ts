@@ -42,7 +42,6 @@ export class ScrollboxOptions {
  **/
 export class Scrollbox extends chip.Composite {
   public readonly options: ScrollboxOptions;
-  public onWheelHandler: () => void;
 
   private _pointerDown: any;
   private _container: PIXI.Container;
@@ -97,10 +96,8 @@ export class Scrollbox extends chip.Composite {
     }
 
     if (this.options.wheelScroll) {
-      this.onWheelHandler = this._onWheel.bind(this);
-      this._chipContext.pixiApplication.view.addEventListener(
-        "wheel",
-        this.onWheelHandler,
+      this._subscribe(this._container, "wheel", (event) =>
+        this._onWheel(event),
       );
     }
 
@@ -152,15 +149,6 @@ export class Scrollbox extends chip.Composite {
     }
 
     this.refresh();
-  }
-
-  protected _onTerminate() {
-    if (this.options.wheelScroll) {
-      this._chipContext.pixiApplication.view.removeEventListener(
-        "wheel",
-        this.onWheelHandler,
-      );
-    }
   }
 
   /** Call when container contents have changed  */
@@ -344,25 +332,8 @@ export class Scrollbox extends chip.Composite {
    * @param {WheelEvent} e
    */
   private _onWheel(e: WheelEvent) {
-    if (!this._container.worldVisible) return;
-
-    // Get coordinates of point and test if we touch this container
-    const globalPoint = new PIXI.Point();
-    this._chipContext.app.renderer.plugins.interaction.mapPositionToPoint(
-      globalPoint,
-      e.clientX,
-      e.clientY,
-    );
-    if (
-      !this._chipContext.app.renderer.events.rootBoundary.hitTest(
-        globalPoint,
-        this._container,
-      )
-    )
-      return;
-
     // Finally, scroll!
-    const scrollAmount = -e.deltaY;
+    const scrollAmount = -e.deltaY / 5;
     if (this.options.direction === "horizontal") {
       this.scrollBy({ x: scrollAmount, y: 0 });
     } else {
