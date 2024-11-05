@@ -196,8 +196,8 @@ export class Dj extends chip.ChipBase {
       loop: false,
     });
 
-    this._channels["forest"] = new DJChannel(this._getSoundResource, {
-      volume: 0.01,
+    this._channels["ambiance"] = new DJChannel(this._getSoundResource, {
+      volume: 0.1,
       singleInstance: true,
       loop: true,
     });
