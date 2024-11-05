@@ -4,6 +4,7 @@ import * as sound from "@pixi/sound";
 
 class DJChannelOptions {
   volume: number;
+  volumeAmp: number;
   singleInstance: boolean;
   loop: boolean;
 }
@@ -22,6 +23,8 @@ class DJChannel {
   private _playingInstances: Array<sound.IMediaInstance>;
   private _channelFilter: sound.Filter;
   private _volumeNode: GainNode;
+  private _volume: number;
+  private _volumeAmp: number;
 
   constructor(
     private readonly _getSoundRessource: (
@@ -29,8 +32,12 @@ class DJChannel {
     ) => sound.Sound | undefined,
     private readonly options: DJChannelOptions,
   ) {
+    this._volumeAmp = options.volumeAmp;
+    this._volume = options.volume;
+
     this._volumeNode = sound.sound.context.audioContext.createGain();
-    this._volumeNode.gain.value = this.options.volume;
+    this._volumeNode.gain.value = this._volume * this._volumeAmp;
+
     this._channelFilter = new sound.filters.Filter(this._volumeNode);
     this._playingInstances = [];
   }
@@ -53,10 +60,10 @@ class DJChannel {
 
     //because for some reason play don't last between context
     soundRessource.filters = [this._channelFilter];
+    soundRessource.volume = completeOptions.volume;
 
     const instance = sound.sound.play(name, {
       loop: this.options.loop,
-      volume: completeOptions.volume,
       complete: () => {
         const index = this._playingInstances.findIndex((playedInstance) => {
           return playedInstance.id === instance.id;
@@ -71,11 +78,21 @@ class DJChannel {
   }
 
   public set volume(value: number) {
-    this._volumeNode.gain.value = value;
+    this._volume = value;
+    this._volumeNode.gain.value = this._volume * this._volumeAmp;
   }
 
   public get volume() {
-    return this._volumeNode.gain.value;
+    return this._volume;
+  }
+
+  public set volumeAmp(value: number) {
+    this._volumeAmp = value;
+    this._volumeNode.gain.value = this._volume * this._volumeAmp;
+  }
+
+  public get volumeAmp() {
+    return this._volumeAmp;
   }
 
   public stop() {
@@ -186,18 +203,21 @@ export class Dj extends chip.ChipBase {
 
     this._channels["music"] = new DJChannel(this._getSoundResource, {
       volume: 0.25,
+      volumeAmp: 1,
       singleInstance: true,
       loop: true,
     });
 
     this._channels["soundEffect"] = new DJChannel(this._getSoundResource, {
       volume: 1,
+      volumeAmp: 1,
       singleInstance: false,
       loop: false,
     });
 
     this._channels["ambiance"] = new DJChannel(this._getSoundResource, {
       volume: 0.1,
+      volumeAmp: 1,
       singleInstance: true,
       loop: true,
     });
@@ -235,6 +255,14 @@ export class Dj extends chip.ChipBase {
 
   public getVolume(channel: string) {
     return this._channels[channel].volume;
+  }
+
+  public changeVolumeAmp(channel: string, value: number) {
+    this._channels[channel].volumeAmp = value;
+  }
+
+  public getVolumeAmp(channel: string) {
+    return this._channels[channel].volumeAmp;
   }
 
   get musicChannelVolume(): number {
