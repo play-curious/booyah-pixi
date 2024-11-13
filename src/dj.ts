@@ -265,6 +265,10 @@ export class Dj extends chip.ChipBase {
     return this._channels[channel].volumeAmp;
   }
 
+  public stop(channel: string) {
+    this._channels[channel].stop();
+  }
+
   get musicChannelVolume(): number {
     return this._channels["music"].volume;
   }
