@@ -1,7 +1,6 @@
-import * as PIXI from "pixi.js";
-
 import * as chip from "booyah/dist/chip";
 import * as util from "booyah/dist/util";
+import * as PIXI from "pixi.js";
 
 export type StaticLayoutValue =
   | number
@@ -14,7 +13,7 @@ export type StaticLayoutValue =
 
 export type DynamicLayoutValue = (
   options: LayoutOptions,
-  bounds: PIXI.Rectangle
+  bounds: PIXI.Rectangle,
 ) => StaticLayoutValue;
 
 export type LayoutValue = StaticLayoutValue | DynamicLayoutValue;
@@ -51,7 +50,7 @@ export class LayoutOptions {
 function parseLayoutProperty(
   options: LayoutOptions,
   prop: keyof LayoutOptions,
-  bounds: PIXI.Rectangle
+  bounds: PIXI.Rectangle,
 ): number {
   // If property doesn't exist, just return 0
   if (!(prop in options)) return 0;
@@ -63,7 +62,7 @@ function parseLayoutProperty(
 function parseLayoutValue(
   options: LayoutOptions,
   propValue: LayoutValue,
-  bounds: PIXI.Rectangle
+  bounds: PIXI.Rectangle,
 ): number {
   // If property doesn't exist, just return 0
   if (typeof propValue === "undefined") return 0;
@@ -82,7 +81,7 @@ function parseLayoutValue(
   const matchingValue = options[matchingProp];
   if (typeof matchingValue !== "number") {
     throw new Error(
-      `Layout referencing property ${matchingProp} which is not a number. Value: ${matchingValue}`
+      `Layout referencing property ${matchingProp} which is not a number. Value: ${matchingValue}`,
     );
   }
 
@@ -111,7 +110,7 @@ export abstract class LayoutBase
 
   protected abstract _onRefresh(
     outerBounds: PIXI.Rectangle,
-    innerBounds: PIXI.Rectangle
+    innerBounds: PIXI.Rectangle,
   ): void;
 
   refresh(bounds: PIXI.Rectangle): void {
@@ -122,14 +121,14 @@ export abstract class LayoutBase
       bounds.width < parseLayoutProperty(this._options, "minWidth", bounds)
     )
       console.error(
-        `Insufficient width to layout item. Bounds.width = ${bounds.width} and minWidth = ${this._options.minWidth}`
+        `Insufficient width to layout item. Bounds.width = ${bounds.width} and minWidth = ${this._options.minWidth}`,
       );
     if (
       this._options.minHeight &&
       bounds.height < parseLayoutProperty(this._options, "minHeight", bounds)
     )
       console.error(
-        `Insufficient height to layout item. Bounds.height = ${bounds.height} and minHeight = ${this._options.minHeight}`
+        `Insufficient height to layout item. Bounds.height = ${bounds.height} and minHeight = ${this._options.minHeight}`,
       );
 
     const innerBounds = new PIXI.Rectangle(
@@ -140,7 +139,7 @@ export abstract class LayoutBase
         parseLayoutProperty(this._options, "paddingRight", bounds),
       bounds.height -
         parseLayoutProperty(this._options, "paddingTop", bounds) -
-        parseLayoutProperty(this._options, "paddingBottom", bounds)
+        parseLayoutProperty(this._options, "paddingBottom", bounds),
     );
 
     this._onRefresh(bounds, innerBounds);
@@ -165,7 +164,7 @@ export abstract class LayoutBase
 export class SpacerLayout extends LayoutBase {
   protected _onRefresh(
     outerBounds: PIXI.Rectangle,
-    innerBounds: PIXI.Rectangle
+    innerBounds: PIXI.Rectangle,
   ): void {
     // no op
   }
@@ -177,7 +176,7 @@ export class DisplayObjectLayout extends LayoutBase {
 
   constructor(
     private readonly _displayObject: PIXI.DisplayObject,
-    options?: Partial<LayoutOptions>
+    options?: Partial<LayoutOptions>,
   ) {
     super(options);
 
@@ -190,12 +189,12 @@ export class DisplayObjectLayout extends LayoutBase {
           parseLayoutProperty(
             this._options,
             "paddingLeft",
-            new PIXI.Rectangle()
+            new PIXI.Rectangle(),
           ) +
           parseLayoutProperty(
             this._options,
             "paddingRight",
-            new PIXI.Rectangle()
+            new PIXI.Rectangle(),
           );
       }
 
@@ -205,12 +204,12 @@ export class DisplayObjectLayout extends LayoutBase {
           parseLayoutProperty(
             this._options,
             "paddingTop",
-            new PIXI.Rectangle()
+            new PIXI.Rectangle(),
           ) +
           parseLayoutProperty(
             this._options,
             "paddingBottom",
-            new PIXI.Rectangle()
+            new PIXI.Rectangle(),
           );
       }
     }
@@ -234,7 +233,7 @@ export class DisplayObjectLayout extends LayoutBase {
         horizontalScale =
           Math.max(
             innerBounds.width,
-            parseLayoutProperty(this._options, "minWidth", innerBounds)
+            parseLayoutProperty(this._options, "minWidth", innerBounds),
           ) / parseLayoutProperty(this._options, "idealWidth", innerBounds);
       } else {
         horizontalScale =
@@ -246,7 +245,7 @@ export class DisplayObjectLayout extends LayoutBase {
         verticalScale =
           Math.max(
             innerBounds.height,
-            parseLayoutProperty(this._options, "minHeight", innerBounds)
+            parseLayoutProperty(this._options, "minHeight", innerBounds),
           ) / parseLayoutProperty(this._options, "idealHeight", innerBounds);
       } else {
         verticalScale =
@@ -264,7 +263,7 @@ export class DisplayObjectLayout extends LayoutBase {
         horizontalScale =
           Math.min(
             parseLayoutProperty(this._options, "maxWidth", innerBounds),
-            innerBounds.width
+            innerBounds.width,
           ) / parseLayoutProperty(this._options, "idealWidth", innerBounds);
       } else {
         horizontalScale =
@@ -276,7 +275,7 @@ export class DisplayObjectLayout extends LayoutBase {
         verticalScale =
           Math.min(
             parseLayoutProperty(this._options, "maxHeight", innerBounds),
-            innerBounds.height
+            innerBounds.height,
           ) / parseLayoutProperty(this._options, "idealHeight", innerBounds);
       } else {
         verticalScale =
@@ -302,7 +301,7 @@ export class DisplayObjectLayout extends LayoutBase {
 
     // Start with the position within the padding area
     const position = this._displayObject.parent.toLocal(
-      new PIXI.Point(innerBounds.x, innerBounds.y)
+      new PIXI.Point(innerBounds.x, innerBounds.y),
     );
 
     // If the object has an non-zero anchor point, adjust the position
@@ -385,7 +384,7 @@ export abstract class CompositeLayout extends LayoutBase {
 export class VerticalLayout extends CompositeLayout {
   protected _onRefresh(
     outerBounds: PIXI.Rectangle,
-    innerBounds: PIXI.Rectangle
+    innerBounds: PIXI.Rectangle,
   ): void {
     layoutAlongAxis(this._children, this.options, "vertical", innerBounds);
   }
@@ -394,16 +393,17 @@ export class VerticalLayout extends CompositeLayout {
 export class HorizontalLayout extends CompositeLayout {
   protected _onRefresh(
     outerBounds: PIXI.Rectangle,
-    innerBounds: PIXI.Rectangle
+    innerBounds: PIXI.Rectangle,
   ): void {
     layoutAlongAxis(this._children, this.options, "horizontal", innerBounds);
   }
 }
+
 function layoutAlongAxis(
   items: Array<Layout>,
   options: LayoutOptions,
   direction: "horizontal" | "vertical",
-  innerBounds: PIXI.Rectangle
+  innerBounds: PIXI.Rectangle,
 ): void {
   // Determine which properties will be used depending on the direction
   const minLengthProp = direction === "vertical" ? "minHeight" : "minWidth";
@@ -424,10 +424,10 @@ function layoutAlongAxis(
       minUsedSpace += parseLayoutProperty(
         child.options,
         minLengthProp,
-        innerBounds
+        innerBounds,
       );
       lengths.push(
-        parseLayoutProperty(child.options, minLengthProp, innerBounds)
+        parseLayoutProperty(child.options, minLengthProp, innerBounds),
       );
     } else {
       lengths.push(0);
@@ -455,7 +455,7 @@ function layoutAlongAxis(
       const spaceToGive = Math.min(
         extraSpacePerChild,
         parseLayoutProperty(child.options, maxLengthProp, innerBounds) -
-          lengths[childIndex]
+          lengths[childIndex],
       );
       lengths[childIndex] += spaceToGive;
       availableExtraSpace -= spaceToGive;
@@ -500,7 +500,7 @@ function layoutAlongAxis(
         const spaceToGive = Math.min(
           extraSpacePerChild,
           parseLayoutProperty(child.options, maxLengthProp, innerBounds) -
-            lengths[childIndex]
+            lengths[childIndex],
         );
         lengths[childIndex] += spaceToGive;
         availableExtraSpace -= spaceToGive;
@@ -541,14 +541,14 @@ function layoutAlongAxis(
         innerBounds.x,
         innerBounds.y + axisOffset,
         innerBounds.width,
-        lengths[i]
+        lengths[i],
       );
     } else {
       itemBounds = new PIXI.Rectangle(
         innerBounds.x + axisOffset,
         innerBounds.y,
         lengths[i],
-        innerBounds.height
+        innerBounds.height,
       );
     }
 
@@ -575,7 +575,7 @@ function layoutAlongAxis(
 export class PaddedLayout extends CompositeLayout {
   protected _onRefresh(
     outerBounds: PIXI.Rectangle,
-    innerBounds: PIXI.Rectangle
+    innerBounds: PIXI.Rectangle,
   ): void {
     for (const child of this._children) {
       child.refresh(innerBounds);
@@ -584,7 +584,10 @@ export class PaddedLayout extends CompositeLayout {
 }
 
 export class RootLayout extends CompositeLayout {
-  constructor(private _rectangle?: PIXI.Rectangle, children?: Array<Layout>) {
+  constructor(
+    private _rectangle?: PIXI.Rectangle,
+    children?: Array<Layout>,
+  ) {
     super(children);
 
     if (this._rectangle) this.refresh(this._rectangle);
@@ -593,7 +596,7 @@ export class RootLayout extends CompositeLayout {
   protected _onRefresh(): void {
     if (this._lastBounds !== this._rectangle)
       throw new Error(
-        "Root layout should not be called with other bounds than its own"
+        "Root layout should not be called with other bounds than its own",
       );
 
     for (const child of this._children) {
@@ -619,7 +622,8 @@ export class RootLayoutResizer extends chip.ChipBase {
   }
 
   protected _onActivate(): void {
-    if (!this.chipContext.pixiApplication) throw new Error("Cannot find PIXI app");
+    if (!this.chipContext.pixiApplication)
+      throw new Error("Cannot find PIXI app");
 
     this._onResize();
 
@@ -641,7 +645,6 @@ export class RootLayoutResizer extends chip.ChipBase {
       layout: this._rootLayout,
     };
   }
-
 }
 
 // export function installFullScreenLayout(
@@ -661,8 +664,7 @@ export class LayoutChip extends chip.ChipBase {
   }
 
   protected _onActivate(): void {
-    if (!this.chipContext.layout)
-      throw new Error("Cannot find parent layout");
+    if (!this.chipContext.layout) throw new Error("Cannot find parent layout");
 
     this.chipContext.layout.addChildLayout(this._layout);
   }
@@ -703,7 +705,7 @@ export class LayoutTest extends chip.Composite {
           horizontalAlign: "right",
           paddingTop: 10,
           paddingRight: 15,
-        })
+        }),
       );
     }
 
@@ -720,7 +722,7 @@ export class LayoutTest extends chip.Composite {
         new DisplayObjectLayout(blue, {
           maxHeight: 200,
           idealHeight: 200,
-        })
+        }),
       );
     }
 
@@ -732,7 +734,7 @@ export class LayoutTest extends chip.Composite {
       this._container.addChild(green);
 
       layout.addChildLayout(
-        new DisplayObjectLayout(green, { horizontalAlign: "center" })
+        new DisplayObjectLayout(green, { horizontalAlign: "center" }),
       );
     }
 
@@ -760,7 +762,7 @@ export class LayoutTest extends chip.Composite {
           verticalAlign: "top",
           paddingTop: 10,
           paddingRight: 15,
-        })
+        }),
       );
     }
 
@@ -777,7 +779,7 @@ export class LayoutTest extends chip.Composite {
         new DisplayObjectLayout(green, {
           maxWidth: 200,
           idealWidth: "maxWidth",
-        })
+        }),
       );
     }
 
@@ -789,7 +791,7 @@ export class LayoutTest extends chip.Composite {
       this._container.addChild(blue);
 
       layout.addChildLayout(
-        new DisplayObjectLayout(blue, { verticalAlign: "middle" })
+        new DisplayObjectLayout(blue, { verticalAlign: "middle" }),
       );
     }
 

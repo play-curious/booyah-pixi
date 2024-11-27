@@ -164,19 +164,591 @@ export function withinDistanceOfPoints(
   return false;
 }
 
-interface PixiAppChipOptions {
+export type StaticDisplayItemValue =
+  | number
+  | "minWidth"
+  | "minHeight"
+  | "idealWidth"
+  | "idealHeight"
+  | "maxWidth"
+  | "maxHeight";
+
+export interface RenderInfo {
+  renderSize: PIXI.IPointData;
+}
+
+export interface DynamicDisplayItemValueOptions extends RenderInfo {
+  displayItemOptions: Partial<DisplayItemOptions>;
+}
+
+export type DynamicDisplayItemValue = (
+  options: DynamicDisplayItemValueOptions,
+) => StaticDisplayItemValue;
+
+export type DisplayItemValue = StaticDisplayItemValue | DynamicDisplayItemValue;
+
+export class DisplayItemOptions {
+  minWidth: DisplayItemValue;
+  minHeight: DisplayItemValue;
+
+  idealWidth: DisplayItemValue;
+  idealHeight: DisplayItemValue;
+
+  maxWidth: DisplayItemValue;
+  maxHeight: DisplayItemValue;
+
+  paddingLeft: DisplayItemValue = 0;
+  paddingRight: DisplayItemValue = 0;
+  paddingTop: DisplayItemValue = 0;
+  paddingBottom: DisplayItemValue = 0;
+}
+
+// Parses a property in the displayitem options as a number
+function parseDisplayItemProperty(
+  options: Partial<DisplayItemOptions>,
+  prop: keyof DisplayItemOptions,
+  renderInfo: RenderInfo,
+): number {
+  // If property doesn't exist, return undefined
+  if (!(prop in options)) return;
+
+  return parseDisplayItemValue(
+    options,
+    options[prop] as DisplayItemValue,
+    renderInfo,
+  );
+}
+
+// Parses a displayitem value as a number
+function parseDisplayItemValue(
+  displayItemOptions: Partial<DisplayItemOptions>,
+  propValue: DisplayItemValue,
+  renderInfo: RenderInfo,
+): number {
+  // If property doesn't exist, just return 0
+  if (typeof propValue === "undefined") return 0;
+  // If property is a number, return it directly
+  if (typeof propValue === "number") return propValue as number;
+
+  // If property is a function (dynamic) call it and parse the result
+  if (typeof propValue === "function") {
+    propValue = (propValue as DynamicDisplayItemValue)({
+      displayItemOptions,
+      ...renderInfo,
+    });
+    if (typeof propValue === "undefined") return 0;
+    if (typeof propValue === "number") return propValue as number;
+  }
+
+  // Find matching property and return it
+  const matchingProp = propValue as keyof DisplayItemOptions;
+  const matchingValue = displayItemOptions[matchingProp];
+  if (typeof matchingValue !== "number") {
+    throw new Error(
+      `DisplayItem referencing property ${matchingProp} which is not a number. Value: ${matchingValue}`,
+    );
+  }
+
+  return matchingValue;
+}
+
+export interface DisplayItem extends chip.NodeEventSource {
+  readonly minWidth?: number;
+  readonly minHeight?: number;
+  readonly idealWidth?: number;
+  readonly idealHeight?: number;
+  readonly maxWidth?: number;
+  readonly maxHeight?: number;
+
+  prepareRefresh(renderInfo: RenderInfo): void;
+  refresh(bounds: PIXI.Rectangle): void;
+
+  addChildDisplayItem(child: DisplayItem): void;
+  removeChildDisplayItem(child: DisplayItem): void;
+}
+
+export abstract class DisplayItemBase
+  extends chip.Parallel
+  implements chip.NodeEventSource
+{
+  protected abstract _displayItemOptions: DisplayItemOptions;
+
+  protected _lastRenderInfo?: RenderInfo;
+  protected _lastBounds?: PIXI.Rectangle;
+
+  constructor(
+    childChipOptions: Array<
+      chip.ActivateChildChipOptions | chip.ChipResolvable
+    > = [],
+  ) {
+    super(childChipOptions, { terminateOnCompletion: false });
+  }
+
+  addChildDisplayItem(child: DisplayItem): void {
+    throw new Error(`${this.constructor.name} can't have child display items`);
+  }
+
+  removeChildDisplayItem(child: DisplayItem): void {
+    throw new Error(`${this.constructor.name}  can't have child display items`);
+  }
+
+  prepareRefresh(renderInfo: RenderInfo): void {
+    this._lastRenderInfo = renderInfo;
+    this._onPrepareRefresh();
+    // TODO: emit event?
+  }
+
+  protected _onPrepareRefresh() {
+    /* no op */
+  }
+
+  protected abstract _onRefresh(
+    outerBounds: PIXI.Rectangle,
+    innerBounds: PIXI.Rectangle,
+  ): void;
+
+  refresh(bounds: PIXI.Rectangle): void {
+    this._lastBounds = bounds;
+    this.emit("willRefresh", bounds);
+
+    if (typeof this.minWidth !== "undefined" && bounds.width < this.minWidth)
+      console.error(
+        `Insufficient width to displayitem display item. Bounds.width = ${bounds.width} and minWidth = ${this.minWidth}`,
+      );
+    if (typeof this.minHeight !== "undefined" && bounds.height < this.minHeight)
+      console.error(
+        `Insufficient height to displayitem display item. Bounds.height = ${bounds.height} and minHeight = ${this.minHeight}`,
+      );
+
+    const innerBounds = new PIXI.Rectangle(
+      bounds.x +
+        parseDisplayItemProperty(
+          this._displayItemOptions,
+          "paddingLeft",
+          this._lastRenderInfo,
+        ),
+      bounds.y +
+        parseDisplayItemProperty(
+          this._displayItemOptions,
+          "paddingTop",
+          this._lastRenderInfo,
+        ),
+      bounds.width -
+        parseDisplayItemProperty(
+          this._displayItemOptions,
+          "paddingLeft",
+          this._lastRenderInfo,
+        ) -
+        parseDisplayItemProperty(
+          this._displayItemOptions,
+          "paddingRight",
+          this._lastRenderInfo,
+        ),
+      bounds.height -
+        parseDisplayItemProperty(
+          this._displayItemOptions,
+          "paddingTop",
+          this._lastRenderInfo,
+        ) -
+        parseDisplayItemProperty(
+          this._displayItemOptions,
+          "paddingBottom",
+          this._lastRenderInfo,
+        ),
+    );
+
+    this._onRefresh(bounds, innerBounds);
+
+    this.emit("didRefresh", bounds);
+  }
+
+  get minWidth() {
+    return parseDisplayItemProperty(
+      this._displayItemOptions,
+      "minWidth",
+      this._lastRenderInfo,
+    );
+  }
+  get minHeight() {
+    return parseDisplayItemProperty(
+      this._displayItemOptions,
+      "minHeight",
+      this._lastRenderInfo,
+    );
+  }
+
+  get idealWidth() {
+    return parseDisplayItemProperty(
+      this._displayItemOptions,
+      "idealWidth",
+      this._lastRenderInfo,
+    );
+  }
+  get idealHeight() {
+    return parseDisplayItemProperty(
+      this._displayItemOptions,
+      "idealHeight",
+      this._lastRenderInfo,
+    );
+  }
+
+  get maxWidth() {
+    return parseDisplayItemProperty(
+      this._displayItemOptions,
+      "maxWidth",
+      this._lastRenderInfo,
+    );
+  }
+  get maxHeight() {
+    return parseDisplayItemProperty(
+      this._displayItemOptions,
+      "maxHeight",
+      this._lastRenderInfo,
+    );
+  }
+}
+
+export abstract class ContainerChip extends DisplayItemBase {
+  protected _childDisplayItems: Array<DisplayItem>;
+  protected _container: PIXI.Container;
+
+  protected _onActivate(): void {
+    this._childDisplayItems = [];
+
+    if (this.parentDisplayItem) {
+      this.parentDisplayItem.addChildDisplayItem(this);
+    }
+  }
+
+  protected _onTerminate(): void {
+    if (this.parentDisplayItem) {
+      this.parentDisplayItem.removeChildDisplayItem(this);
+    }
+  }
+
+  addChildDisplayItem(child: DisplayItem): void {
+    const index = this._childDisplayItems.indexOf(child);
+    if (index !== -1) throw new Error("Cannot add duplicate child displayitem");
+
+    this._childDisplayItems.push(child);
+
+    if (this._lastBounds) this.refresh(this._lastBounds);
+  }
+
+  removeChildDisplayItem(child: DisplayItem): void {
+    const index = this._childDisplayItems.indexOf(child);
+    if (index === -1)
+      throw new Error("Cannot find child displayitem to remove");
+
+    this._childDisplayItems.splice(index, 1);
+
+    if (this._lastBounds) this.refresh(this._lastBounds);
+  }
+
+  protected _onPrepareRefresh(): void {
+    for (const child of this._childDisplayItems)
+      child.prepareRefresh(this._lastRenderInfo);
+  }
+
+  private _sumChildValues(
+    prop:
+      | "minWidth"
+      | "minHeight"
+      | "idealWidth"
+      | "idealHeight"
+      | "maxWidth"
+      | "maxHeight",
+  ) {
+    return this._childDisplayItems.reduce((sum, child) => sum + child[prop], 0);
+  }
+
+  get minWidth() {
+    return super.minWidth ?? this._sumChildValues("minWidth");
+  }
+  get minHeight() {
+    return super.minHeight ?? this._sumChildValues("minHeight");
+  }
+
+  get idealWidth() {
+    return super.idealWidth ?? this._sumChildValues("idealWidth");
+  }
+  get idealHeight() {
+    return super.idealHeight ?? this._sumChildValues("idealHeight");
+  }
+
+  get maxWidth() {
+    return super.minWidth ?? this._sumChildValues("maxWidth");
+  }
+  get maxHeight() {
+    return super.minHeight ?? this._sumChildValues("maxHeight");
+  }
+
+  get parentDisplayItem() {
+    return this._chipContext.displayItem as DisplayItem | undefined;
+  }
+
+  get contextModification(): chip.ChipContextResolvable {
+    return {
+      displayItem: this,
+      container: this._container,
+    };
+  }
+}
+
+export class StackingContainerChip extends ContainerChip {
+  protected _displayItemOptions: DisplayItemOptions;
+
+  constructor(options?: Partial<DisplayItemOptions>) {
+    super();
+
+    this._displayItemOptions = util.fillInOptions(
+      options,
+      new DisplayItemOptions(),
+    );
+  }
+
+  protected _onActivate(): void {
+    super._onActivate();
+
+    this._container = new PIXI.Container();
+    this.chipContext.container.addChild(this._container);
+  }
+
+  protected _onTerminate(): void {
+    super._onTerminate();
+
+    this.chipContext.container.removeChild(this._container);
+    delete this._container;
+  }
+
+  protected _onRefresh(
+    outerBounds: PIXI.Rectangle,
+    innerBounds: PIXI.Rectangle,
+  ): void {
+    // Refresh all children
+    for (const child of this._childDisplayItems) child.refresh(innerBounds);
+  }
+}
+
+export class AxisContainerOptions extends DisplayItemOptions {
+  axis: "horizontal" | "vertical" = "horizontal";
+
+  distributeSpace:
+    | "atStart"
+    | "atEnd"
+    | "atStartAndEnd"
+    | "between"
+    | "around" = "atEnd";
+}
+
+export class AxisContainerChip extends ContainerChip {
+  protected _displayItemOptions: AxisContainerOptions;
+
+  constructor(options: Partial<AxisContainerOptions>) {
+    super();
+
+    this._displayItemOptions = util.fillInOptions(
+      options,
+      new AxisContainerOptions(),
+    );
+  }
+
+  protected _onActivate(): void {
+    super._onActivate();
+
+    this._container = new PIXI.Container();
+    this.chipContext.container.addChild(this._container);
+  }
+
+  protected _onTerminate(): void {
+    super._onTerminate();
+
+    this.chipContext.container.removeChild(this._container);
+    delete this._container;
+  }
+
+  protected _onRefresh(
+    outerBounds: PIXI.Rectangle,
+    innerBounds: PIXI.Rectangle,
+  ): void {
+    // Determine which properties will be used depending on the direction
+    const minLengthProp =
+      this._displayItemOptions.axis === "vertical" ? "minHeight" : "minWidth";
+    const idealLengthProp =
+      this._displayItemOptions.axis === "vertical"
+        ? "idealHeight"
+        : "idealWidth";
+    const maxLengthProp =
+      this._displayItemOptions.axis === "vertical" ? "maxHeight" : "maxWidth";
+    const lengthProp =
+      this._displayItemOptions.axis === "vertical" ? "height" : "width";
+
+    // Do a first pass to gather minimum space and element types
+    const lengths: Array<number> = [];
+    let childIndexesToGrow: Array<number> = [];
+
+    let minUsedSpace = 0;
+    for (let i = 0; i < this._childDisplayItems.length; i++) {
+      const child = this._childDisplayItems[i];
+
+      const childMinLength = child[minLengthProp] || 0;
+      if (typeof childMinLength !== "undefined") {
+        minUsedSpace += childMinLength;
+
+        lengths.push(childMinLength);
+      } else {
+        lengths.push(0);
+      }
+
+      // Prepare the next step by identifying those items with larger ideal lengths
+      const childIdealLength = child[idealLengthProp];
+      if (
+        typeof childIdealLength !== "undefined" &&
+        childIdealLength >= childMinLength
+      ) {
+        childIndexesToGrow.push(i);
+      }
+    }
+
+    // Do a second pass to bring elements to their ideal lengths
+    let availableExtraSpace = innerBounds[lengthProp] - minUsedSpace;
+    while (availableExtraSpace > 1 && childIndexesToGrow.length > 0) {
+      const extraSpacePerChild =
+        availableExtraSpace / childIndexesToGrow.length;
+      for (let i = 0; i < childIndexesToGrow.length; i++) {
+        const childIndex = childIndexesToGrow[i];
+        const child = this._childDisplayItems[childIndex];
+        const childMaxLength = child[maxLengthProp] || 0;
+
+        // Expand the element, but not beyond the ideal length
+        const spaceToGive = Math.min(
+          extraSpacePerChild,
+          childMaxLength - lengths[childIndex],
+        );
+        lengths[childIndex] += spaceToGive;
+        availableExtraSpace -= spaceToGive;
+
+        if (lengths[childIndex] >= childMaxLength) {
+          // Remove the child from the array of indexes to grow. Keep i at the same value for the next loop
+          childIndexesToGrow.splice(i, 1);
+          i--;
+        }
+      }
+    }
+
+    // Identify elements that can still grow
+    if (availableExtraSpace > 1) {
+      childIndexesToGrow = [];
+
+      for (let i = 0; i < this._childDisplayItems.length; i++) {
+        const child = this._childDisplayItems[i];
+        const childMaxLength = child[maxLengthProp] || 0;
+
+        if (!child[maxLengthProp] || childMaxLength > lengths[i]) {
+          childIndexesToGrow.push(i);
+        }
+      }
+    }
+
+    // Do extra passes, giving space to growing elements
+    while (availableExtraSpace > 1 && childIndexesToGrow.length > 0) {
+      const extraSpacePerChild =
+        availableExtraSpace / childIndexesToGrow.length;
+      for (let i = 0; i < childIndexesToGrow.length; i++) {
+        const childIndex = childIndexesToGrow[i];
+        const child = this._childDisplayItems[childIndex];
+
+        if (child[maxLengthProp]) {
+          // Expand the element, but not beyond the max length
+          const spaceToGive = Math.min(
+            extraSpacePerChild,
+            child[maxLengthProp] - lengths[childIndex],
+          );
+          lengths[childIndex] += spaceToGive;
+          availableExtraSpace -= spaceToGive;
+
+          if (lengths[childIndex] >= child[maxLengthProp]) {
+            // Remove the child from the array of indexes to grow. Keep i at the same value for the next loop
+            childIndexesToGrow.splice(i, 1);
+            i--;
+          }
+        } else {
+          // Increase the length in an unbounded way
+          lengths[childIndex] += extraSpacePerChild;
+          availableExtraSpace -= extraSpacePerChild;
+        }
+      }
+    }
+
+    // Distribute any extra space around or between elements at the same time as you assign lengths
+    let axisOffset = 0;
+
+    if (this._displayItemOptions.distributeSpace === "atStart") {
+      axisOffset += availableExtraSpace;
+    } else if (this._displayItemOptions.distributeSpace === "atStartAndEnd") {
+      axisOffset += availableExtraSpace / 2;
+    } else if (this._displayItemOptions.distributeSpace === "around") {
+      axisOffset += availableExtraSpace / this._childDisplayItems.length / 2;
+    }
+
+    for (let i = 0; i < this._childDisplayItems.length; i++) {
+      const child = this._childDisplayItems[i];
+
+      let itemBounds: PIXI.Rectangle;
+      if (this._displayItemOptions.axis === "vertical") {
+        itemBounds = new PIXI.Rectangle(
+          innerBounds.x,
+          innerBounds.y + axisOffset,
+          innerBounds.width,
+          lengths[i],
+        );
+      } else {
+        itemBounds = new PIXI.Rectangle(
+          innerBounds.x + axisOffset,
+          innerBounds.y,
+          lengths[i],
+          innerBounds.height,
+        );
+      }
+
+      // Update item
+      child.refresh(itemBounds);
+
+      // Add space used to y offset
+      axisOffset += lengths[i];
+
+      // Distribute extra space between items
+      if (this._displayItemOptions.distributeSpace === "between") {
+        if (this._childDisplayItems.length > 1)
+          axisOffset +=
+            availableExtraSpace / (this._childDisplayItems.length - 1);
+      } else if (this._displayItemOptions.distributeSpace === "around") {
+        axisOffset += availableExtraSpace / this._childDisplayItems.length;
+      }
+    }
+  }
+}
+
+class PixiAppChipOptions {
   /* Provide either a parent element or a canvas */
   parentElement?: HTMLElement;
   canvas?: PIXI.ICanvas;
 
   appOptions?: Partial<PIXI.IApplicationOptions & PIXI.IRendererOptions>;
+
+  addContainerChip = true;
 }
 
 export class PixiAppChip extends chip.Composite {
-  private _pixiApplication: PIXI.Application;
+  private readonly _options: PixiAppChipOptions;
 
-  constructor(private readonly _options?: PixiAppChipOptions) {
+  private _pixiApplication: PIXI.Application;
+  private _stackingContainerChip?: StackingContainerChip;
+
+  constructor(options?: Partial<PixiAppChipOptions>) {
     super();
+
+    this._options = chip.fillInOptions(options, new PixiAppChipOptions());
   }
 
   protected _onActivate(): void {
@@ -192,12 +764,25 @@ export class PixiAppChip extends chip.Composite {
       parent.appendChild(this._pixiApplication.view as unknown as Node);
     }
 
+    if (this._options.addContainerChip) {
+      this._activateChildChip(new StackingContainerChip(), {
+        context: {
+          pixiAppChip: this,
+          pixiApplication: this._pixiApplication,
+          container: this._pixiApplication.stage,
+        },
+        attribute: "_stackingContainerChip",
+      });
+    }
+
     // If PIXI handles resizing, listen to that event. Otherwise listen to the window
     if (this._pixiApplication.resizeTo) {
       this._subscribe(this._pixiApplication.renderer, "resize", this._onResize);
     } else {
       this._subscribe(window, "resize", this._onResize);
     }
+
+    this._onResize();
   }
 
   protected _onTick(): void {
@@ -209,14 +794,29 @@ export class PixiAppChip extends chip.Composite {
   }
 
   get contextModification(): chip.ChipContextResolvable {
-    return {
-      pixiAppChip: this,
-      pixiApplication: this._pixiApplication,
-      container: this._pixiApplication.stage,
-    };
+    if (this._stackingContainerChip) {
+      return {
+        pixiAppChip: this,
+        pixiApplication: this._pixiApplication,
+        ...this._stackingContainerChip.contextModification,
+      };
+    } else {
+      return {
+        pixiAppChip: this,
+        pixiApplication: this._pixiApplication,
+        container: this._pixiApplication.stage,
+      };
+    }
   }
 
   private _onResize() {
+    if (this._stackingContainerChip) {
+      this._stackingContainerChip.prepareRefresh({
+        renderSize: this.renderSize,
+      });
+      this._stackingContainerChip.refresh(this._pixiApplication.screen);
+    }
+
     this.emit("resize");
   }
 
@@ -282,33 +882,70 @@ export type DisplayObjectProperties<
   >;
 };
 
-export class DisplayObjectChipOptions<
-  DisplayObjectType extends PIXI.DisplayObject,
-> {
+export class SpriteDisplayItemOptions extends DisplayItemOptions {
+  keepAspectRatio = false;
+
+  horizontalAlign: "left" | "right" | "center" = "left";
+  verticalAlign: "top" | "bottom" | "middle" = "top";
+}
+
+export class SpriteChipOptions<DisplayObjectType extends PIXI.DisplayObject> {
   properties?: DisplayObjectProperties<DisplayObjectType> = {};
   onResize?: (
     options: DisplayObjectValueFunctionOptions<DisplayObjectType>,
   ) => unknown;
+  spriteDisplayItemOptions?: Partial<SpriteDisplayItemOptions>;
+
+  addToParentDisplayItem = true;
   addToContainer = true;
 }
 
-export class DisplayObjectChip<
+export class SpriteChip<
   DisplayObjectType extends PIXI.DisplayObject,
-> extends chip.ChipBase {
-  private readonly _options: DisplayObjectChipOptions<DisplayObjectType>;
+> extends DisplayItemBase {
+  private readonly _options: SpriteChipOptions<DisplayObjectType>;
+
+  // Cache of the local bounds so as not to recalculate it
+  private _localBounds?: PIXI.Rectangle;
+  private _idealWidth?: number;
+  private _idealHeight?: number;
 
   private _propertiesToUpdateOnResize: Array<keyof DisplayObjectType>;
 
   constructor(
     public readonly displayObject: DisplayObjectType,
-    options?: Partial<DisplayObjectChipOptions<DisplayObjectType>>,
+    options?: Partial<SpriteChipOptions<DisplayObjectType>>,
   ) {
     super();
 
     this._options = chip.fillInOptions(
       options,
-      new DisplayObjectChipOptions<DisplayObjectType>(),
+      new SpriteChipOptions<DisplayObjectType>(),
     );
+    this._options.spriteDisplayItemOptions = chip.fillInOptions(
+      this._options.spriteDisplayItemOptions,
+      new SpriteDisplayItemOptions(),
+    );
+  }
+
+  _onPrepareRefresh() {
+    if (
+      !this._options.spriteDisplayItemOptions.idealWidth ||
+      !this._options.spriteDisplayItemOptions.idealHeight
+    ) {
+      this._updateIdealSize();
+    } else {
+      this._idealWidth = parseDisplayItemProperty(
+        this._options.spriteDisplayItemOptions,
+        "idealWidth",
+        this._lastRenderInfo,
+      );
+      this._idealHeight = parseDisplayItemProperty(
+        this._options.spriteDisplayItemOptions,
+        "idealHeight",
+        this._lastRenderInfo,
+      );
+    }
   }
 
   _onActivate() {
@@ -363,10 +1000,19 @@ export class DisplayObjectChip<
       renderSize: this.pixiAppChip.renderSize,
     });
 
-    this._subscribe(this.pixiAppChip, "resize", this._onResize);
+    // Optionally participate in the layout
+    if (this._options.addToParentDisplayItem && this.parentDisplayItem) {
+      this.parentDisplayItem.addChildDisplayItem(this);
+    } else {
+      this._subscribe(this.pixiAppChip, "resize", this._onResize);
+    }
   }
 
   _onTerminate() {
+    if (this._options.addToParentDisplayItem && this.parentDisplayItem) {
+      this.parentDisplayItem.removeChildDisplayItem(this);
+    }
+
     if (
       !this._options.hasOwnProperty("addToContainer") ||
       this._options.addToContainer
@@ -394,8 +1040,290 @@ export class DisplayObjectChip<
     }
   }
 
+  private _updateIdealSize() {
+    this._localBounds = this.displayObject.getLocalBounds();
+
+    if (!this._options.spriteDisplayItemOptions.idealWidth) {
+      this._idealWidth =
+        this._localBounds.width +
+        parseDisplayItemProperty(
+          this._options.spriteDisplayItemOptions,
+          "paddingLeft",
+          this._lastRenderInfo,
+        ) +
+        parseDisplayItemProperty(
+          this._options.spriteDisplayItemOptions,
+          "paddingRight",
+          this._lastRenderInfo,
+        );
+    } else {
+      this._idealWidth = parseDisplayItemProperty(
+        this._options.spriteDisplayItemOptions,
+        "idealWidth",
+        this._lastRenderInfo,
+      );
+    }
+
+    if (!this._options.spriteDisplayItemOptions.idealHeight) {
+      this._idealHeight =
+        this._localBounds.height +
+        parseDisplayItemProperty(
+          this._options.spriteDisplayItemOptions,
+          "paddingTop",
+          this._lastRenderInfo,
+        ) +
+        parseDisplayItemProperty(
+          this._options.spriteDisplayItemOptions,
+          "paddingBottom",
+          this._lastRenderInfo,
+        );
+    } else {
+      this._idealHeight = parseDisplayItemProperty(
+        this._options.spriteDisplayItemOptions,
+        "idealHeight",
+        this._lastRenderInfo,
+      );
+    }
+  }
+
+  _onRefresh(outerBounds: PIXI.Rectangle, innerBounds: PIXI.Rectangle): void {
+    // if (!this._displayObject.parent)
+    //   throw new Error("Cannot layout display object without a parent");
+
+    let horizontalScale = 1;
+    let verticalScale = 1;
+
+    if (
+      innerBounds.width <
+        parseDisplayItemProperty(
+          this._displayItemOptions,
+          "idealWidth",
+          this._lastRenderInfo,
+        ) ||
+      innerBounds.height <
+        parseDisplayItemProperty(
+          this._displayItemOptions,
+          "idealHeight",
+          this._lastRenderInfo,
+        )
+    ) {
+      // Shink, but not beyond the min size
+      if (
+        parseDisplayItemProperty(
+          this._displayItemOptions,
+          "minWidth",
+          this._lastRenderInfo,
+        )
+      ) {
+        horizontalScale =
+          Math.max(
+            innerBounds.width,
+            parseDisplayItemProperty(
+              this._displayItemOptions,
+              "minWidth",
+              this._lastRenderInfo,
+            ),
+          ) /
+          parseDisplayItemProperty(
+            this._displayItemOptions,
+            "idealWidth",
+            this._lastRenderInfo,
+          );
+      } else {
+        horizontalScale =
+          innerBounds.width /
+          parseDisplayItemProperty(
+            this._displayItemOptions,
+            "idealWidth",
+            this._lastRenderInfo,
+          );
+      }
+
+      if (this._displayItemOptions.minHeight) {
+        verticalScale =
+          Math.max(
+            innerBounds.height,
+            parseDisplayItemProperty(
+              this._displayItemOptions,
+              "minHeight",
+              this._lastRenderInfo,
+            ),
+          ) /
+          parseDisplayItemProperty(
+            this._displayItemOptions,
+            "idealHeight",
+            this._lastRenderInfo,
+          );
+      } else {
+        verticalScale =
+          innerBounds.height /
+          parseDisplayItemProperty(
+            this._displayItemOptions,
+            "idealHeight",
+            this._lastRenderInfo,
+          );
+      }
+    } else if (
+      innerBounds.width >
+        parseDisplayItemProperty(
+          this._displayItemOptions,
+          "idealWidth",
+          this._lastRenderInfo,
+        ) ||
+      innerBounds.height >
+        parseDisplayItemProperty(
+          this._displayItemOptions,
+          "idealHeight",
+          this._lastRenderInfo,
+        )
+    ) {
+      // Grow, but not beyond the max size
+      if (
+        parseDisplayItemProperty(
+          this._displayItemOptions,
+          "maxWidth",
+          this._lastRenderInfo,
+        )
+      ) {
+        horizontalScale =
+          Math.min(
+            parseDisplayItemProperty(
+              this._displayItemOptions,
+              "maxWidth",
+              this._lastRenderInfo,
+            ),
+            innerBounds.width,
+          ) /
+          parseDisplayItemProperty(
+            this._displayItemOptions,
+            "idealWidth",
+            this._lastRenderInfo,
+          );
+      } else {
+        horizontalScale =
+          innerBounds.width /
+          parseDisplayItemProperty(
+            this._displayItemOptions,
+            "idealWidth",
+            this._lastRenderInfo,
+          );
+      }
+
+      if (
+        parseDisplayItemProperty(
+          this._displayItemOptions,
+          "maxHeight",
+          this._lastRenderInfo,
+        )
+      ) {
+        verticalScale =
+          Math.min(
+            parseDisplayItemProperty(
+              this._displayItemOptions,
+              "maxHeight",
+              this._lastRenderInfo,
+            ),
+            innerBounds.height,
+          ) /
+          parseDisplayItemProperty(
+            this._displayItemOptions,
+            "idealHeight",
+            this._lastRenderInfo,
+          );
+      } else {
+        verticalScale =
+          innerBounds.height /
+          parseDisplayItemProperty(
+            this._displayItemOptions,
+            "idealHeight",
+            this._lastRenderInfo,
+          );
+      }
+    }
+
+    if (this._options.spriteDisplayItemOptions.keepAspectRatio) {
+      const minScale = Math.min(horizontalScale, verticalScale);
+      horizontalScale = minScale;
+      verticalScale = minScale;
+    }
+
+    this.displayObject.scale.set(horizontalScale, verticalScale);
+
+    const scaledWidth =
+      parseDisplayItemProperty(
+        this._displayItemOptions,
+        "idealWidth",
+        this._lastRenderInfo,
+      ) * horizontalScale;
+    const scaledHeight =
+      parseDisplayItemProperty(
+        this._displayItemOptions,
+        "idealHeight",
+        this._lastRenderInfo,
+      ) * verticalScale;
+
+    // Start with the position within the padding area
+    const position = this.displayObject.parent.toLocal(
+      new PIXI.Point(innerBounds.x, innerBounds.y),
+    );
+
+    // If the object has an non-zero anchor point, adjust the position
+    if (!this._localBounds) {
+      this._localBounds = this.displayObject.getLocalBounds();
+    }
+    position.x -= this._localBounds.left;
+    position.y -= this._localBounds.top;
+
+    // Handle horizontal alignment
+    if (
+      this._options.spriteDisplayItemOptions.horizontalAlign !== "left" &&
+      innerBounds.width > scaledWidth
+    ) {
+      const extraSpace = innerBounds.width - scaledWidth;
+      if (this._options.spriteDisplayItemOptions.horizontalAlign === "right") {
+        position.x += extraSpace;
+      } else if (
+        this._options.spriteDisplayItemOptions.horizontalAlign === "center"
+      ) {
+        position.x += extraSpace / 2;
+      }
+    }
+
+    // Handle vertical alignment
+    if (
+      this._options.spriteDisplayItemOptions.verticalAlign !== "top" &&
+      innerBounds.height > scaledHeight
+    ) {
+      const extraSpace = innerBounds.height - scaledHeight;
+      if (this._options.spriteDisplayItemOptions.verticalAlign === "bottom") {
+        position.y += extraSpace;
+      } else if (
+        this._options.spriteDisplayItemOptions.verticalAlign === "middle"
+      ) {
+        position.y += extraSpace / 2;
+      }
+    }
+
+    this.displayObject.position = position;
+  }
+
   get pixiAppChip() {
-    return this._chipContext.pixiAppChip;
+    return this._chipContext.pixiAppChip as PixiAppChip;
+  }
+
+  get parentDisplayItem() {
+    return this._chipContext.displayItem as DisplayItem | undefined;
+  }
+
+  protected get _displayItemOptions() {
+    return this._options.spriteDisplayItemOptions as SpriteDisplayItemOptions;
+  }
+
+  get idealWidth() {
+    return this._idealWidth;
+  }
+  get idealHeight() {
+    return this._idealHeight;
   }
 }
 
@@ -713,5 +1641,126 @@ function updateProperty<
   } else {
     // @ts-ignore
     displayObject[property] = value;
+  }
+}
+
+export class LayoutTest extends chip.Composite {
+  protected _onActivate(): void {
+    this._addHorizontalLayout();
+  }
+
+  // private _addVerticalLayout() {
+  //   const layout = new VerticalLayout([], {
+  //     distributeSpace: "between",
+  //     paddingBottom: 10,
+  //   });
+
+  //   {
+  //     const red = new PIXI.Graphics();
+  //     red.beginFill(0xff0000);
+  //     red.drawRoundedRect(0, 0, 100, 100, 10);
+  //     red.endFill();
+  //     this._container.addChild(red);
+
+  //     layout.addChildLayout(
+  //       new DisplayObjectLayout(red, {
+  //         maxWidth: 100,
+  //         minHeight: 10,
+  //         maxHeight: 100,
+  //         horizontalAlign: "right",
+  //         paddingTop: 10,
+  //         paddingRight: 15,
+  //       })
+  //     );
+  //   }
+
+  //   layout.addChildLayout(new SpacerLayout({ minHeight: 10, maxHeight: 10 }));
+
+  //   {
+  //     const blue = new PIXI.Graphics();
+  //     blue.beginFill(0x00ff00);
+  //     blue.drawRoundedRect(0, 0, 50, 100, 10);
+  //     blue.endFill();
+  //     this._container.addChild(blue);
+
+  //     layout.addChildLayout(
+  //       new DisplayObjectLayout(blue, {
+  //         maxHeight: 200,
+  //         idealHeight: 200,
+  //       })
+  //     );
+  //   }
+
+  //   {
+  //     const green = new PIXI.Graphics();
+  //     green.beginFill(0x0000ff);
+  //     green.drawRoundedRect(0, 0, 100, 50, 10);
+  //     green.endFill();
+  //     this._container.addChild(green);
+
+  //     layout.addChildLayout(
+  //       new DisplayObjectLayout(green, { horizontalAlign: "center" })
+  //     );
+  //   }
+
+  //   this._activateChildChip(new LayoutChip(layout));
+  // }
+
+  private _addHorizontalLayout() {
+    const containerChip = new AxisContainerChip({
+      distributeSpace: "between",
+      paddingBottom: 10,
+    });
+    this._activateChildChip(containerChip);
+
+    {
+      const red = new PIXI.Graphics();
+      red.beginFill(0xff0000);
+      red.drawRoundedRect(0, 0, 100, 100, 10);
+      red.endFill();
+
+      containerChip.addChildChip(
+        new SpriteChip(red, {
+          spriteDisplayItemOptions: {
+            // maxWidth: 100,
+            // minWidth: "idealWidth",
+            // maxWidth: "idealWidth",
+            verticalAlign: "top",
+            paddingTop: 10,
+            paddingRight: 15,
+          },
+        }),
+      );
+    }
+
+    // containerChip.addChildLayout(
+    //   new SpacerLayout({ minWidth: 10, maxWidth: 10 }),
+    // );
+
+    {
+      const green = new PIXI.Graphics();
+      green.beginFill(0x00ff00);
+      green.drawRoundedRect(0, 0, 50, 100, 10);
+      green.endFill();
+
+      containerChip.addChildChip(
+        new SpriteChip(green, {
+          spriteDisplayItemOptions: { maxWidth: 200, idealWidth: "maxWidth" },
+        }),
+      );
+    }
+
+    {
+      const blue = new PIXI.Graphics();
+      blue.beginFill(0x0000ff);
+      blue.drawRoundedRect(0, 0, 100, 50, 10);
+      blue.endFill();
+
+      containerChip.addChildChip(
+        new SpriteChip(blue, {
+          spriteDisplayItemOptions: { verticalAlign: "middle" },
+        }),
+      );
+    }
   }
 }
