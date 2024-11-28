@@ -164,8 +164,7 @@ export function withinDistanceOfPoints(
   return false;
 }
 
-export type StaticDisplayItemValue =
-  | number
+export type DisplayItemProperty =
   | "minWidth"
   | "minHeight"
   | "idealWidth"
@@ -173,12 +172,15 @@ export type StaticDisplayItemValue =
   | "maxWidth"
   | "maxHeight";
 
+export type StaticDisplayItemValue = number | DisplayItemProperty;
+
 export interface RenderInfo {
   renderSize: PIXI.IPointData;
 }
 
 export interface DynamicDisplayItemValueOptions extends RenderInfo {
   displayItemOptions: Partial<DisplayItemOptions>;
+  displayItem: DisplayItem;
 }
 
 export type DynamicDisplayItemValue = (
@@ -203,46 +205,51 @@ export class DisplayItemOptions {
   paddingBottom: DisplayItemValue = 0;
 }
 
-// Parses a property in the displayitem options as a number
-function parseDisplayItemProperty(
-  options: Partial<DisplayItemOptions>,
+function safeParseDisplayItemProperty(
+  displayItem: DisplayItem,
+  displayItemOptions: Partial<DisplayItemOptions>,
   prop: keyof DisplayItemOptions,
   renderInfo: RenderInfo,
 ): number {
-  // If property doesn't exist, return undefined
-  if (!(prop in options)) return;
-
-  return parseDisplayItemValue(
-    options,
-    options[prop] as DisplayItemValue,
-    renderInfo,
+  return (
+    parseDisplayItemProperty(
+      displayItem,
+      displayItemOptions,
+      prop,
+      renderInfo,
+    ) || 0
   );
 }
 
-// Parses a displayitem value as a number
-function parseDisplayItemValue(
+// Parses a property in the displayitem options as a number
+function parseDisplayItemProperty(
+  displayItem: DisplayItem,
   displayItemOptions: Partial<DisplayItemOptions>,
-  propValue: DisplayItemValue,
+  prop: keyof DisplayItemOptions,
   renderInfo: RenderInfo,
-): number {
-  // If property doesn't exist, just return 0
-  if (typeof propValue === "undefined") return 0;
+): number | undefined {
+  // If property doesn't exist, return undefined
+  if (!(prop in displayItemOptions)) return;
+
+  const propValue = displayItemOptions[prop] as DisplayItemValue;
+
   // If property is a number, return it directly
   if (typeof propValue === "number") return propValue as number;
 
   // If property is a function (dynamic) call it and parse the result
   if (typeof propValue === "function") {
-    propValue = (propValue as DynamicDisplayItemValue)({
+    const evaluatedValue = (propValue as DynamicDisplayItemValue)({
       displayItemOptions,
+      displayItem,
       ...renderInfo,
     });
-    if (typeof propValue === "undefined") return 0;
-    if (typeof propValue === "number") return propValue as number;
+    if (typeof evaluatedValue === "undefined") return 0;
+    if (typeof evaluatedValue === "number") return evaluatedValue as number;
   }
 
   // Find matching property and return it
-  const matchingProp = propValue as keyof DisplayItemOptions;
-  const matchingValue = displayItemOptions[matchingProp];
+  const matchingProp = propValue as DisplayItemProperty;
+  const matchingValue = displayItem[matchingProp];
   if (typeof matchingValue !== "number") {
     throw new Error(
       `DisplayItem referencing property ${matchingProp} which is not a number. Value: ${matchingValue}`,
@@ -321,40 +328,10 @@ export abstract class DisplayItemBase
       );
 
     const innerBounds = new PIXI.Rectangle(
-      bounds.x +
-        parseDisplayItemProperty(
-          this._displayItemOptions,
-          "paddingLeft",
-          this._lastRenderInfo,
-        ),
-      bounds.y +
-        parseDisplayItemProperty(
-          this._displayItemOptions,
-          "paddingTop",
-          this._lastRenderInfo,
-        ),
-      bounds.width -
-        parseDisplayItemProperty(
-          this._displayItemOptions,
-          "paddingLeft",
-          this._lastRenderInfo,
-        ) -
-        parseDisplayItemProperty(
-          this._displayItemOptions,
-          "paddingRight",
-          this._lastRenderInfo,
-        ),
-      bounds.height -
-        parseDisplayItemProperty(
-          this._displayItemOptions,
-          "paddingTop",
-          this._lastRenderInfo,
-        ) -
-        parseDisplayItemProperty(
-          this._displayItemOptions,
-          "paddingBottom",
-          this._lastRenderInfo,
-        ),
+      bounds.x + this.paddingLeft,
+      bounds.y + this.paddingTop,
+      bounds.width - this.paddingLeft - this.paddingRight,
+      bounds.height - this.paddingTop - this.paddingBottom,
     );
 
     this._onRefresh(bounds, innerBounds);
@@ -362,47 +339,86 @@ export abstract class DisplayItemBase
     this.emit("didRefresh", bounds);
   }
 
-  get minWidth() {
+  get minWidth(): number | undefined {
     return parseDisplayItemProperty(
+      this,
       this._displayItemOptions,
       "minWidth",
       this._lastRenderInfo,
     );
   }
-  get minHeight() {
+  get minHeight(): number | undefined {
     return parseDisplayItemProperty(
+      this,
       this._displayItemOptions,
       "minHeight",
       this._lastRenderInfo,
     );
   }
 
-  get idealWidth() {
+  get idealWidth(): number | undefined {
     return parseDisplayItemProperty(
+      this,
       this._displayItemOptions,
       "idealWidth",
       this._lastRenderInfo,
     );
   }
-  get idealHeight() {
+  get idealHeight(): number | undefined {
     return parseDisplayItemProperty(
+      this,
       this._displayItemOptions,
       "idealHeight",
       this._lastRenderInfo,
     );
   }
 
-  get maxWidth() {
+  get maxWidth(): number | undefined {
     return parseDisplayItemProperty(
+      this,
       this._displayItemOptions,
       "maxWidth",
       this._lastRenderInfo,
     );
   }
-  get maxHeight() {
+  get maxHeight(): number | undefined {
     return parseDisplayItemProperty(
+      this,
       this._displayItemOptions,
       "maxHeight",
+      this._lastRenderInfo,
+    );
+  }
+
+  get paddingLeft(): number {
+    return safeParseDisplayItemProperty(
+      this,
+      this._displayItemOptions,
+      "paddingLeft",
+      this._lastRenderInfo,
+    );
+  }
+  get paddingRight(): number {
+    return safeParseDisplayItemProperty(
+      this,
+      this._displayItemOptions,
+      "paddingRight",
+      this._lastRenderInfo,
+    );
+  }
+  get paddingTop(): number {
+    return safeParseDisplayItemProperty(
+      this,
+      this._displayItemOptions,
+      "paddingTop",
+      this._lastRenderInfo,
+    );
+  }
+  get paddingBottom(): number {
+    return safeParseDisplayItemProperty(
+      this,
+      this._displayItemOptions,
+      "paddingBottom",
       this._lastRenderInfo,
     );
   }
@@ -432,7 +448,10 @@ export abstract class ContainerChip extends DisplayItemBase {
 
     this._childDisplayItems.push(child);
 
-    if (this._lastBounds) this.refresh(this._lastBounds);
+    if (this._lastBounds) {
+      this.prepareRefresh(this._lastRenderInfo);
+      this.refresh(this._lastBounds);
+    }
   }
 
   removeChildDisplayItem(child: DisplayItem): void {
@@ -604,7 +623,7 @@ export class AxisContainerChip extends ContainerChip {
       const childIdealLength = child[idealLengthProp];
       if (
         typeof childIdealLength !== "undefined" &&
-        childIdealLength >= childMinLength
+        childIdealLength > childMinLength
       ) {
         childIndexesToGrow.push(i);
       }
@@ -618,17 +637,17 @@ export class AxisContainerChip extends ContainerChip {
       for (let i = 0; i < childIndexesToGrow.length; i++) {
         const childIndex = childIndexesToGrow[i];
         const child = this._childDisplayItems[childIndex];
-        const childMaxLength = child[maxLengthProp] || 0;
+        const childIdealLength = child[idealLengthProp] || 0;
 
         // Expand the element, but not beyond the ideal length
         const spaceToGive = Math.min(
           extraSpacePerChild,
-          childMaxLength - lengths[childIndex],
+          childIdealLength - lengths[childIndex],
         );
         lengths[childIndex] += spaceToGive;
         availableExtraSpace -= spaceToGive;
 
-        if (lengths[childIndex] >= childMaxLength) {
+        if (lengths[childIndex] >= childIdealLength) {
           // Remove the child from the array of indexes to grow. Keep i at the same value for the next loop
           childIndexesToGrow.splice(i, 1);
           i--;
@@ -636,15 +655,17 @@ export class AxisContainerChip extends ContainerChip {
       }
     }
 
-    // Identify elements that can still grow
+    // Identify elements that can still grow (no max length, or max length greater than current)
     if (availableExtraSpace > 1) {
       childIndexesToGrow = [];
 
       for (let i = 0; i < this._childDisplayItems.length; i++) {
         const child = this._childDisplayItems[i];
-        const childMaxLength = child[maxLengthProp] || 0;
 
-        if (!child[maxLengthProp] || childMaxLength > lengths[i]) {
+        if (
+          typeof child[maxLengthProp] === "undefined" ||
+          child[maxLengthProp] > lengths[i]
+        ) {
           childIndexesToGrow.push(i);
         }
       }
@@ -658,7 +679,7 @@ export class AxisContainerChip extends ContainerChip {
         const childIndex = childIndexesToGrow[i];
         const child = this._childDisplayItems[childIndex];
 
-        if (child[maxLengthProp]) {
+        if (typeof child[maxLengthProp] !== "undefined") {
           // Expand the element, but not beyond the max length
           const spaceToGive = Math.min(
             extraSpacePerChild,
@@ -883,7 +904,7 @@ export type DisplayObjectProperties<
 };
 
 export class SpriteDisplayItemOptions extends DisplayItemOptions {
-  keepAspectRatio = false;
+  keepAspectRatio = true;
 
   horizontalAlign: "left" | "right" | "center" = "left";
   verticalAlign: "top" | "bottom" | "middle" = "top";
@@ -936,11 +957,13 @@ export class SpriteChip<
       this._updateIdealSize();
     } else {
       this._idealWidth = parseDisplayItemProperty(
+        this,
         this._options.spriteDisplayItemOptions,
         "idealWidth",
         this._lastRenderInfo,
       );
       this._idealHeight = parseDisplayItemProperty(
+        this,
         this._options.spriteDisplayItemOptions,
         "idealHeight",
         this._lastRenderInfo,
@@ -1028,6 +1051,8 @@ export class SpriteChip<
       renderSize: this.pixiAppChip.renderSize,
     };
 
+    // TODO: optionally update ideal size
+
     for (const property of this._propertiesToUpdateOnResize) {
       const f = this._options.properties[
         property
@@ -1045,19 +1070,10 @@ export class SpriteChip<
 
     if (!this._options.spriteDisplayItemOptions.idealWidth) {
       this._idealWidth =
-        this._localBounds.width +
-        parseDisplayItemProperty(
-          this._options.spriteDisplayItemOptions,
-          "paddingLeft",
-          this._lastRenderInfo,
-        ) +
-        parseDisplayItemProperty(
-          this._options.spriteDisplayItemOptions,
-          "paddingRight",
-          this._lastRenderInfo,
-        );
+        this._localBounds.width + this.paddingLeft + this.paddingRight;
     } else {
       this._idealWidth = parseDisplayItemProperty(
+        this,
         this._options.spriteDisplayItemOptions,
         "idealWidth",
         this._lastRenderInfo,
@@ -1066,19 +1082,10 @@ export class SpriteChip<
 
     if (!this._options.spriteDisplayItemOptions.idealHeight) {
       this._idealHeight =
-        this._localBounds.height +
-        parseDisplayItemProperty(
-          this._options.spriteDisplayItemOptions,
-          "paddingTop",
-          this._lastRenderInfo,
-        ) +
-        parseDisplayItemProperty(
-          this._options.spriteDisplayItemOptions,
-          "paddingBottom",
-          this._lastRenderInfo,
-        );
+        this._localBounds.height + this.paddingTop + this.paddingBottom;
     } else {
       this._idealHeight = parseDisplayItemProperty(
+        this,
         this._options.spriteDisplayItemOptions,
         "idealHeight",
         this._lastRenderInfo,
@@ -1093,151 +1100,49 @@ export class SpriteChip<
     let horizontalScale = 1;
     let verticalScale = 1;
 
+    // Reason in sizes without padding
+    const idealInnerWidth = this.idealWidth
+      ? this.idealWidth - (this.paddingLeft + this.paddingRight)
+      : 0;
+    const idealInnerHeight = this.idealHeight
+      ? this.idealHeight - (this.paddingTop + this.paddingBottom)
+      : 0;
+
     if (
-      innerBounds.width <
-        parseDisplayItemProperty(
-          this._displayItemOptions,
-          "idealWidth",
-          this._lastRenderInfo,
-        ) ||
-      innerBounds.height <
-        parseDisplayItemProperty(
-          this._displayItemOptions,
-          "idealHeight",
-          this._lastRenderInfo,
-        )
+      innerBounds.width < idealInnerWidth ||
+      innerBounds.height < idealInnerHeight
     ) {
-      // Shink, but not beyond the min size
-      if (
-        parseDisplayItemProperty(
-          this._displayItemOptions,
-          "minWidth",
-          this._lastRenderInfo,
-        )
-      ) {
+      // Shrink, but not beyond the min size
+      if (typeof this.minWidth !== "undefined") {
         horizontalScale =
-          Math.max(
-            innerBounds.width,
-            parseDisplayItemProperty(
-              this._displayItemOptions,
-              "minWidth",
-              this._lastRenderInfo,
-            ),
-          ) /
-          parseDisplayItemProperty(
-            this._displayItemOptions,
-            "idealWidth",
-            this._lastRenderInfo,
-          );
+          Math.max(innerBounds.width, this.minWidth) / idealInnerWidth;
       } else {
-        horizontalScale =
-          innerBounds.width /
-          parseDisplayItemProperty(
-            this._displayItemOptions,
-            "idealWidth",
-            this._lastRenderInfo,
-          );
+        horizontalScale = innerBounds.width / idealInnerWidth;
       }
 
-      if (this._displayItemOptions.minHeight) {
+      if (typeof this.minHeight !== "undefined") {
         verticalScale =
-          Math.max(
-            innerBounds.height,
-            parseDisplayItemProperty(
-              this._displayItemOptions,
-              "minHeight",
-              this._lastRenderInfo,
-            ),
-          ) /
-          parseDisplayItemProperty(
-            this._displayItemOptions,
-            "idealHeight",
-            this._lastRenderInfo,
-          );
+          Math.max(innerBounds.height, this.minHeight) / idealInnerHeight;
       } else {
-        verticalScale =
-          innerBounds.height /
-          parseDisplayItemProperty(
-            this._displayItemOptions,
-            "idealHeight",
-            this._lastRenderInfo,
-          );
+        verticalScale = innerBounds.height / idealInnerHeight;
       }
     } else if (
-      innerBounds.width >
-        parseDisplayItemProperty(
-          this._displayItemOptions,
-          "idealWidth",
-          this._lastRenderInfo,
-        ) ||
-      innerBounds.height >
-        parseDisplayItemProperty(
-          this._displayItemOptions,
-          "idealHeight",
-          this._lastRenderInfo,
-        )
+      innerBounds.width > idealInnerWidth ||
+      innerBounds.height > idealInnerHeight
     ) {
       // Grow, but not beyond the max size
-      if (
-        parseDisplayItemProperty(
-          this._displayItemOptions,
-          "maxWidth",
-          this._lastRenderInfo,
-        )
-      ) {
+      if (typeof this.maxWidth !== "undefined") {
         horizontalScale =
-          Math.min(
-            parseDisplayItemProperty(
-              this._displayItemOptions,
-              "maxWidth",
-              this._lastRenderInfo,
-            ),
-            innerBounds.width,
-          ) /
-          parseDisplayItemProperty(
-            this._displayItemOptions,
-            "idealWidth",
-            this._lastRenderInfo,
-          );
+          Math.min(this.maxWidth, innerBounds.width) / idealInnerWidth;
       } else {
-        horizontalScale =
-          innerBounds.width /
-          parseDisplayItemProperty(
-            this._displayItemOptions,
-            "idealWidth",
-            this._lastRenderInfo,
-          );
+        horizontalScale = innerBounds.width / idealInnerWidth;
       }
 
-      if (
-        parseDisplayItemProperty(
-          this._displayItemOptions,
-          "maxHeight",
-          this._lastRenderInfo,
-        )
-      ) {
+      if (typeof this.maxHeight !== "undefined") {
         verticalScale =
-          Math.min(
-            parseDisplayItemProperty(
-              this._displayItemOptions,
-              "maxHeight",
-              this._lastRenderInfo,
-            ),
-            innerBounds.height,
-          ) /
-          parseDisplayItemProperty(
-            this._displayItemOptions,
-            "idealHeight",
-            this._lastRenderInfo,
-          );
+          Math.min(this.maxHeight, innerBounds.height) / idealInnerHeight;
       } else {
-        verticalScale =
-          innerBounds.height /
-          parseDisplayItemProperty(
-            this._displayItemOptions,
-            "idealHeight",
-            this._lastRenderInfo,
-          );
+        verticalScale = innerBounds.height / idealInnerHeight;
       }
     }
 
@@ -1249,18 +1154,8 @@ export class SpriteChip<
 
     this.displayObject.scale.set(horizontalScale, verticalScale);
 
-    const scaledWidth =
-      parseDisplayItemProperty(
-        this._displayItemOptions,
-        "idealWidth",
-        this._lastRenderInfo,
-      ) * horizontalScale;
-    const scaledHeight =
-      parseDisplayItemProperty(
-        this._displayItemOptions,
-        "idealHeight",
-        this._lastRenderInfo,
-      ) * verticalScale;
+    const scaledWidth = idealInnerWidth * horizontalScale;
+    const scaledHeight = idealInnerHeight * verticalScale;
 
     // Start with the position within the padding area
     const position = this.displayObject.parent.toLocal(
@@ -1723,8 +1618,8 @@ export class LayoutTest extends chip.Composite {
         new SpriteChip(red, {
           spriteDisplayItemOptions: {
             // maxWidth: 100,
-            // minWidth: "idealWidth",
-            // maxWidth: "idealWidth",
+            minWidth: "idealWidth",
+            maxWidth: "idealWidth",
             verticalAlign: "top",
             paddingTop: 10,
             paddingRight: 15,
