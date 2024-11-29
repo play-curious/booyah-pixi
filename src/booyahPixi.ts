@@ -757,7 +757,8 @@ class PixiAppChipOptions {
 
   appOptions?: Partial<PIXI.IApplicationOptions & PIXI.IRendererOptions>;
 
-  addContainerChip = true;
+  /** If true, set up a container to handle layout */
+  addContainerChip = false;
 }
 
 export class PixiAppChip extends chip.Composite {
@@ -1017,17 +1018,13 @@ export class SpriteChip<
       this._chipContext.container.addChild(this.displayObject);
     }
 
-    this._options.onResize?.({
-      displayObject: this.displayObject,
-      pixiAppChip: this.pixiAppChip,
-      renderSize: this.pixiAppChip.renderSize,
-    });
-
     // Optionally participate in the layout
     if (this._options.addToParentDisplayItem && this.parentDisplayItem) {
+      // When _onRefresh() is called, it will call _updateProperties()
       this.parentDisplayItem.addChildDisplayItem(this);
     } else {
-      this._subscribe(this.pixiAppChip, "resize", this._onResize);
+      // Call _updateProperties() directly
+      this._subscribe(this.pixiAppChip, "resize", this._updateProperties);
     }
   }
 
@@ -1041,55 +1038,6 @@ export class SpriteChip<
       this._options.addToContainer
     ) {
       this._chipContext.container.removeChild(this.displayObject);
-    }
-  }
-
-  private _onResize() {
-    const valueFunctionOptions = {
-      displayObject: this.displayObject,
-      pixiAppChip: this.pixiAppChip,
-      renderSize: this.pixiAppChip.renderSize,
-    };
-
-    // TODO: optionally update ideal size
-
-    for (const property of this._propertiesToUpdateOnResize) {
-      const f = this._options.properties[
-        property
-      ] as DisplayObjectValueFunction<
-        DisplayObjectType,
-        keyof DisplayObjectType
-      >;
-      const value = f(valueFunctionOptions);
-      updateProperty(this.displayObject, property, value);
-    }
-  }
-
-  private _updateIdealSize() {
-    this._localBounds = this.displayObject.getLocalBounds();
-
-    if (!this._options.spriteDisplayItemOptions.idealWidth) {
-      this._idealWidth =
-        this._localBounds.width + this.paddingLeft + this.paddingRight;
-    } else {
-      this._idealWidth = parseDisplayItemProperty(
-        this,
-        this._options.spriteDisplayItemOptions,
-        "idealWidth",
-        this._lastRenderInfo,
-      );
-    }
-
-    if (!this._options.spriteDisplayItemOptions.idealHeight) {
-      this._idealHeight =
-        this._localBounds.height + this.paddingTop + this.paddingBottom;
-    } else {
-      this._idealHeight = parseDisplayItemProperty(
-        this,
-        this._options.spriteDisplayItemOptions,
-        "idealHeight",
-        this._lastRenderInfo,
-      );
     }
   }
 
@@ -1200,6 +1148,63 @@ export class SpriteChip<
     }
 
     this.displayObject.position = position;
+
+    this._updateProperties();
+  }
+
+  private _updateProperties() {
+    const valueFunctionOptions = {
+      displayObject: this.displayObject,
+      pixiAppChip: this.pixiAppChip,
+      renderSize: this.pixiAppChip.renderSize,
+    };
+
+    // TODO: optionally update ideal size
+
+    for (const property of this._propertiesToUpdateOnResize) {
+      const f = this._options.properties[
+        property
+      ] as DisplayObjectValueFunction<
+        DisplayObjectType,
+        keyof DisplayObjectType
+      >;
+      const value = f(valueFunctionOptions);
+      updateProperty(this.displayObject, property, value);
+    }
+
+    this._options.onResize?.({
+      displayObject: this.displayObject,
+      pixiAppChip: this.pixiAppChip,
+      renderSize: this.pixiAppChip.renderSize,
+    });
+  }
+
+  private _updateIdealSize() {
+    this._localBounds = this.displayObject.getLocalBounds();
+
+    if (!this._options.spriteDisplayItemOptions.idealWidth) {
+      this._idealWidth =
+        this._localBounds.width + this.paddingLeft + this.paddingRight;
+    } else {
+      this._idealWidth = parseDisplayItemProperty(
+        this,
+        this._options.spriteDisplayItemOptions,
+        "idealWidth",
+        this._lastRenderInfo,
+      );
+    }
+
+    if (!this._options.spriteDisplayItemOptions.idealHeight) {
+      this._idealHeight =
+        this._localBounds.height + this.paddingTop + this.paddingBottom;
+    } else {
+      this._idealHeight = parseDisplayItemProperty(
+        this,
+        this._options.spriteDisplayItemOptions,
+        "idealHeight",
+        this._lastRenderInfo,
+      );
+    }
   }
 
   get pixiAppChip() {
@@ -1616,6 +1621,9 @@ export class LayoutTest extends chip.Composite {
 
       containerChip.addChildChip(
         new SpriteChip(red, {
+          properties: {
+            x: ({ displayObject }) => displayObject.x,
+          },
           spriteDisplayItemOptions: {
             // maxWidth: 100,
             minWidth: "idealWidth",
