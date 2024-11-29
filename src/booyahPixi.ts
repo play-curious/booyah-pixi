@@ -306,13 +306,15 @@ export abstract class DisplayItemBase
   }
 
   protected _onPrepareRefresh() {
-    /* no op */
+    // no op
   }
 
-  protected abstract _onRefresh(
+  protected _onRefresh(
     outerBounds: PIXI.Rectangle,
     innerBounds: PIXI.Rectangle,
-  ): void;
+  ): void {
+    // no op
+  }
 
   refresh(bounds: PIXI.Rectangle): void {
     this._lastBounds = bounds;
@@ -420,6 +422,20 @@ export abstract class DisplayItemBase
       this._displayItemOptions,
       "paddingBottom",
       this._lastRenderInfo,
+    );
+  }
+}
+
+/** Just takes up space */
+export class SpacerChip extends DisplayItemBase {
+  protected _displayItemOptions: DisplayItemOptions;
+
+  constructor(options?: Partial<DisplayItemOptions>) {
+    super();
+
+    this._displayItemOptions = util.fillInOptions(
+      options,
+      new DisplayItemOptions(),
     );
   }
 }
@@ -1048,7 +1064,7 @@ export class SpriteChip<
     let horizontalScale = 1;
     let verticalScale = 1;
 
-    // Reason in sizes without padding
+    // Reason in inner sizes, without padding
     const idealInnerWidth = this.idealWidth
       ? this.idealWidth - (this.paddingLeft + this.paddingRight)
       : 0;
@@ -1062,15 +1078,19 @@ export class SpriteChip<
     ) {
       // Shrink, but not beyond the min size
       if (typeof this.minWidth !== "undefined") {
+        const minInnerWidth =
+          this.minWidth - (this.paddingLeft + this.paddingRight);
         horizontalScale =
-          Math.max(innerBounds.width, this.minWidth) / idealInnerWidth;
+          Math.max(innerBounds.width, minInnerWidth) / idealInnerWidth;
       } else {
         horizontalScale = innerBounds.width / idealInnerWidth;
       }
 
       if (typeof this.minHeight !== "undefined") {
+        const minInnerHeight =
+          this.minHeight - (this.paddingTop + this.paddingBottom);
         verticalScale =
-          Math.max(innerBounds.height, this.minHeight) / idealInnerHeight;
+          Math.max(innerBounds.height, minInnerHeight) / idealInnerHeight;
       } else {
         verticalScale = innerBounds.height / idealInnerHeight;
       }
@@ -1080,15 +1100,19 @@ export class SpriteChip<
     ) {
       // Grow, but not beyond the max size
       if (typeof this.maxWidth !== "undefined") {
+        const maxInnerWidth =
+          this.maxWidth - (this.paddingLeft + this.paddingRight);
         horizontalScale =
-          Math.min(this.maxWidth, innerBounds.width) / idealInnerWidth;
+          Math.min(maxInnerWidth, innerBounds.width) / idealInnerWidth;
       } else {
         horizontalScale = innerBounds.width / idealInnerWidth;
       }
 
       if (typeof this.maxHeight !== "undefined") {
+        const maxInnerHeight =
+          this.maxHeight - (this.paddingTop + this.paddingBottom);
         verticalScale =
-          Math.min(this.maxHeight, innerBounds.height) / idealInnerHeight;
+          Math.min(maxInnerHeight, innerBounds.height) / idealInnerHeight;
       } else {
         verticalScale = innerBounds.height / idealInnerHeight;
       }
@@ -1100,10 +1124,14 @@ export class SpriteChip<
       verticalScale = minScale;
     }
 
-    this.displayObject.scale.set(horizontalScale, verticalScale);
-
     const scaledWidth = idealInnerWidth * horizontalScale;
     const scaledHeight = idealInnerHeight * verticalScale;
+    this._setSize({
+      scaledWidth,
+      scaledHeight,
+      horizontalScale,
+      verticalScale,
+    });
 
     // Start with the position within the padding area
     const position = this.displayObject.parent.toLocal(
@@ -1147,7 +1175,7 @@ export class SpriteChip<
       }
     }
 
-    this.displayObject.position = position;
+    this._setPosition(position);
 
     this._updateProperties();
   }
@@ -1224,6 +1252,35 @@ export class SpriteChip<
   }
   get idealHeight() {
     return this._idealHeight;
+  }
+
+  protected _setSize({
+    horizontalScale,
+    verticalScale,
+  }: {
+    scaledWidth: number;
+    scaledHeight: number;
+    horizontalScale: number;
+    verticalScale: number;
+  }) {
+    this.displayObject.scale.set(horizontalScale, verticalScale);
+  }
+
+  protected _setPosition(position: PIXI.IPointData) {
+    this.displayObject.position.copyFrom(position);
+  }
+}
+
+export class NineSlicePlaneChip extends SpriteChip<PIXI.NineSlicePlane> {
+  protected _setSize({
+    scaledWidth,
+    scaledHeight,
+  }: {
+    scaledWidth: number;
+    scaledHeight: number;
+  }) {
+    this.displayObject.width = scaledWidth;
+    this.displayObject.height = scaledHeight;
   }
 }
 
@@ -1549,6 +1606,85 @@ export class LayoutTest extends chip.Composite {
     this._addHorizontalLayout();
   }
 
+  private _addHorizontalLayout() {
+    const containerChip = new AxisContainerChip({
+      distributeSpace: "between",
+      paddingBottom: 10,
+    });
+    this._activateChildChip(containerChip);
+
+    {
+      const red = new PIXI.Graphics();
+      red.beginFill(0xff0000);
+      red.drawRoundedRect(0, 0, 100, 100, 10);
+      red.endFill();
+
+      containerChip.addChildChip(
+        new SpriteChip(red, {
+          properties: {
+            x: ({ displayObject }) => displayObject.x,
+          },
+          spriteDisplayItemOptions: {
+            // maxWidth: 100,
+            minWidth: "idealWidth",
+            maxWidth: "idealWidth",
+            verticalAlign: "top",
+            paddingTop: 10,
+            paddingRight: 15,
+          },
+        }),
+      );
+    }
+
+    containerChip.addChildChip(new SpacerChip({ minWidth: 10, maxWidth: 10 }));
+
+    {
+      const green = new PIXI.Graphics();
+      green.beginFill(0x00ff00);
+      green.drawRoundedRect(0, 0, 50, 100, 10);
+      green.endFill();
+
+      containerChip.addChildChip(
+        new SpriteChip(green, {
+          spriteDisplayItemOptions: { maxWidth: 200, idealWidth: "maxWidth" },
+        }),
+      );
+    }
+
+    {
+      // Render a rounded rect to a texture, use that as the basis from the 9-slice
+      const sprite = new PIXI.Graphics();
+      sprite.beginFill(0x0000ff);
+      sprite.drawRoundedRect(0, 0, 100, 50, 10);
+      sprite.endFill();
+
+      const baseRenderTexture = new PIXI.BaseRenderTexture({
+        width: 100,
+        height: 50,
+      });
+      const renderTexture = new PIXI.RenderTexture(baseRenderTexture);
+      this.chipContext.pixiApplication.renderer.render(sprite, {
+        renderTexture,
+      });
+
+      const nineSlicePlane = new PIXI.NineSlicePlane(
+        renderTexture,
+        10,
+        10,
+        10,
+        10,
+      );
+
+      containerChip.addChildChip(
+        new NineSlicePlaneChip(nineSlicePlane, {
+          spriteDisplayItemOptions: {
+            verticalAlign: "middle",
+          },
+        }),
+      );
+    }
+  }
+
   // private _addVerticalLayout() {
   //   const layout = new VerticalLayout([], {
   //     distributeSpace: "between",
@@ -1605,65 +1741,4 @@ export class LayoutTest extends chip.Composite {
 
   //   this._activateChildChip(new LayoutChip(layout));
   // }
-
-  private _addHorizontalLayout() {
-    const containerChip = new AxisContainerChip({
-      distributeSpace: "between",
-      paddingBottom: 10,
-    });
-    this._activateChildChip(containerChip);
-
-    {
-      const red = new PIXI.Graphics();
-      red.beginFill(0xff0000);
-      red.drawRoundedRect(0, 0, 100, 100, 10);
-      red.endFill();
-
-      containerChip.addChildChip(
-        new SpriteChip(red, {
-          properties: {
-            x: ({ displayObject }) => displayObject.x,
-          },
-          spriteDisplayItemOptions: {
-            // maxWidth: 100,
-            minWidth: "idealWidth",
-            maxWidth: "idealWidth",
-            verticalAlign: "top",
-            paddingTop: 10,
-            paddingRight: 15,
-          },
-        }),
-      );
-    }
-
-    // containerChip.addChildLayout(
-    //   new SpacerLayout({ minWidth: 10, maxWidth: 10 }),
-    // );
-
-    {
-      const green = new PIXI.Graphics();
-      green.beginFill(0x00ff00);
-      green.drawRoundedRect(0, 0, 50, 100, 10);
-      green.endFill();
-
-      containerChip.addChildChip(
-        new SpriteChip(green, {
-          spriteDisplayItemOptions: { maxWidth: 200, idealWidth: "maxWidth" },
-        }),
-      );
-    }
-
-    {
-      const blue = new PIXI.Graphics();
-      blue.beginFill(0x0000ff);
-      blue.drawRoundedRect(0, 0, 100, 50, 10);
-      blue.endFill();
-
-      containerChip.addChildChip(
-        new SpriteChip(blue, {
-          spriteDisplayItemOptions: { verticalAlign: "middle" },
-        }),
-      );
-    }
-  }
 }
