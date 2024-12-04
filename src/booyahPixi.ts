@@ -276,7 +276,7 @@ export interface DisplayItem extends chip.NodeEventSource {
 
 export abstract class DisplayItemBase
   extends chip.Parallel
-  implements chip.NodeEventSource
+  implements DisplayItem
 {
   protected abstract _displayItemOptions: DisplayItemOptions;
 
@@ -579,7 +579,7 @@ export class AxisContainerOptions extends DisplayItemOptions {
 export class AxisContainerChip extends ContainerChip {
   protected _displayItemOptions: AxisContainerOptions;
 
-  constructor(options: Partial<AxisContainerOptions>) {
+  constructor(options?: Partial<AxisContainerOptions>) {
     super();
 
     this._displayItemOptions = util.fillInOptions(
@@ -920,28 +920,32 @@ export type DisplayObjectProperties<
   >;
 };
 
-export class SpriteDisplayItemOptions extends DisplayItemOptions {
-  keepAspectRatio = true;
+export class DisplayObjectDisplayItemOptions extends DisplayItemOptions {
+  keepAspectRatio = false;
 
   horizontalAlign: "left" | "right" | "center" = "left";
   verticalAlign: "top" | "bottom" | "middle" = "top";
 }
 
-export class SpriteChipOptions<DisplayObjectType extends PIXI.DisplayObject> {
+export class DisplayObjectChipOptions<
+  DisplayObjectType extends PIXI.DisplayObject,
+> {
+  displayObject: DisplayObjectType;
+  children: Array<chip.ActivateChildChipOptions | chip.ChipResolvable> = [];
   properties?: DisplayObjectProperties<DisplayObjectType> = {};
   onResize?: (
     options: DisplayObjectValueFunctionOptions<DisplayObjectType>,
   ) => unknown;
-  spriteDisplayItemOptions?: Partial<SpriteDisplayItemOptions>;
+  displayObjectDisplayItemOptions?: Partial<DisplayObjectDisplayItemOptions>;
 
   addToParentDisplayItem = true;
   addToContainer = true;
 }
 
-export class SpriteChip<
+export class DisplayObjectChip<
   DisplayObjectType extends PIXI.DisplayObject,
 > extends DisplayItemBase {
-  private readonly _options: SpriteChipOptions<DisplayObjectType>;
+  protected readonly _options: DisplayObjectChipOptions<DisplayObjectType>;
 
   // Cache of the local bounds so as not to recalculate it
   private _localBounds?: PIXI.Rectangle;
@@ -950,49 +954,36 @@ export class SpriteChip<
 
   private _propertiesToUpdateOnResize: Array<keyof DisplayObjectType>;
 
-  constructor(
-    public readonly displayObject: DisplayObjectType,
-    options?: Partial<SpriteChipOptions<DisplayObjectType>>,
-  ) {
-    super();
-
-    this._options = chip.fillInOptions(
+  constructor(options: Partial<DisplayObjectChipOptions<DisplayObjectType>>) {
+    const filledOptions = chip.fillInOptions(
       options,
-      new SpriteChipOptions<DisplayObjectType>(),
+      new DisplayObjectChipOptions<DisplayObjectType>(),
     );
-    this._options.spriteDisplayItemOptions = chip.fillInOptions(
-      this._options.spriteDisplayItemOptions,
-      new SpriteDisplayItemOptions(),
+    super(options.children);
+
+    filledOptions.displayObjectDisplayItemOptions = chip.fillInOptions(
+      filledOptions.displayObjectDisplayItemOptions,
+      new DisplayObjectDisplayItemOptions(),
     );
+    this._options = filledOptions;
   }
 
   _onPrepareRefresh() {
+    // The first time, possibly calculate ideal sizes
     if (
-      !this._options.spriteDisplayItemOptions.idealWidth ||
-      !this._options.spriteDisplayItemOptions.idealHeight
-    ) {
-      this._updateIdealSize();
-    } else {
-      this._idealWidth = parseDisplayItemProperty(
-        this,
-        this._options.spriteDisplayItemOptions,
-        "idealWidth",
-        this._lastRenderInfo,
-      );
-      this._idealHeight = parseDisplayItemProperty(
-        this,
-        this._options.spriteDisplayItemOptions,
-        "idealHeight",
-        this._lastRenderInfo,
-      );
-    }
+      typeof this._idealWidth !== "undefined" &&
+      typeof this._idealHeight !== "undefined"
+    )
+      return;
+
+    this.updateIdealSize();
   }
 
   _onActivate() {
     this._propertiesToUpdateOnResize = [];
 
     const valueFunctionOptions = {
-      displayObject: this.displayObject,
+      displayObject: this._options.displayObject,
       pixiAppChip: this.pixiAppChip,
       renderSize: this.pixiAppChip.renderSize,
     };
@@ -1021,7 +1012,7 @@ export class SpriteChip<
       }
 
       updateProperty(
-        this.displayObject,
+        this._options.displayObject,
         property as keyof DisplayObjectType,
         value,
       );
@@ -1031,7 +1022,7 @@ export class SpriteChip<
       !this._options.hasOwnProperty("addToContainer") ||
       this._options.addToContainer
     ) {
-      this._chipContext.container.addChild(this.displayObject);
+      this._chipContext.container.addChild(this._options.displayObject);
     }
 
     // Optionally participate in the layout
@@ -1053,7 +1044,7 @@ export class SpriteChip<
       !this._options.hasOwnProperty("addToContainer") ||
       this._options.addToContainer
     ) {
-      this._chipContext.container.removeChild(this.displayObject);
+      this._chipContext.container.removeChild(this._options.displayObject);
     }
   }
 
@@ -1118,7 +1109,7 @@ export class SpriteChip<
       }
     }
 
-    if (this._options.spriteDisplayItemOptions.keepAspectRatio) {
+    if (this._options.displayObjectDisplayItemOptions.keepAspectRatio) {
       const minScale = Math.min(horizontalScale, verticalScale);
       horizontalScale = minScale;
       verticalScale = minScale;
@@ -1134,27 +1125,32 @@ export class SpriteChip<
     });
 
     // Start with the position within the padding area
-    const position = this.displayObject.parent.toLocal(
+    const position = this._options.displayObject.parent.toLocal(
       new PIXI.Point(innerBounds.x, innerBounds.y),
     );
 
     // If the object has an non-zero anchor point, adjust the position
     if (!this._localBounds) {
-      this._localBounds = this.displayObject.getLocalBounds();
+      this._localBounds = this._options.displayObject.getLocalBounds();
     }
     position.x -= this._localBounds.left;
     position.y -= this._localBounds.top;
 
     // Handle horizontal alignment
     if (
-      this._options.spriteDisplayItemOptions.horizontalAlign !== "left" &&
+      this._options.displayObjectDisplayItemOptions.horizontalAlign !==
+        "left" &&
       innerBounds.width > scaledWidth
     ) {
       const extraSpace = innerBounds.width - scaledWidth;
-      if (this._options.spriteDisplayItemOptions.horizontalAlign === "right") {
+      if (
+        this._options.displayObjectDisplayItemOptions.horizontalAlign ===
+        "right"
+      ) {
         position.x += extraSpace;
       } else if (
-        this._options.spriteDisplayItemOptions.horizontalAlign === "center"
+        this._options.displayObjectDisplayItemOptions.horizontalAlign ===
+        "center"
       ) {
         position.x += extraSpace / 2;
       }
@@ -1162,14 +1158,16 @@ export class SpriteChip<
 
     // Handle vertical alignment
     if (
-      this._options.spriteDisplayItemOptions.verticalAlign !== "top" &&
+      this._options.displayObjectDisplayItemOptions.verticalAlign !== "top" &&
       innerBounds.height > scaledHeight
     ) {
       const extraSpace = innerBounds.height - scaledHeight;
-      if (this._options.spriteDisplayItemOptions.verticalAlign === "bottom") {
+      if (
+        this._options.displayObjectDisplayItemOptions.verticalAlign === "bottom"
+      ) {
         position.y += extraSpace;
       } else if (
-        this._options.spriteDisplayItemOptions.verticalAlign === "middle"
+        this._options.displayObjectDisplayItemOptions.verticalAlign === "middle"
       ) {
         position.y += extraSpace / 2;
       }
@@ -1182,7 +1180,7 @@ export class SpriteChip<
 
   private _updateProperties() {
     const valueFunctionOptions = {
-      displayObject: this.displayObject,
+      displayObject: this._options.displayObject,
       pixiAppChip: this.pixiAppChip,
       renderSize: this.pixiAppChip.renderSize,
     };
@@ -1197,38 +1195,44 @@ export class SpriteChip<
         keyof DisplayObjectType
       >;
       const value = f(valueFunctionOptions);
-      updateProperty(this.displayObject, property, value);
+      updateProperty(this._options.displayObject, property, value);
     }
 
     this._options.onResize?.({
-      displayObject: this.displayObject,
+      displayObject: this._options.displayObject,
       pixiAppChip: this.pixiAppChip,
       renderSize: this.pixiAppChip.renderSize,
     });
   }
 
-  private _updateIdealSize() {
-    this._localBounds = this.displayObject.getLocalBounds();
+  updateIdealSize() {
+    this._localBounds = this._options.displayObject.getLocalBounds();
 
-    if (!this._options.spriteDisplayItemOptions.idealWidth) {
+    if (
+      typeof this._options.displayObjectDisplayItemOptions.idealWidth ===
+      "undefined"
+    ) {
       this._idealWidth =
         this._localBounds.width + this.paddingLeft + this.paddingRight;
     } else {
       this._idealWidth = parseDisplayItemProperty(
         this,
-        this._options.spriteDisplayItemOptions,
+        this._options.displayObjectDisplayItemOptions,
         "idealWidth",
         this._lastRenderInfo,
       );
     }
 
-    if (!this._options.spriteDisplayItemOptions.idealHeight) {
+    if (
+      typeof this._options.displayObjectDisplayItemOptions.idealHeight ===
+      "undefined"
+    ) {
       this._idealHeight =
         this._localBounds.height + this.paddingTop + this.paddingBottom;
     } else {
       this._idealHeight = parseDisplayItemProperty(
         this,
-        this._options.spriteDisplayItemOptions,
+        this._options.displayObjectDisplayItemOptions,
         "idealHeight",
         this._lastRenderInfo,
       );
@@ -1244,7 +1248,8 @@ export class SpriteChip<
   }
 
   protected get _displayItemOptions() {
-    return this._options.spriteDisplayItemOptions as SpriteDisplayItemOptions;
+    return this._options
+      .displayObjectDisplayItemOptions as DisplayObjectDisplayItemOptions;
   }
 
   get idealWidth() {
@@ -1263,15 +1268,50 @@ export class SpriteChip<
     horizontalScale: number;
     verticalScale: number;
   }) {
-    this.displayObject.scale.set(horizontalScale, verticalScale);
+    this._options.displayObject.scale.set(horizontalScale, verticalScale);
   }
 
   protected _setPosition(position: PIXI.IPointData) {
-    this.displayObject.position.copyFrom(position);
+    this._options.displayObject.position.copyFrom(position);
   }
 }
 
-export class NineSlicePlaneChip extends SpriteChip<PIXI.NineSlicePlane> {
+export class SpriteChipDisplayItemOptions extends DisplayObjectDisplayItemOptions {
+  keepAspectRatio = true;
+
+  maxWidth: DisplayItemValue = "idealWidth";
+  maxHeight: DisplayItemValue = "idealHeight";
+}
+
+export class SpriteChipOptions extends DisplayObjectChipOptions<PIXI.Sprite> {}
+
+export class SpriteChip extends DisplayObjectChip<PIXI.Sprite> {
+  constructor(
+    source: PIXI.Sprite | PIXI.Texture | string,
+    options: Partial<SpriteChipOptions> = {},
+  ) {
+    const filledOptions = chip.fillInOptions(options, new SpriteChipOptions());
+    filledOptions.displayObjectDisplayItemOptions = chip.fillInOptions(
+      filledOptions.displayObjectDisplayItemOptions,
+      new SpriteChipDisplayItemOptions(),
+    );
+
+    if (typeof source === "string") {
+      const texture = PIXI.Assets.get<PIXI.Texture>(source);
+      if (!texture) throw new Error(`Cannot find asset for sprite "${source}"`);
+
+      filledOptions.displayObject = new PIXI.Sprite(texture);
+    } else if (source instanceof PIXI.Texture) {
+      filledOptions.displayObject = new PIXI.Sprite(source);
+    } else {
+      filledOptions.displayObject = source;
+    }
+
+    super(filledOptions);
+  }
+}
+
+export class NineSlicePlaneChip extends DisplayObjectChip<PIXI.NineSlicePlane> {
   protected _setSize({
     scaledWidth,
     scaledHeight,
@@ -1279,8 +1319,8 @@ export class NineSlicePlaneChip extends SpriteChip<PIXI.NineSlicePlane> {
     scaledWidth: number;
     scaledHeight: number;
   }) {
-    this.displayObject.width = scaledWidth;
-    this.displayObject.height = scaledHeight;
+    this._options.displayObject.width = scaledWidth;
+    this._options.displayObject.height = scaledHeight;
   }
 }
 
@@ -1614,17 +1654,26 @@ export class LayoutTest extends chip.Composite {
     this._activateChildChip(containerChip);
 
     {
-      const red = new PIXI.Graphics();
-      red.beginFill(0xff0000);
-      red.drawRoundedRect(0, 0, 100, 100, 10);
-      red.endFill();
+      const sprite = new PIXI.Graphics();
+      sprite.beginFill(0xff0000);
+      sprite.drawRoundedRect(0, 0, 100, 100, 10);
+      sprite.endFill();
+
+      const baseRenderTexture = new PIXI.BaseRenderTexture({
+        width: 100,
+        height: 100,
+      });
+      const renderTexture = new PIXI.RenderTexture(baseRenderTexture);
+      this.chipContext.pixiApplication.renderer.render(sprite, {
+        renderTexture,
+      });
 
       containerChip.addChildChip(
-        new SpriteChip(red, {
+        new SpriteChip(renderTexture, {
           properties: {
             x: ({ displayObject }) => displayObject.x,
           },
-          spriteDisplayItemOptions: {
+          displayObjectDisplayItemOptions: {
             // maxWidth: 100,
             minWidth: "idealWidth",
             maxWidth: "idealWidth",
@@ -1645,8 +1694,13 @@ export class LayoutTest extends chip.Composite {
       green.endFill();
 
       containerChip.addChildChip(
-        new SpriteChip(green, {
-          spriteDisplayItemOptions: { maxWidth: 200, idealWidth: "maxWidth" },
+        new DisplayObjectChip({
+          displayObject: green,
+          displayObjectDisplayItemOptions: {
+            maxWidth: 200,
+            keepAspectRatio: true,
+            idealWidth: "maxWidth",
+          },
         }),
       );
     }
@@ -1676,9 +1730,11 @@ export class LayoutTest extends chip.Composite {
       );
 
       containerChip.addChildChip(
-        new NineSlicePlaneChip(nineSlicePlane, {
-          spriteDisplayItemOptions: {
+        new NineSlicePlaneChip({
+          displayObject: nineSlicePlane,
+          displayObjectDisplayItemOptions: {
             verticalAlign: "middle",
+            maxHeight: 200,
           },
         }),
       );
