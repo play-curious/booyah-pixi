@@ -1063,10 +1063,7 @@ export class DisplayObjectChip<
       ? this.idealHeight - (this.paddingTop + this.paddingBottom)
       : 0;
 
-    if (
-      innerBounds.width < idealInnerWidth ||
-      innerBounds.height < idealInnerHeight
-    ) {
+    if (innerBounds.width < idealInnerWidth) {
       // Shrink, but not beyond the min size
       if (typeof this.minWidth !== "undefined") {
         const minInnerWidth =
@@ -1076,19 +1073,7 @@ export class DisplayObjectChip<
       } else {
         horizontalScale = innerBounds.width / idealInnerWidth;
       }
-
-      if (typeof this.minHeight !== "undefined") {
-        const minInnerHeight =
-          this.minHeight - (this.paddingTop + this.paddingBottom);
-        verticalScale =
-          Math.max(innerBounds.height, minInnerHeight) / idealInnerHeight;
-      } else {
-        verticalScale = innerBounds.height / idealInnerHeight;
-      }
-    } else if (
-      innerBounds.width > idealInnerWidth ||
-      innerBounds.height > idealInnerHeight
-    ) {
+    } else if (innerBounds.width > idealInnerWidth) {
       // Grow, but not beyond the max size
       if (typeof this.maxWidth !== "undefined") {
         const maxInnerWidth =
@@ -1098,7 +1083,20 @@ export class DisplayObjectChip<
       } else {
         horizontalScale = innerBounds.width / idealInnerWidth;
       }
+    }
 
+    if (innerBounds.height < idealInnerHeight) {
+      // Shrink, but not beyond the min size
+      if (typeof this.minHeight !== "undefined") {
+        const minInnerHeight =
+          this.minHeight - (this.paddingTop + this.paddingBottom);
+        verticalScale =
+          Math.max(innerBounds.height, minInnerHeight) / idealInnerHeight;
+      } else {
+        verticalScale = innerBounds.height / idealInnerHeight;
+      }
+    } else if (innerBounds.height > idealInnerHeight) {
+      // Grow, but not beyond the max size
       if (typeof this.maxHeight !== "undefined") {
         const maxInnerHeight =
           this.maxHeight - (this.paddingTop + this.paddingBottom);
