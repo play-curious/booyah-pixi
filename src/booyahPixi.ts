@@ -164,7 +164,7 @@ export function withinDistanceOfPoints(
   return false;
 }
 
-export type DisplayItemProperty =
+export type LayoutProperty =
   | "minWidth"
   | "minHeight"
   | "idealWidth"
@@ -172,66 +172,59 @@ export type DisplayItemProperty =
   | "maxWidth"
   | "maxHeight";
 
-export type StaticDisplayItemValue = number | DisplayItemProperty;
+export type StaticLayoutValue = number | LayoutProperty;
 
 export interface RenderInfo {
   renderSize: PIXI.IPointData;
 }
 
-export interface DynamicDisplayItemValueOptions extends RenderInfo {
-  displayItemOptions: Partial<DisplayItemOptions>;
+export interface DynamicLayoutValueOptions extends RenderInfo {
+  layoutOptions: Partial<LayoutOptions>;
   displayItem: DisplayItem;
 }
 
 export type DynamicDisplayItemValue = (
-  options: DynamicDisplayItemValueOptions,
-) => StaticDisplayItemValue;
+  options: DynamicLayoutValueOptions,
+) => StaticLayoutValue;
 
-export type DisplayItemValue = StaticDisplayItemValue | DynamicDisplayItemValue;
+export type LayoutValue = StaticLayoutValue | DynamicDisplayItemValue;
 
-export class DisplayItemOptions {
-  minWidth: DisplayItemValue;
-  minHeight: DisplayItemValue;
+export class LayoutOptions {
+  minWidth: LayoutValue;
+  minHeight: LayoutValue;
 
-  idealWidth: DisplayItemValue;
-  idealHeight: DisplayItemValue;
+  idealWidth: LayoutValue;
+  idealHeight: LayoutValue;
 
-  maxWidth: DisplayItemValue;
-  maxHeight: DisplayItemValue;
+  maxWidth: LayoutValue;
+  maxHeight: LayoutValue;
 
-  paddingLeft: DisplayItemValue = 0;
-  paddingRight: DisplayItemValue = 0;
-  paddingTop: DisplayItemValue = 0;
-  paddingBottom: DisplayItemValue = 0;
+  paddingLeft: LayoutValue = 0;
+  paddingRight: LayoutValue = 0;
+  paddingTop: LayoutValue = 0;
+  paddingBottom: LayoutValue = 0;
 }
 
-function safeParseDisplayItemProperty(
+function safeParseLayoutProperty(
   displayItem: DisplayItem,
-  displayItemOptions: Partial<DisplayItemOptions>,
-  prop: keyof DisplayItemOptions,
+  layoutOptions: Partial<LayoutOptions>,
+  prop: keyof LayoutOptions,
   renderInfo: RenderInfo,
 ): number {
-  return (
-    parseDisplayItemProperty(
-      displayItem,
-      displayItemOptions,
-      prop,
-      renderInfo,
-    ) || 0
-  );
+  return parseLayoutProperty(displayItem, layoutOptions, prop, renderInfo) || 0;
 }
 
 // Parses a property in the displayitem options as a number
-function parseDisplayItemProperty(
+function parseLayoutProperty(
   displayItem: DisplayItem,
-  displayItemOptions: Partial<DisplayItemOptions>,
-  prop: keyof DisplayItemOptions,
+  layoutOptions: Partial<LayoutOptions>,
+  prop: keyof LayoutOptions,
   renderInfo: RenderInfo,
 ): number | undefined {
   // If property doesn't exist, return undefined
-  if (!(prop in displayItemOptions)) return;
+  if (!(prop in layoutOptions)) return;
 
-  const propValue = displayItemOptions[prop] as DisplayItemValue;
+  const propValue = layoutOptions[prop] as LayoutValue;
 
   // If property is a number, return it directly
   if (typeof propValue === "number") return propValue as number;
@@ -239,7 +232,7 @@ function parseDisplayItemProperty(
   // If property is a function (dynamic) call it and parse the result
   if (typeof propValue === "function") {
     const evaluatedValue = (propValue as DynamicDisplayItemValue)({
-      displayItemOptions,
+      layoutOptions: layoutOptions,
       displayItem,
       ...renderInfo,
     });
@@ -248,7 +241,7 @@ function parseDisplayItemProperty(
   }
 
   // Find matching property and return it
-  const matchingProp = propValue as DisplayItemProperty;
+  const matchingProp = propValue as LayoutProperty;
   const matchingValue = displayItem[matchingProp];
   if (typeof matchingValue !== "number") {
     throw new Error(
@@ -278,7 +271,7 @@ export abstract class DisplayItemBase
   extends chip.Parallel
   implements DisplayItem
 {
-  protected abstract _displayItemOptions: DisplayItemOptions;
+  protected abstract _layoutOptions: LayoutOptions;
 
   protected _lastRenderInfo?: RenderInfo;
   protected _lastBounds?: PIXI.Rectangle;
@@ -342,84 +335,84 @@ export abstract class DisplayItemBase
   }
 
   get minWidth(): number | undefined {
-    return parseDisplayItemProperty(
+    return parseLayoutProperty(
       this,
-      this._displayItemOptions,
+      this._layoutOptions,
       "minWidth",
       this._lastRenderInfo,
     );
   }
   get minHeight(): number | undefined {
-    return parseDisplayItemProperty(
+    return parseLayoutProperty(
       this,
-      this._displayItemOptions,
+      this._layoutOptions,
       "minHeight",
       this._lastRenderInfo,
     );
   }
 
   get idealWidth(): number | undefined {
-    return parseDisplayItemProperty(
+    return parseLayoutProperty(
       this,
-      this._displayItemOptions,
+      this._layoutOptions,
       "idealWidth",
       this._lastRenderInfo,
     );
   }
   get idealHeight(): number | undefined {
-    return parseDisplayItemProperty(
+    return parseLayoutProperty(
       this,
-      this._displayItemOptions,
+      this._layoutOptions,
       "idealHeight",
       this._lastRenderInfo,
     );
   }
 
   get maxWidth(): number | undefined {
-    return parseDisplayItemProperty(
+    return parseLayoutProperty(
       this,
-      this._displayItemOptions,
+      this._layoutOptions,
       "maxWidth",
       this._lastRenderInfo,
     );
   }
   get maxHeight(): number | undefined {
-    return parseDisplayItemProperty(
+    return parseLayoutProperty(
       this,
-      this._displayItemOptions,
+      this._layoutOptions,
       "maxHeight",
       this._lastRenderInfo,
     );
   }
 
   get paddingLeft(): number {
-    return safeParseDisplayItemProperty(
+    return safeParseLayoutProperty(
       this,
-      this._displayItemOptions,
+      this._layoutOptions,
       "paddingLeft",
       this._lastRenderInfo,
     );
   }
   get paddingRight(): number {
-    return safeParseDisplayItemProperty(
+    return safeParseLayoutProperty(
       this,
-      this._displayItemOptions,
+      this._layoutOptions,
       "paddingRight",
       this._lastRenderInfo,
     );
   }
   get paddingTop(): number {
-    return safeParseDisplayItemProperty(
+    return safeParseLayoutProperty(
       this,
-      this._displayItemOptions,
+      this._layoutOptions,
       "paddingTop",
       this._lastRenderInfo,
     );
   }
   get paddingBottom(): number {
-    return safeParseDisplayItemProperty(
+    return safeParseLayoutProperty(
       this,
-      this._displayItemOptions,
+      this._layoutOptions,
       "paddingBottom",
       this._lastRenderInfo,
     );
@@ -428,15 +421,12 @@ export abstract class DisplayItemBase
 
 /** Just takes up space */
 export class SpacerChip extends DisplayItemBase {
-  protected _displayItemOptions: DisplayItemOptions;
+  protected _layoutOptions: LayoutOptions;
 
-  constructor(options?: Partial<DisplayItemOptions>) {
+  constructor(options?: Partial<LayoutOptions>) {
     super();
 
-    this._displayItemOptions = util.fillInOptions(
-      options,
-      new DisplayItemOptions(),
-    );
+    this._layoutOptions = util.fillInOptions(options, new LayoutOptions());
   }
 }
 
@@ -445,17 +435,27 @@ export abstract class ContainerChip extends DisplayItemBase {
   protected _container: PIXI.Container;
 
   protected _onActivate(): void {
+    this._container = new PIXI.Container();
+    this.chipContext.container.addChild(this._container);
+
     this._childDisplayItems = [];
 
     if (this.parentDisplayItem) {
       this.parentDisplayItem.addChildDisplayItem(this);
     }
+
+    super._onActivate();
   }
 
   protected _onTerminate(): void {
+    super._onTerminate();
+
     if (this.parentDisplayItem) {
       this.parentDisplayItem.removeChildDisplayItem(this);
     }
+
+    this.chipContext.container.removeChild(this._container);
+    delete this._container;
   }
 
   addChildDisplayItem(child: DisplayItem): void {
@@ -531,29 +531,12 @@ export abstract class ContainerChip extends DisplayItemBase {
 }
 
 export class StackingContainerChip extends ContainerChip {
-  protected _displayItemOptions: DisplayItemOptions;
+  protected _layoutOptions: LayoutOptions;
 
-  constructor(options?: Partial<DisplayItemOptions>) {
+  constructor(options?: Partial<LayoutOptions>) {
     super();
 
-    this._displayItemOptions = util.fillInOptions(
-      options,
-      new DisplayItemOptions(),
-    );
-  }
-
-  protected _onActivate(): void {
-    super._onActivate();
-
-    this._container = new PIXI.Container();
-    this.chipContext.container.addChild(this._container);
-  }
-
-  protected _onTerminate(): void {
-    super._onTerminate();
-
-    this.chipContext.container.removeChild(this._container);
-    delete this._container;
+    this._layoutOptions = util.fillInOptions(options, new LayoutOptions());
   }
 
   protected _onRefresh(
@@ -565,7 +548,7 @@ export class StackingContainerChip extends ContainerChip {
   }
 }
 
-export class AxisContainerOptions extends DisplayItemOptions {
+export class AxisContainerOptions extends LayoutOptions {
   axis: "horizontal" | "vertical" = "horizontal";
 
   distributeSpace:
@@ -577,12 +560,12 @@ export class AxisContainerOptions extends DisplayItemOptions {
 }
 
 export class AxisContainerChip extends ContainerChip {
-  protected _displayItemOptions: AxisContainerOptions;
+  protected _layoutOptions: AxisContainerOptions;
 
   constructor(options?: Partial<AxisContainerOptions>) {
     super();
 
-    this._displayItemOptions = util.fillInOptions(
+    this._layoutOptions = util.fillInOptions(
       options,
       new AxisContainerOptions(),
     );
@@ -608,15 +591,13 @@ export class AxisContainerChip extends ContainerChip {
   ): void {
     // Determine which properties will be used depending on the direction
     const minLengthProp =
-      this._displayItemOptions.axis === "vertical" ? "minHeight" : "minWidth";
+      this._layoutOptions.axis === "vertical" ? "minHeight" : "minWidth";
     const idealLengthProp =
-      this._displayItemOptions.axis === "vertical"
-        ? "idealHeight"
-        : "idealWidth";
+      this._layoutOptions.axis === "vertical" ? "idealHeight" : "idealWidth";
     const maxLengthProp =
-      this._displayItemOptions.axis === "vertical" ? "maxHeight" : "maxWidth";
+      this._layoutOptions.axis === "vertical" ? "maxHeight" : "maxWidth";
     const lengthProp =
-      this._displayItemOptions.axis === "vertical" ? "height" : "width";
+      this._layoutOptions.axis === "vertical" ? "height" : "width";
 
     // Do a first pass to gather minimum space and element types
     const lengths: Array<number> = [];
@@ -720,11 +701,11 @@ export class AxisContainerChip extends ContainerChip {
     // Distribute any extra space around or between elements at the same time as you assign lengths
     let axisOffset = 0;
 
-    if (this._displayItemOptions.distributeSpace === "atStart") {
+    if (this._layoutOptions.distributeSpace === "atStart") {
       axisOffset += availableExtraSpace;
-    } else if (this._displayItemOptions.distributeSpace === "atStartAndEnd") {
+    } else if (this._layoutOptions.distributeSpace === "atStartAndEnd") {
       axisOffset += availableExtraSpace / 2;
-    } else if (this._displayItemOptions.distributeSpace === "around") {
+    } else if (this._layoutOptions.distributeSpace === "around") {
       axisOffset += availableExtraSpace / this._childDisplayItems.length / 2;
     }
 
@@ -732,7 +713,7 @@ export class AxisContainerChip extends ContainerChip {
       const child = this._childDisplayItems[i];
 
       let itemBounds: PIXI.Rectangle;
-      if (this._displayItemOptions.axis === "vertical") {
+      if (this._layoutOptions.axis === "vertical") {
         itemBounds = new PIXI.Rectangle(
           innerBounds.x,
           innerBounds.y + axisOffset,
@@ -755,11 +736,11 @@ export class AxisContainerChip extends ContainerChip {
       axisOffset += lengths[i];
 
       // Distribute extra space between items
-      if (this._displayItemOptions.distributeSpace === "between") {
+      if (this._layoutOptions.distributeSpace === "between") {
         if (this._childDisplayItems.length > 1)
           axisOffset +=
             availableExtraSpace / (this._childDisplayItems.length - 1);
-      } else if (this._displayItemOptions.distributeSpace === "around") {
+      } else if (this._layoutOptions.distributeSpace === "around") {
         axisOffset += availableExtraSpace / this._childDisplayItems.length;
       }
     }
@@ -920,7 +901,7 @@ export type DisplayObjectProperties<
   >;
 };
 
-export class DisplayObjectDisplayItemOptions extends DisplayItemOptions {
+export class DisplayObjectLayoutOptions extends LayoutOptions {
   keepAspectRatio = false;
 
   horizontalAlign: "left" | "right" | "center" = "left";
@@ -936,7 +917,7 @@ export class DisplayObjectChipOptions<
   onResize?: (
     options: DisplayObjectValueFunctionOptions<DisplayObjectType>,
   ) => unknown;
-  displayObjectDisplayItemOptions?: Partial<DisplayObjectDisplayItemOptions>;
+  layoutOptions?: Partial<DisplayObjectLayoutOptions>;
 
   addToParentDisplayItem = true;
   addToContainer = true;
@@ -961,9 +942,9 @@ export class DisplayObjectChip<
     );
     super(options.children);
 
-    filledOptions.displayObjectDisplayItemOptions = chip.fillInOptions(
-      filledOptions.displayObjectDisplayItemOptions,
-      new DisplayObjectDisplayItemOptions(),
+    filledOptions.layoutOptions = chip.fillInOptions(
+      filledOptions.layoutOptions,
+      new DisplayObjectLayoutOptions(),
     );
     this._options = filledOptions;
   }
@@ -1107,7 +1088,7 @@ export class DisplayObjectChip<
       }
     }
 
-    if (this._options.displayObjectDisplayItemOptions.keepAspectRatio) {
+    if (this._options.layoutOptions.keepAspectRatio) {
       const minScale = Math.min(horizontalScale, verticalScale);
       horizontalScale = minScale;
       verticalScale = minScale;
@@ -1136,37 +1117,26 @@ export class DisplayObjectChip<
 
     // Handle horizontal alignment
     if (
-      this._options.displayObjectDisplayItemOptions.horizontalAlign !==
-        "left" &&
+      this._options.layoutOptions.horizontalAlign !== "left" &&
       innerBounds.width > scaledWidth
     ) {
       const extraSpace = innerBounds.width - scaledWidth;
-      if (
-        this._options.displayObjectDisplayItemOptions.horizontalAlign ===
-        "right"
-      ) {
+      if (this._options.layoutOptions.horizontalAlign === "right") {
         position.x += extraSpace;
-      } else if (
-        this._options.displayObjectDisplayItemOptions.horizontalAlign ===
-        "center"
-      ) {
+      } else if (this._options.layoutOptions.horizontalAlign === "center") {
         position.x += extraSpace / 2;
       }
     }
 
     // Handle vertical alignment
     if (
-      this._options.displayObjectDisplayItemOptions.verticalAlign !== "top" &&
+      this._options.layoutOptions.verticalAlign !== "top" &&
       innerBounds.height > scaledHeight
     ) {
       const extraSpace = innerBounds.height - scaledHeight;
-      if (
-        this._options.displayObjectDisplayItemOptions.verticalAlign === "bottom"
-      ) {
+      if (this._options.layoutOptions.verticalAlign === "bottom") {
         position.y += extraSpace;
-      } else if (
-        this._options.displayObjectDisplayItemOptions.verticalAlign === "middle"
-      ) {
+      } else if (this._options.layoutOptions.verticalAlign === "middle") {
         position.y += extraSpace / 2;
       }
     }
@@ -1206,31 +1176,25 @@ export class DisplayObjectChip<
   updateIdealSize() {
     this._localBounds = this._options.displayObject.getLocalBounds();
 
-    if (
-      typeof this._options.displayObjectDisplayItemOptions.idealWidth ===
-      "undefined"
-    ) {
+    if (typeof this._options.layoutOptions.idealWidth === "undefined") {
       this._idealWidth =
         this._localBounds.width + this.paddingLeft + this.paddingRight;
     } else {
-      this._idealWidth = parseDisplayItemProperty(
+      this._idealWidth = parseLayoutProperty(
         this,
-        this._options.displayObjectDisplayItemOptions,
+        this._options.layoutOptions,
         "idealWidth",
         this._lastRenderInfo,
       );
     }
 
-    if (
-      typeof this._options.displayObjectDisplayItemOptions.idealHeight ===
-      "undefined"
-    ) {
+    if (typeof this._options.layoutOptions.idealHeight === "undefined") {
       this._idealHeight =
         this._localBounds.height + this.paddingTop + this.paddingBottom;
     } else {
-      this._idealHeight = parseDisplayItemProperty(
+      this._idealHeight = parseLayoutProperty(
         this,
-        this._options.displayObjectDisplayItemOptions,
+        this._options.layoutOptions,
         "idealHeight",
         this._lastRenderInfo,
       );
@@ -1245,9 +1209,8 @@ export class DisplayObjectChip<
     return this._chipContext.displayItem as DisplayItem | undefined;
   }
 
-  protected get _displayItemOptions() {
-    return this._options
-      .displayObjectDisplayItemOptions as DisplayObjectDisplayItemOptions;
+  protected get _layoutOptions() {
+    return this._options.layoutOptions as DisplayObjectLayoutOptions;
   }
 
   get idealWidth() {
@@ -1274,11 +1237,11 @@ export class DisplayObjectChip<
   }
 }
 
-export class SpriteChipDisplayItemOptions extends DisplayObjectDisplayItemOptions {
+export class SpriteChipLayoutOptions extends DisplayObjectLayoutOptions {
   keepAspectRatio = true;
 
-  maxWidth: DisplayItemValue = "idealWidth";
-  maxHeight: DisplayItemValue = "idealHeight";
+  maxWidth: LayoutValue = "idealWidth";
+  maxHeight: LayoutValue = "idealHeight";
 }
 
 export class SpriteChipOptions extends DisplayObjectChipOptions<PIXI.Sprite> {}
@@ -1289,9 +1252,9 @@ export class SpriteChip extends DisplayObjectChip<PIXI.Sprite> {
     options: Partial<SpriteChipOptions> = {},
   ) {
     const filledOptions = chip.fillInOptions(options, new SpriteChipOptions());
-    filledOptions.displayObjectDisplayItemOptions = chip.fillInOptions(
-      filledOptions.displayObjectDisplayItemOptions,
-      new SpriteChipDisplayItemOptions(),
+    filledOptions.layoutOptions = chip.fillInOptions(
+      filledOptions.layoutOptions,
+      new SpriteChipLayoutOptions(),
     );
 
     if (typeof source === "string") {
@@ -1671,7 +1634,7 @@ export class LayoutTest extends chip.Composite {
           properties: {
             x: ({ displayObject }) => displayObject.x,
           },
-          displayObjectDisplayItemOptions: {
+          layoutOptions: {
             // maxWidth: 100,
             minWidth: "idealWidth",
             maxWidth: "idealWidth",
@@ -1694,7 +1657,7 @@ export class LayoutTest extends chip.Composite {
       containerChip.addChildChip(
         new DisplayObjectChip({
           displayObject: green,
-          displayObjectDisplayItemOptions: {
+          layoutOptions: {
             maxWidth: 200,
             keepAspectRatio: true,
             idealWidth: "maxWidth",
@@ -1730,7 +1693,7 @@ export class LayoutTest extends chip.Composite {
       containerChip.addChildChip(
         new NineSlicePlaneChip({
           displayObject: nineSlicePlane,
-          displayObjectDisplayItemOptions: {
+          layoutOptions: {
             verticalAlign: "middle",
             maxHeight: 200,
           },
