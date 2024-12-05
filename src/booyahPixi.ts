@@ -442,11 +442,10 @@ export class SpacerChip extends DisplayItemBase {
 }
 
 export abstract class ContainerChip extends DisplayItemBase {
+  protected _container: PIXI.Container = new PIXI.Container();
   protected _childDisplayItems: Array<DisplayItem>;
-  protected _container: PIXI.Container;
 
   protected _onActivate(): void {
-    this._container = new PIXI.Container();
     this.chipContext.container.addChild(this._container);
 
     this._childDisplayItems = [];
@@ -466,7 +465,6 @@ export abstract class ContainerChip extends DisplayItemBase {
     }
 
     this.chipContext.container.removeChild(this._container);
-    delete this._container;
   }
 
   addChildDisplayItem(child: DisplayItem): void {
@@ -503,37 +501,8 @@ export abstract class ContainerChip extends DisplayItemBase {
       child.prepareRefresh(this._lastRenderInfo);
   }
 
-  private _sumChildValues(
-    prop:
-      | "minWidth"
-      | "minHeight"
-      | "idealWidth"
-      | "idealHeight"
-      | "maxWidth"
-      | "maxHeight",
-  ) {
-    return this._childDisplayItems.reduce((sum, child) => sum + child[prop], 0);
-  }
-
-  get minWidth() {
-    return super.minWidth ?? this._sumChildValues("minWidth");
-  }
-  get minHeight() {
-    return super.minHeight ?? this._sumChildValues("minHeight");
-  }
-
-  get idealWidth() {
-    return super.idealWidth ?? this._sumChildValues("idealWidth");
-  }
-  get idealHeight() {
-    return super.idealHeight ?? this._sumChildValues("idealHeight");
-  }
-
-  get maxWidth() {
-    return super.minWidth ?? this._sumChildValues("maxWidth");
-  }
-  get maxHeight() {
-    return super.minHeight ?? this._sumChildValues("maxHeight");
+  get container() {
+    return this._container;
   }
 
   get parentDisplayItem() {
@@ -545,6 +514,23 @@ export abstract class ContainerChip extends DisplayItemBase {
       displayItem: this,
       container: this._container,
     };
+  }
+
+  aggregateChildValues(
+    prop:
+      | "minWidth"
+      | "minHeight"
+      | "idealWidth"
+      | "idealHeight"
+      | "maxWidth"
+      | "maxHeight",
+    operation: "sum" | "max",
+  ) {
+    return this._childDisplayItems.reduce((agg, child) => {
+      const childValue = child[prop] || 0;
+      if (operation === "sum") return agg + childValue;
+      else return Math.max(agg, childValue);
+    }, 0);
   }
 }
 
@@ -564,6 +550,27 @@ export class StackingContainerChip extends ContainerChip {
     // Refresh all children
     for (const child of this._childDisplayItems) child.refresh(innerBounds);
   }
+
+  get minWidth() {
+    return super.minWidth ?? this.aggregateChildValues("minWidth", "max");
+  }
+  get minHeight() {
+    return super.minHeight ?? this.aggregateChildValues("minHeight", "max");
+  }
+
+  get idealWidth() {
+    return super.idealWidth ?? this.aggregateChildValues("idealWidth", "max");
+  }
+  get idealHeight() {
+    return super.idealHeight ?? this.aggregateChildValues("idealHeight", "max");
+  }
+
+  get maxWidth() {
+    return super.minWidth ?? this.aggregateChildValues("maxWidth", "max");
+  }
+  get maxHeight() {
+    return super.minHeight ?? this.aggregateChildValues("maxHeight", "max");
+  }
 }
 
 export class AxisContainerOptions extends LayoutOptions {
@@ -575,6 +582,8 @@ export class AxisContainerOptions extends LayoutOptions {
     | "atStartAndEnd"
     | "between"
     | "around" = "atEnd";
+
+  gap = 0;
 }
 
 export class AxisContainerChip extends ContainerChip {
@@ -623,16 +632,14 @@ export class AxisContainerChip extends ContainerChip {
 
     let minUsedSpace = 0;
     for (let i = 0; i < this._childDisplayItems.length; i++) {
+      // Account for the gap
+      if (i > 0) minUsedSpace += this._layoutOptions.gap;
+
       const child = this._childDisplayItems[i];
 
       const childMinLength = child[minLengthProp] || 0;
-      if (typeof childMinLength !== "undefined") {
-        minUsedSpace += childMinLength;
-
-        lengths.push(childMinLength);
-      } else {
-        lengths.push(0);
-      }
+      minUsedSpace += childMinLength;
+      lengths.push(childMinLength);
 
       // Prepare the next step by identifying those items with larger ideal lengths
       const childIdealLength = child[idealLengthProp];
@@ -728,6 +735,9 @@ export class AxisContainerChip extends ContainerChip {
     }
 
     for (let i = 0; i < this._childDisplayItems.length; i++) {
+      // Handle gap
+      if (i > 0) axisOffset += this._layoutOptions.gap;
+
       const child = this._childDisplayItems[i];
 
       let itemBounds: PIXI.Rectangle;
@@ -762,6 +772,63 @@ export class AxisContainerChip extends ContainerChip {
         axisOffset += availableExtraSpace / this._childDisplayItems.length;
       }
     }
+  }
+
+  get minWidth() {
+    return (
+      super.minWidth ??
+      this.aggregateChildValues(
+        "minWidth",
+        this._layoutOptions.axis === "horizontal" ? "sum" : "max",
+      )
+    );
+  }
+  get minHeight() {
+    return (
+      super.minHeight ??
+      this.aggregateChildValues(
+        "minHeight",
+        this._layoutOptions.axis === "vertical" ? "sum" : "max",
+      )
+    );
+  }
+
+  get idealWidth() {
+    return (
+      super.idealWidth ??
+      this.aggregateChildValues(
+        "idealWidth",
+        this._layoutOptions.axis === "horizontal" ? "sum" : "max",
+      )
+    );
+  }
+  get idealHeight() {
+    return (
+      super.idealHeight ??
+      this.aggregateChildValues(
+        "idealHeight",
+        this._layoutOptions.axis === "vertical" ? "sum" : "max",
+      )
+    );
+  }
+
+  get maxWidth() {
+    return (
+      super.idealWidth ??
+      this.aggregateChildValues(
+        "maxWidth",
+        this._layoutOptions.axis === "horizontal" ? "sum" : "max",
+      )
+    );
+  }
+  get maxHeight() {
+    return (
+      super.minHeight ??
+      this.aggregateChildValues(
+        "maxHeight",
+        this._layoutOptions.axis === "vertical" ? "sum" : "max",
+      )
+    );
   }
 }
 
@@ -1276,35 +1343,92 @@ export class SpriteChipLayoutOptions extends DisplayObjectLayoutOptions {
   maxHeight: LayoutValue = "idealHeight";
 }
 
-export class SpriteChipOptions extends DisplayObjectChipOptions<PIXI.Sprite> {}
+export class SpriteChipOptions extends DisplayObjectChipOptions<PIXI.Sprite> {
+  texture?: PIXI.Texture | string;
+}
 
 export class SpriteChip extends DisplayObjectChip<PIXI.Sprite> {
-  constructor(
-    source: PIXI.Sprite | PIXI.Texture | string,
-    options: Partial<SpriteChipOptions> = {},
-  ) {
+  constructor(options: Partial<SpriteChipOptions>) {
     const filledOptions = chip.fillInOptions(options, new SpriteChipOptions());
     filledOptions.layoutOptions = chip.fillInOptions(
       filledOptions.layoutOptions,
       new SpriteChipLayoutOptions(),
     );
 
-    if (typeof source === "string") {
-      const texture = PIXI.Assets.get<PIXI.Texture>(source);
-      if (!texture) throw new Error(`Cannot find asset for sprite "${source}"`);
+    if (!filledOptions.displayObject) {
+      if (!options.texture) {
+        throw new Error("Missing display object or texture for SpriteChip");
+      }
 
-      filledOptions.displayObject = new PIXI.Sprite(texture);
-    } else if (source instanceof PIXI.Texture) {
-      filledOptions.displayObject = new PIXI.Sprite(source);
-    } else {
-      filledOptions.displayObject = source;
+      if (typeof options.texture === "string") {
+        const resolvedTexture = PIXI.Assets.get<PIXI.Texture>(options.texture);
+        if (!resolvedTexture)
+          throw new Error(
+            `Cannot find texture asset for SpriteChip "${options.texture}"`,
+          );
+
+        options.texture = resolvedTexture;
+      }
+
+      filledOptions.displayObject = new PIXI.Sprite(options.texture);
     }
 
     super(filledOptions);
   }
 }
 
+export class NineSliceWidths {
+  left = 0;
+  top = 0;
+  right = 0;
+  bottom = 0;
+}
+
+export class NineSlicePlaneChipOptions extends DisplayObjectChipOptions<PIXI.NineSlicePlane> {
+  texture?: PIXI.Texture | string;
+  nineSliceWidths?: Partial<NineSliceWidths>;
+}
+
 export class NineSlicePlaneChip extends DisplayObjectChip<PIXI.NineSlicePlane> {
+  constructor(options: Partial<NineSlicePlaneChipOptions>) {
+    const filledOptions = chip.fillInOptions(
+      options,
+      new NineSlicePlaneChipOptions(),
+    );
+    filledOptions.nineSliceWidths = chip.fillInOptions(
+      filledOptions.nineSliceWidths,
+      new NineSliceWidths(),
+    );
+
+    if (!filledOptions.displayObject) {
+      if (!options.texture) {
+        throw new Error(
+          "Missing display object or texture for NineSlicePlaneChip",
+        );
+      }
+
+      if (typeof options.texture === "string") {
+        const resolvedTexture = PIXI.Assets.get<PIXI.Texture>(options.texture);
+        if (!resolvedTexture)
+          throw new Error(
+            `Cannot find texture asset for nine slice plane "${options.texture}"`,
+          );
+
+        options.texture = resolvedTexture;
+      }
+
+      filledOptions.displayObject = new PIXI.NineSlicePlane(
+        options.texture,
+        options.nineSliceWidths.left,
+        options.nineSliceWidths.top,
+        options.nineSliceWidths.right,
+        options.nineSliceWidths.bottom,
+      );
+    }
+
+    super(filledOptions);
+  }
+
   protected _setSize({
     scaledWidth,
     scaledHeight,
@@ -1314,6 +1438,39 @@ export class NineSlicePlaneChip extends DisplayObjectChip<PIXI.NineSlicePlane> {
   }) {
     this._options.displayObject.width = scaledWidth;
     this._options.displayObject.height = scaledHeight;
+  }
+}
+
+export class TextChipLayoutOptions extends DisplayObjectLayoutOptions {
+  keepAspectRatio = true;
+
+  minWidth: LayoutValue = "idealWidth";
+  minHeight: LayoutValue = "idealHeight";
+  maxWidth: LayoutValue = "idealWidth";
+  maxHeight: LayoutValue = "idealHeight";
+}
+
+export class TextChipOptions extends DisplayObjectChipOptions<PIXI.Text> {
+  message?: string;
+  style?: Partial<PIXI.ITextStyle> | PIXI.TextStyle;
+}
+
+export class TextChip extends DisplayObjectChip<PIXI.Text> {
+  constructor(options: Partial<TextChipOptions>) {
+    const filledOptions = chip.fillInOptions(options, new TextChipOptions());
+    filledOptions.layoutOptions = chip.fillInOptions(
+      filledOptions.layoutOptions,
+      new TextChipLayoutOptions(),
+    );
+
+    if (!filledOptions.displayObject) {
+      filledOptions.displayObject = new PIXI.Text(
+        options.message || "",
+        options.style,
+      );
+    }
+
+    super(filledOptions);
   }
 }
 
@@ -1662,7 +1819,8 @@ export class LayoutTest extends chip.Composite {
       });
 
       containerChip.addChildChip(
-        new SpriteChip(renderTexture, {
+        new SpriteChip({
+          texture: renderTexture,
           properties: {
             x: ({ displayObject }) => displayObject.x,
           },
