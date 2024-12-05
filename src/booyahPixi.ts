@@ -252,6 +252,12 @@ function parseLayoutProperty(
   return matchingValue;
 }
 
+/**
+ * Emits:
+ *  - updated() - something changed, requesting an update
+ *  - willRefresh(bounds)
+ *  - didRefresh(bounds)
+ */
 export interface DisplayItem extends chip.NodeEventSource {
   readonly minWidth?: number;
   readonly minHeight?: number;
@@ -417,6 +423,11 @@ export abstract class DisplayItemBase
       this._lastRenderInfo,
     );
   }
+
+  /** Child classes can call this to request a new refresh cycle */
+  protected _requestRefresh() {
+    this.emit("updated");
+  }
 }
 
 /** Just takes up space */
@@ -460,24 +471,31 @@ export abstract class ContainerChip extends DisplayItemBase {
 
   addChildDisplayItem(child: DisplayItem): void {
     const index = this._childDisplayItems.indexOf(child);
-    if (index !== -1) throw new Error("Cannot add duplicate child displayitem");
+    if (index !== -1)
+      throw new Error("Cannot add duplicate child display item");
 
     this._childDisplayItems.push(child);
 
-    if (this._lastBounds) {
-      this.prepareRefresh(this._lastRenderInfo);
-      this.refresh(this._lastBounds);
-    }
+    this._subscribe(child, "updated", this._requestRefresh);
+    this._requestRefresh();
+
+    // if (this._lastBounds) {
+    //   this.prepareRefresh(this._lastRenderInfo);
+    //   this.refresh(this._lastBounds);
+    // }
   }
 
   removeChildDisplayItem(child: DisplayItem): void {
     const index = this._childDisplayItems.indexOf(child);
     if (index === -1)
-      throw new Error("Cannot find child displayitem to remove");
+      throw new Error("Cannot find child display item to remove");
 
     this._childDisplayItems.splice(index, 1);
+    this._unsubscribe(child);
 
-    if (this._lastBounds) this.refresh(this._lastBounds);
+    this._requestRefresh();
+
+    // if (this._lastBounds) this.refresh(this._lastBounds);
   }
 
   protected _onPrepareRefresh(): void {
@@ -763,6 +781,7 @@ export class PixiAppChip extends chip.Composite {
 
   private _pixiApplication: PIXI.Application;
   private _stackingContainerChip?: StackingContainerChip;
+  private _refreshNeeded: boolean;
 
   constructor(options?: Partial<PixiAppChipOptions>) {
     super();
@@ -771,6 +790,8 @@ export class PixiAppChip extends chip.Composite {
   }
 
   protected _onActivate(): void {
+    this._refreshNeeded = false;
+
     const appOptions = this._options?.appOptions || {};
     appOptions.autoStart = false;
     if (this._options.canvas) {
@@ -792,6 +813,8 @@ export class PixiAppChip extends chip.Composite {
         },
         attribute: "_stackingContainerChip",
       });
+
+      this._subscribe(this._stackingContainerChip, "updated", this._onResize);
     }
 
     // If PIXI handles resizing, listen to that event. Otherwise listen to the window
@@ -801,10 +824,15 @@ export class PixiAppChip extends chip.Composite {
       this._subscribe(window, "resize", this._onResize);
     }
 
-    this._onResize();
+    this._handleResize();
   }
 
   protected _onTick(): void {
+    if (this._refreshNeeded) {
+      this._handleResize();
+      this._refreshNeeded = false;
+    }
+
     this._pixiApplication.render();
   }
 
@@ -829,6 +857,10 @@ export class PixiAppChip extends chip.Composite {
   }
 
   private _onResize() {
+    this._refreshNeeded = true;
+  }
+
+  private _handleResize() {
     if (this._stackingContainerChip) {
       this._stackingContainerChip.prepareRefresh({
         renderSize: this.renderSize,
