@@ -221,10 +221,10 @@ function parseLayoutProperty(
   prop: keyof LayoutOptions,
   renderInfo: RenderInfo,
 ): number | undefined {
-  // If property doesn't exist, return undefined
-  if (!(prop in layoutOptions)) return;
-
   const propValue = layoutOptions[prop] as LayoutValue;
+
+  // If property doesn't exist, return undefined
+  if (typeof propValue === "undefined") return;
 
   // If property is a number, return it directly
   if (typeof propValue === "number") return propValue as number;
@@ -574,7 +574,7 @@ export class StackingContainerChip extends ContainerChip {
 }
 
 export class AxisContainerOptions extends LayoutOptions {
-  axis: "horizontal" | "vertical" = "horizontal";
+  direction: "horizontal" | "vertical" = "horizontal";
 
   distributeSpace:
     | "atStart"
@@ -618,13 +618,15 @@ export class AxisContainerChip extends ContainerChip {
   ): void {
     // Determine which properties will be used depending on the direction
     const minLengthProp =
-      this._layoutOptions.axis === "vertical" ? "minHeight" : "minWidth";
+      this._layoutOptions.direction === "vertical" ? "minHeight" : "minWidth";
     const idealLengthProp =
-      this._layoutOptions.axis === "vertical" ? "idealHeight" : "idealWidth";
+      this._layoutOptions.direction === "vertical"
+        ? "idealHeight"
+        : "idealWidth";
     const maxLengthProp =
-      this._layoutOptions.axis === "vertical" ? "maxHeight" : "maxWidth";
+      this._layoutOptions.direction === "vertical" ? "maxHeight" : "maxWidth";
     const lengthProp =
-      this._layoutOptions.axis === "vertical" ? "height" : "width";
+      this._layoutOptions.direction === "vertical" ? "height" : "width";
 
     // Do a first pass to gather minimum space and element types
     const lengths: Array<number> = [];
@@ -741,7 +743,7 @@ export class AxisContainerChip extends ContainerChip {
       const child = this._childDisplayItems[i];
 
       let itemBounds: PIXI.Rectangle;
-      if (this._layoutOptions.axis === "vertical") {
+      if (this._layoutOptions.direction === "vertical") {
         itemBounds = new PIXI.Rectangle(
           innerBounds.x,
           innerBounds.y + axisOffset,
@@ -779,7 +781,7 @@ export class AxisContainerChip extends ContainerChip {
       super.minWidth ??
       this.aggregateChildValues(
         "minWidth",
-        this._layoutOptions.axis === "horizontal" ? "sum" : "max",
+        this._layoutOptions.direction === "horizontal" ? "sum" : "max",
       )
     );
   }
@@ -788,7 +790,7 @@ export class AxisContainerChip extends ContainerChip {
       super.minHeight ??
       this.aggregateChildValues(
         "minHeight",
-        this._layoutOptions.axis === "vertical" ? "sum" : "max",
+        this._layoutOptions.direction === "vertical" ? "sum" : "max",
       )
     );
   }
@@ -798,7 +800,7 @@ export class AxisContainerChip extends ContainerChip {
       super.idealWidth ??
       this.aggregateChildValues(
         "idealWidth",
-        this._layoutOptions.axis === "horizontal" ? "sum" : "max",
+        this._layoutOptions.direction === "horizontal" ? "sum" : "max",
       )
     );
   }
@@ -807,7 +809,7 @@ export class AxisContainerChip extends ContainerChip {
       super.idealHeight ??
       this.aggregateChildValues(
         "idealHeight",
-        this._layoutOptions.axis === "vertical" ? "sum" : "max",
+        this._layoutOptions.direction === "vertical" ? "sum" : "max",
       )
     );
   }
@@ -817,7 +819,7 @@ export class AxisContainerChip extends ContainerChip {
       super.idealWidth ??
       this.aggregateChildValues(
         "maxWidth",
-        this._layoutOptions.axis === "horizontal" ? "sum" : "max",
+        this._layoutOptions.direction === "horizontal" ? "sum" : "max",
       )
     );
   }
@@ -826,7 +828,7 @@ export class AxisContainerChip extends ContainerChip {
       super.minHeight ??
       this.aggregateChildValues(
         "maxHeight",
-        this._layoutOptions.axis === "vertical" ? "sum" : "max",
+        this._layoutOptions.direction === "vertical" ? "sum" : "max",
       )
     );
   }
