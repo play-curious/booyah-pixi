@@ -777,60 +777,73 @@ export class AxisContainerChip extends ContainerChip {
   }
 
   get minWidth() {
-    return (
-      super.minWidth ??
-      this.aggregateChildValues(
-        "minWidth",
-        this._layoutOptions.direction === "horizontal" ? "sum" : "max",
-      )
-    );
+    if (typeof super.minWidth !== "undefined") return super.minWidth;
+
+    if (this._layoutOptions.direction === "horizontal") {
+      const childrenSum = this.aggregateChildValues("minWidth", "sum");
+      return childrenSum + this._calcuateGapSum();
+    } else {
+      return this.aggregateChildValues("minWidth", "max");
+    }
   }
   get minHeight() {
-    return (
-      super.minHeight ??
-      this.aggregateChildValues(
-        "minHeight",
-        this._layoutOptions.direction === "vertical" ? "sum" : "max",
-      )
-    );
+    if (typeof super.minHeight !== "undefined") return super.minWidth;
+
+    if (this._layoutOptions.direction === "vertical") {
+      const childrenSum = this.aggregateChildValues("minHeight", "sum");
+      return childrenSum + this._calcuateGapSum();
+    } else {
+      return this.aggregateChildValues("minHeight", "max");
+    }
   }
 
   get idealWidth() {
-    return (
-      super.idealWidth ??
-      this.aggregateChildValues(
-        "idealWidth",
-        this._layoutOptions.direction === "horizontal" ? "sum" : "max",
-      )
-    );
+    if (typeof super.idealWidth !== "undefined") return super.idealWidth;
+
+    if (this._layoutOptions.direction === "horizontal") {
+      const childrenSum = this.aggregateChildValues("idealWidth", "sum");
+      return childrenSum + this._calcuateGapSum();
+    } else {
+      return this.aggregateChildValues("idealWidth", "max");
+    }
   }
   get idealHeight() {
-    return (
-      super.idealHeight ??
-      this.aggregateChildValues(
-        "idealHeight",
-        this._layoutOptions.direction === "vertical" ? "sum" : "max",
-      )
-    );
+    if (typeof super.idealHeight !== "undefined") return super.minWidth;
+
+    if (this._layoutOptions.direction === "vertical") {
+      const childrenSum = this.aggregateChildValues("idealHeight", "sum");
+      return childrenSum + this._calcuateGapSum();
+    } else {
+      return this.aggregateChildValues("idealHeight", "max");
+    }
   }
 
   get maxWidth() {
-    return (
-      super.idealWidth ??
-      this.aggregateChildValues(
-        "maxWidth",
-        this._layoutOptions.direction === "horizontal" ? "sum" : "max",
-      )
-    );
+    if (typeof super.maxWidth !== "undefined") return super.maxWidth;
+
+    if (this._layoutOptions.direction === "horizontal") {
+      const childrenSum = this.aggregateChildValues("maxWidth", "sum");
+      return childrenSum + this._calcuateGapSum();
+    } else {
+      return this.aggregateChildValues("maxWidth", "max");
+    }
   }
+
   get maxHeight() {
-    return (
-      super.minHeight ??
-      this.aggregateChildValues(
-        "maxHeight",
-        this._layoutOptions.direction === "vertical" ? "sum" : "max",
-      )
-    );
+    if (typeof super.maxHeight !== "undefined") return super.minWidth;
+
+    if (this._layoutOptions.direction === "vertical") {
+      const childrenSum = this.aggregateChildValues("maxHeight", "sum");
+      return childrenSum + this._calcuateGapSum();
+    } else {
+      return this.aggregateChildValues("maxHeight", "max");
+    }
+  }
+
+  private _calcuateGapSum() {
+    return this._childDisplayItems.length > 1
+      ? (this._childDisplayItems.length - 1) * this._layoutOptions.gap
+      : 0;
   }
 }
 
