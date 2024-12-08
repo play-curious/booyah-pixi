@@ -252,6 +252,10 @@ function parseLayoutProperty(
   return matchingValue;
 }
 
+export type DisplayItemChildChipOptions = Array<
+  chip.ActivateChildChipOptions | chip.ChipResolvable
+>;
+
 /**
  * Emits:
  *  - updated() - something changed, requesting an update
@@ -282,11 +286,7 @@ export abstract class DisplayItemBase
   protected _lastRenderInfo?: RenderInfo;
   protected _lastBounds?: PIXI.Rectangle;
 
-  constructor(
-    childChipOptions: Array<
-      chip.ActivateChildChipOptions | chip.ChipResolvable
-    > = [],
-  ) {
+  constructor(childChipOptions: DisplayItemChildChipOptions = []) {
     super(childChipOptions, { terminateOnCompletion: false });
   }
 
@@ -438,412 +438,6 @@ export class SpacerChip extends DisplayItemBase {
     super();
 
     this._layoutOptions = util.fillInOptions(options, new LayoutOptions());
-  }
-}
-
-export abstract class ContainerChip extends DisplayItemBase {
-  protected _container: PIXI.Container = new PIXI.Container();
-  protected _childDisplayItems: Array<DisplayItem>;
-
-  protected _onActivate(): void {
-    this.chipContext.container.addChild(this._container);
-
-    this._childDisplayItems = [];
-
-    if (this.parentDisplayItem) {
-      this.parentDisplayItem.addChildDisplayItem(this);
-    }
-
-    super._onActivate();
-  }
-
-  protected _onTerminate(): void {
-    super._onTerminate();
-
-    if (this.parentDisplayItem) {
-      this.parentDisplayItem.removeChildDisplayItem(this);
-    }
-
-    this.chipContext.container.removeChild(this._container);
-  }
-
-  addChildDisplayItem(child: DisplayItem): void {
-    const index = this._childDisplayItems.indexOf(child);
-    if (index !== -1)
-      throw new Error("Cannot add duplicate child display item");
-
-    this._childDisplayItems.push(child);
-
-    this._subscribe(child, "updated", this._requestRefresh);
-    this._requestRefresh();
-
-    // if (this._lastBounds) {
-    //   this.prepareRefresh(this._lastRenderInfo);
-    //   this.refresh(this._lastBounds);
-    // }
-  }
-
-  removeChildDisplayItem(child: DisplayItem): void {
-    const index = this._childDisplayItems.indexOf(child);
-    if (index === -1)
-      throw new Error("Cannot find child display item to remove");
-
-    this._childDisplayItems.splice(index, 1);
-    this._unsubscribe(child);
-
-    this._requestRefresh();
-
-    // if (this._lastBounds) this.refresh(this._lastBounds);
-  }
-
-  protected _onPrepareRefresh(): void {
-    for (const child of this._childDisplayItems)
-      child.prepareRefresh(this._lastRenderInfo);
-  }
-
-  get container() {
-    return this._container;
-  }
-
-  get parentDisplayItem() {
-    return this._chipContext.displayItem as DisplayItem | undefined;
-  }
-
-  get contextModification(): chip.ChipContextResolvable {
-    return {
-      displayItem: this,
-      container: this._container,
-    };
-  }
-
-  aggregateChildValues(
-    prop:
-      | "minWidth"
-      | "minHeight"
-      | "idealWidth"
-      | "idealHeight"
-      | "maxWidth"
-      | "maxHeight",
-    operation: "sum" | "max",
-  ) {
-    return this._childDisplayItems.reduce((agg, child) => {
-      const childValue = child[prop] || 0;
-      if (operation === "sum") return agg + childValue;
-      else return Math.max(agg, childValue);
-    }, 0);
-  }
-}
-
-export class StackingContainerChip extends ContainerChip {
-  protected _layoutOptions: LayoutOptions;
-
-  constructor(options?: Partial<LayoutOptions>) {
-    super();
-
-    this._layoutOptions = util.fillInOptions(options, new LayoutOptions());
-  }
-
-  protected _onRefresh(
-    outerBounds: PIXI.Rectangle,
-    innerBounds: PIXI.Rectangle,
-  ): void {
-    // Refresh all children
-    for (const child of this._childDisplayItems) child.refresh(innerBounds);
-  }
-
-  get minWidth() {
-    return super.minWidth ?? this.aggregateChildValues("minWidth", "max");
-  }
-  get minHeight() {
-    return super.minHeight ?? this.aggregateChildValues("minHeight", "max");
-  }
-
-  get idealWidth() {
-    return super.idealWidth ?? this.aggregateChildValues("idealWidth", "max");
-  }
-  get idealHeight() {
-    return super.idealHeight ?? this.aggregateChildValues("idealHeight", "max");
-  }
-
-  get maxWidth() {
-    return super.minWidth ?? this.aggregateChildValues("maxWidth", "max");
-  }
-  get maxHeight() {
-    return super.minHeight ?? this.aggregateChildValues("maxHeight", "max");
-  }
-}
-
-export class AxisContainerOptions extends LayoutOptions {
-  direction: "horizontal" | "vertical" = "horizontal";
-
-  distributeSpace:
-    | "atStart"
-    | "atEnd"
-    | "atStartAndEnd"
-    | "between"
-    | "around" = "atEnd";
-
-  gap = 0;
-}
-
-export class AxisContainerChip extends ContainerChip {
-  protected _layoutOptions: AxisContainerOptions;
-
-  constructor(options?: Partial<AxisContainerOptions>) {
-    super();
-
-    this._layoutOptions = util.fillInOptions(
-      options,
-      new AxisContainerOptions(),
-    );
-  }
-
-  protected _onActivate(): void {
-    super._onActivate();
-
-    this._container = new PIXI.Container();
-    this.chipContext.container.addChild(this._container);
-  }
-
-  protected _onTerminate(): void {
-    super._onTerminate();
-
-    this.chipContext.container.removeChild(this._container);
-    delete this._container;
-  }
-
-  protected _onRefresh(
-    outerBounds: PIXI.Rectangle,
-    innerBounds: PIXI.Rectangle,
-  ): void {
-    // Determine which properties will be used depending on the direction
-    const minLengthProp =
-      this._layoutOptions.direction === "vertical" ? "minHeight" : "minWidth";
-    const idealLengthProp =
-      this._layoutOptions.direction === "vertical"
-        ? "idealHeight"
-        : "idealWidth";
-    const maxLengthProp =
-      this._layoutOptions.direction === "vertical" ? "maxHeight" : "maxWidth";
-    const lengthProp =
-      this._layoutOptions.direction === "vertical" ? "height" : "width";
-
-    // Do a first pass to gather minimum space and element types
-    const lengths: Array<number> = [];
-    let childIndexesToGrow: Array<number> = [];
-
-    let minUsedSpace = 0;
-    for (let i = 0; i < this._childDisplayItems.length; i++) {
-      // Account for the gap
-      if (i > 0) minUsedSpace += this._layoutOptions.gap;
-
-      const child = this._childDisplayItems[i];
-
-      const childMinLength = child[minLengthProp] || 0;
-      minUsedSpace += childMinLength;
-      lengths.push(childMinLength);
-
-      // Prepare the next step by identifying those items with larger ideal lengths
-      const childIdealLength = child[idealLengthProp];
-      if (
-        typeof childIdealLength !== "undefined" &&
-        childIdealLength > childMinLength
-      ) {
-        childIndexesToGrow.push(i);
-      }
-    }
-
-    // Do a second pass to bring elements to their ideal lengths
-    let availableExtraSpace = innerBounds[lengthProp] - minUsedSpace;
-    while (availableExtraSpace > 1 && childIndexesToGrow.length > 0) {
-      const extraSpacePerChild =
-        availableExtraSpace / childIndexesToGrow.length;
-      for (let i = 0; i < childIndexesToGrow.length; i++) {
-        const childIndex = childIndexesToGrow[i];
-        const child = this._childDisplayItems[childIndex];
-        const childIdealLength = child[idealLengthProp] || 0;
-
-        // Expand the element, but not beyond the ideal length
-        const spaceToGive = Math.min(
-          extraSpacePerChild,
-          childIdealLength - lengths[childIndex],
-        );
-        lengths[childIndex] += spaceToGive;
-        availableExtraSpace -= spaceToGive;
-
-        if (lengths[childIndex] >= childIdealLength) {
-          // Remove the child from the array of indexes to grow. Keep i at the same value for the next loop
-          childIndexesToGrow.splice(i, 1);
-          i--;
-        }
-      }
-    }
-
-    // Identify elements that can still grow (no max length, or max length greater than current)
-    if (availableExtraSpace > 1) {
-      childIndexesToGrow = [];
-
-      for (let i = 0; i < this._childDisplayItems.length; i++) {
-        const child = this._childDisplayItems[i];
-
-        if (
-          typeof child[maxLengthProp] === "undefined" ||
-          child[maxLengthProp] > lengths[i]
-        ) {
-          childIndexesToGrow.push(i);
-        }
-      }
-    }
-
-    // Do extra passes, giving space to growing elements
-    while (availableExtraSpace > 1 && childIndexesToGrow.length > 0) {
-      const extraSpacePerChild =
-        availableExtraSpace / childIndexesToGrow.length;
-      for (let i = 0; i < childIndexesToGrow.length; i++) {
-        const childIndex = childIndexesToGrow[i];
-        const child = this._childDisplayItems[childIndex];
-
-        if (typeof child[maxLengthProp] !== "undefined") {
-          // Expand the element, but not beyond the max length
-          const spaceToGive = Math.min(
-            extraSpacePerChild,
-            child[maxLengthProp] - lengths[childIndex],
-          );
-          lengths[childIndex] += spaceToGive;
-          availableExtraSpace -= spaceToGive;
-
-          if (lengths[childIndex] >= child[maxLengthProp]) {
-            // Remove the child from the array of indexes to grow. Keep i at the same value for the next loop
-            childIndexesToGrow.splice(i, 1);
-            i--;
-          }
-        } else {
-          // Increase the length in an unbounded way
-          lengths[childIndex] += extraSpacePerChild;
-          availableExtraSpace -= extraSpacePerChild;
-        }
-      }
-    }
-
-    // Distribute any extra space around or between elements at the same time as you assign lengths
-    let axisOffset = 0;
-
-    if (this._layoutOptions.distributeSpace === "atStart") {
-      axisOffset += availableExtraSpace;
-    } else if (this._layoutOptions.distributeSpace === "atStartAndEnd") {
-      axisOffset += availableExtraSpace / 2;
-    } else if (this._layoutOptions.distributeSpace === "around") {
-      axisOffset += availableExtraSpace / this._childDisplayItems.length / 2;
-    }
-
-    for (let i = 0; i < this._childDisplayItems.length; i++) {
-      // Handle gap
-      if (i > 0) axisOffset += this._layoutOptions.gap;
-
-      const child = this._childDisplayItems[i];
-
-      let itemBounds: PIXI.Rectangle;
-      if (this._layoutOptions.direction === "vertical") {
-        itemBounds = new PIXI.Rectangle(
-          innerBounds.x,
-          innerBounds.y + axisOffset,
-          innerBounds.width,
-          lengths[i],
-        );
-      } else {
-        itemBounds = new PIXI.Rectangle(
-          innerBounds.x + axisOffset,
-          innerBounds.y,
-          lengths[i],
-          innerBounds.height,
-        );
-      }
-
-      // Update item
-      child.refresh(itemBounds);
-
-      // Add space used to y offset
-      axisOffset += lengths[i];
-
-      // Distribute extra space between items
-      if (this._layoutOptions.distributeSpace === "between") {
-        if (this._childDisplayItems.length > 1)
-          axisOffset +=
-            availableExtraSpace / (this._childDisplayItems.length - 1);
-      } else if (this._layoutOptions.distributeSpace === "around") {
-        axisOffset += availableExtraSpace / this._childDisplayItems.length;
-      }
-    }
-  }
-
-  get minWidth() {
-    if (typeof super.minWidth !== "undefined") return super.minWidth;
-
-    if (this._layoutOptions.direction === "horizontal") {
-      const childrenSum = this.aggregateChildValues("minWidth", "sum");
-      return childrenSum + this._calcuateGapSum();
-    } else {
-      return this.aggregateChildValues("minWidth", "max");
-    }
-  }
-  get minHeight() {
-    if (typeof super.minHeight !== "undefined") return super.minWidth;
-
-    if (this._layoutOptions.direction === "vertical") {
-      const childrenSum = this.aggregateChildValues("minHeight", "sum");
-      return childrenSum + this._calcuateGapSum();
-    } else {
-      return this.aggregateChildValues("minHeight", "max");
-    }
-  }
-
-  get idealWidth() {
-    if (typeof super.idealWidth !== "undefined") return super.idealWidth;
-
-    if (this._layoutOptions.direction === "horizontal") {
-      const childrenSum = this.aggregateChildValues("idealWidth", "sum");
-      return childrenSum + this._calcuateGapSum();
-    } else {
-      return this.aggregateChildValues("idealWidth", "max");
-    }
-  }
-  get idealHeight() {
-    if (typeof super.idealHeight !== "undefined") return super.minWidth;
-
-    if (this._layoutOptions.direction === "vertical") {
-      const childrenSum = this.aggregateChildValues("idealHeight", "sum");
-      return childrenSum + this._calcuateGapSum();
-    } else {
-      return this.aggregateChildValues("idealHeight", "max");
-    }
-  }
-
-  get maxWidth() {
-    if (typeof super.maxWidth !== "undefined") return super.maxWidth;
-
-    if (this._layoutOptions.direction === "horizontal") {
-      const childrenSum = this.aggregateChildValues("maxWidth", "sum");
-      return childrenSum + this._calcuateGapSum();
-    } else {
-      return this.aggregateChildValues("maxWidth", "max");
-    }
-  }
-
-  get maxHeight() {
-    if (typeof super.maxHeight !== "undefined") return super.minWidth;
-
-    if (this._layoutOptions.direction === "vertical") {
-      const childrenSum = this.aggregateChildValues("maxHeight", "sum");
-      return childrenSum + this._calcuateGapSum();
-    } else {
-      return this.aggregateChildValues("maxHeight", "max");
-    }
-  }
-
-  private _calcuateGapSum() {
-    return this._childDisplayItems.length > 1
-      ? (this._childDisplayItems.length - 1) * this._layoutOptions.gap
-      : 0;
   }
 }
 
@@ -1016,10 +610,9 @@ export type DisplayObjectProperties<
 };
 
 export class DisplayObjectLayoutOptions extends LayoutOptions {
-  keepAspectRatio = false;
-
-  horizontalAlign: "left" | "right" | "center" = "left";
-  verticalAlign: "top" | "bottom" | "middle" = "top";
+  // keepAspectRatio = false;
+  // horizontalAlign: "left" | "right" | "center" = "left";
+  // verticalAlign: "top" | "bottom" | "middle" = "top";
 }
 
 export class DisplayObjectChipOptions<
@@ -1037,44 +630,46 @@ export class DisplayObjectChipOptions<
   addToContainer = true;
 }
 
-export class DisplayObjectChip<
+export abstract class DisplayObjectChip<
   DisplayObjectType extends PIXI.DisplayObject,
 > extends DisplayItemBase {
-  protected readonly _options: DisplayObjectChipOptions<DisplayObjectType>;
+  protected abstract readonly _options: DisplayObjectChipOptions<DisplayObjectType>;
 
   // Cache of the local bounds so as not to recalculate it
-  private _localBounds?: PIXI.Rectangle;
-  private _idealWidth?: number;
-  private _idealHeight?: number;
+  // private _localBounds?: PIXI.Rectangle;
+  // private _idealWidth?: number;
+  // private _idealHeight?: number;
 
   private _propertiesToUpdateOnResize: Array<keyof DisplayObjectType>;
 
-  constructor(options: Partial<DisplayObjectChipOptions<DisplayObjectType>>) {
-    const filledOptions = chip.fillInOptions(
-      options,
-      new DisplayObjectChipOptions<DisplayObjectType>(),
-    );
-    super(options.children);
+  // constructor(childChipOptions: DisplayItemChildChipOptions) {
+  //   const filledOptions = chip.fillInOptions(
+  //     options,
+  //     new DisplayObjectChipOptions<DisplayObjectType>(),
+  //   );
+  //   super(options.children);
 
-    filledOptions.layoutOptions = chip.fillInOptions(
-      filledOptions.layoutOptions,
-      new DisplayObjectLayoutOptions(),
-    );
-    this._options = filledOptions;
-  }
+  // filledOptions.layoutOptions = chip.fillInOptions(
+  //   filledOptions.layoutOptions,
+  //   new DisplayObjectLayoutOptions(),
+  // );
+  // this._options = filledOptions;
+  // }
 
-  _onPrepareRefresh() {
-    // The first time, possibly calculate ideal sizes
-    if (
-      typeof this._idealWidth !== "undefined" &&
-      typeof this._idealHeight !== "undefined"
-    )
-      return;
+  // _onPrepareRefresh() {
+  //   // The first time, possibly calculate ideal sizes
+  //   if (
+  //     typeof this._idealWidth !== "undefined" &&
+  //     typeof this._idealHeight !== "undefined"
+  //   )
+  //     return;
 
-    this.updateIdealSize();
-  }
+  //   this.updateIdealSize();
+  // }
 
-  _onActivate() {
+  protected _onActivate() {
+    super._onActivate();
+
     this._propertiesToUpdateOnResize = [];
 
     const valueFunctionOptions = {
@@ -1130,7 +725,7 @@ export class DisplayObjectChip<
     }
   }
 
-  _onTerminate() {
+  protected _onTerminate() {
     if (this._options.addToParentDisplayItem && this.parentDisplayItem) {
       this.parentDisplayItem.removeChildDisplayItem(this);
     }
@@ -1141,9 +736,276 @@ export class DisplayObjectChip<
     ) {
       this._chipContext.container.removeChild(this._options.displayObject);
     }
+
+    super._onTerminate();
   }
 
-  _onRefresh(outerBounds: PIXI.Rectangle, innerBounds: PIXI.Rectangle): void {
+  // _onRefresh(outerBounds: PIXI.Rectangle, innerBounds: PIXI.Rectangle): void {
+  //   // if (!this._displayObject.parent)
+  //   //   throw new Error("Cannot layout display object without a parent");
+
+  //   let horizontalScale = 1;
+  //   let verticalScale = 1;
+
+  //   // Reason in inner sizes, without padding
+  //   const idealInnerWidth = this.idealWidth
+  //     ? this.idealWidth - (this.paddingLeft + this.paddingRight)
+  //     : 0;
+  //   const idealInnerHeight = this.idealHeight
+  //     ? this.idealHeight - (this.paddingTop + this.paddingBottom)
+  //     : 0;
+
+  //   if (innerBounds.width < idealInnerWidth) {
+  //     // Shrink, but not beyond the min size
+  //     if (typeof this.minWidth !== "undefined") {
+  //       const minInnerWidth =
+  //         this.minWidth - (this.paddingLeft + this.paddingRight);
+  //       horizontalScale =
+  //         Math.max(innerBounds.width, minInnerWidth) / idealInnerWidth;
+  //     } else {
+  //       horizontalScale = innerBounds.width / idealInnerWidth;
+  //     }
+  //   } else if (innerBounds.width > idealInnerWidth) {
+  //     // Grow, but not beyond the max size
+  //     if (typeof this.maxWidth !== "undefined") {
+  //       const maxInnerWidth =
+  //         this.maxWidth - (this.paddingLeft + this.paddingRight);
+  //       horizontalScale =
+  //         Math.min(maxInnerWidth, innerBounds.width) / idealInnerWidth;
+  //     } else {
+  //       horizontalScale = innerBounds.width / idealInnerWidth;
+  //     }
+  //   }
+
+  //   if (innerBounds.height < idealInnerHeight) {
+  //     // Shrink, but not beyond the min size
+  //     if (typeof this.minHeight !== "undefined") {
+  //       const minInnerHeight =
+  //         this.minHeight - (this.paddingTop + this.paddingBottom);
+  //       verticalScale =
+  //         Math.max(innerBounds.height, minInnerHeight) / idealInnerHeight;
+  //     } else {
+  //       verticalScale = innerBounds.height / idealInnerHeight;
+  //     }
+  //   } else if (innerBounds.height > idealInnerHeight) {
+  //     // Grow, but not beyond the max size
+  //     if (typeof this.maxHeight !== "undefined") {
+  //       const maxInnerHeight =
+  //         this.maxHeight - (this.paddingTop + this.paddingBottom);
+  //       verticalScale =
+  //         Math.min(maxInnerHeight, innerBounds.height) / idealInnerHeight;
+  //     } else {
+  //       verticalScale = innerBounds.height / idealInnerHeight;
+  //     }
+  //   }
+
+  //   if (this._options.layoutOptions.keepAspectRatio) {
+  //     const minScale = Math.min(horizontalScale, verticalScale);
+  //     horizontalScale = minScale;
+  //     verticalScale = minScale;
+  //   }
+
+  //   const scaledWidth = idealInnerWidth * horizontalScale;
+  //   const scaledHeight = idealInnerHeight * verticalScale;
+  //   this._setSize({
+  //     scaledWidth,
+  //     scaledHeight,
+  //     horizontalScale,
+  //     verticalScale,
+  //   });
+
+  //   // Start with the position within the padding area
+  //   const position = this._options.displayObject.parent.toLocal(
+  //     new PIXI.Point(innerBounds.x, innerBounds.y),
+  //   );
+
+  //   // If the object has an non-zero anchor point, adjust the position
+  //   if (!this._localBounds) {
+  //     this._localBounds = this._options.displayObject.getLocalBounds();
+  //   }
+  //   position.x -= this._localBounds.left;
+  //   position.y -= this._localBounds.top;
+
+  //   // Handle horizontal alignment
+  //   if (
+  //     this._options.layoutOptions.horizontalAlign !== "left" &&
+  //     innerBounds.width > scaledWidth
+  //   ) {
+  //     const extraSpace = innerBounds.width - scaledWidth;
+  //     if (this._options.layoutOptions.horizontalAlign === "right") {
+  //       position.x += extraSpace;
+  //     } else if (this._options.layoutOptions.horizontalAlign === "center") {
+  //       position.x += extraSpace / 2;
+  //     }
+  //   }
+
+  //   // Handle vertical alignment
+  //   if (
+  //     this._options.layoutOptions.verticalAlign !== "top" &&
+  //     innerBounds.height > scaledHeight
+  //   ) {
+  //     const extraSpace = innerBounds.height - scaledHeight;
+  //     if (this._options.layoutOptions.verticalAlign === "bottom") {
+  //       position.y += extraSpace;
+  //     } else if (this._options.layoutOptions.verticalAlign === "middle") {
+  //       position.y += extraSpace / 2;
+  //     }
+  //   }
+
+  //   this._setPosition(position);
+
+  //   this._updateProperties();
+  // }
+
+  protected _updateProperties() {
+    const valueFunctionOptions = {
+      displayObject: this._options.displayObject,
+      pixiAppChip: this.pixiAppChip,
+      renderSize: this.pixiAppChip.renderSize,
+    };
+
+    // TODO: optionally update ideal size
+
+    for (const property of this._propertiesToUpdateOnResize) {
+      const f = this._options.properties[
+        property
+      ] as DisplayObjectValueFunction<
+        DisplayObjectType,
+        keyof DisplayObjectType
+      >;
+      const value = f(valueFunctionOptions);
+      updateProperty(this._options.displayObject, property, value);
+    }
+
+    this._options.onResize?.({
+      displayObject: this._options.displayObject,
+      pixiAppChip: this.pixiAppChip,
+      renderSize: this.pixiAppChip.renderSize,
+    });
+  }
+
+  // updateIdealSize() {
+  //   this._localBounds = this._options.displayObject.getLocalBounds();
+
+  //   if (typeof this._options.layoutOptions.idealWidth === "undefined") {
+  //     this._idealWidth =
+  //       this._localBounds.width + this.paddingLeft + this.paddingRight;
+  //   } else {
+  //     this._idealWidth = parseLayoutProperty(
+  //       this,
+  //       this._options.layoutOptions,
+  //       "idealWidth",
+  //       this._lastRenderInfo,
+  //     );
+  //   }
+
+  //   if (typeof this._options.layoutOptions.idealHeight === "undefined") {
+  //     this._idealHeight =
+  //       this._localBounds.height + this.paddingTop + this.paddingBottom;
+  //   } else {
+  //     this._idealHeight = parseLayoutProperty(
+  //       this,
+  //       this._options.layoutOptions,
+  //       "idealHeight",
+  //       this._lastRenderInfo,
+  //     );
+  //   }
+  // }
+
+  get pixiAppChip() {
+    return this._chipContext.pixiAppChip as PixiAppChip;
+  }
+
+  get parentDisplayItem() {
+    return this._chipContext.displayItem as DisplayItem | undefined;
+  }
+
+  protected get _layoutOptions() {
+    return this._options.layoutOptions as DisplayObjectLayoutOptions;
+  }
+
+  get displayObject() {
+    return this._options.displayObject;
+  }
+
+  // get idealWidth() {
+  //   return this._idealWidth;
+  // }
+  // get idealHeight() {
+  //   return this._idealHeight;
+  // }
+
+  // protected _setSize({
+  //   horizontalScale,
+  //   verticalScale,
+  // }: {
+  //   scaledWidth: number;
+  //   scaledHeight: number;
+  //   horizontalScale: number;
+  //   verticalScale: number;
+  // }) {
+  //   this._options.displayObject.scale.set(horizontalScale, verticalScale);
+  // }
+
+  // protected _setPosition(position: PIXI.IPointData) {
+  //   this._options.displayObject.position.copyFrom(position);
+  // }
+}
+
+export class DisplayLeafLayoutOptions extends DisplayObjectLayoutOptions {
+  keepAspectRatio = false;
+
+  horizontalAlign: "left" | "right" | "center" = "left";
+  verticalAlign: "top" | "bottom" | "middle" = "top";
+}
+
+export class DisplayLeafChipOptions<
+  DisplayObjectType extends PIXI.DisplayObject,
+> extends DisplayObjectChipOptions<DisplayObjectType> {
+  layoutOptions?: Partial<DisplayLeafLayoutOptions>;
+}
+
+export class DisplayLeafChip<
+  DisplayObjectType extends PIXI.DisplayObject,
+> extends DisplayObjectChip<DisplayObjectType> {
+  protected readonly _options: DisplayLeafChipOptions<DisplayObjectType>;
+
+  // Cache of the local bounds so as not to recalculate it
+  private _localBounds?: PIXI.Rectangle;
+  private _idealWidth?: number;
+  private _idealHeight?: number;
+
+  // private _propertiesToUpdateOnResize: Array<keyof DisplayObjectType>;
+
+  constructor(options: Partial<DisplayLeafChipOptions<DisplayObjectType>>) {
+    const filledOptions = chip.fillInOptions(
+      options,
+      new DisplayLeafChipOptions<DisplayObjectType>(),
+    );
+    super(options.children);
+
+    filledOptions.layoutOptions = chip.fillInOptions(
+      filledOptions.layoutOptions,
+      new DisplayLeafLayoutOptions(),
+    );
+    this._options = filledOptions;
+  }
+
+  protected override _onPrepareRefresh() {
+    // The first time, possibly calculate ideal sizes
+    if (
+      typeof this._idealWidth !== "undefined" &&
+      typeof this._idealHeight !== "undefined"
+    )
+      return;
+
+    this.updateIdealSize();
+  }
+
+  protected override _onRefresh(
+    outerBounds: PIXI.Rectangle,
+    innerBounds: PIXI.Rectangle,
+  ): void {
     // if (!this._displayObject.parent)
     //   throw new Error("Cannot layout display object without a parent");
 
@@ -1260,33 +1122,6 @@ export class DisplayObjectChip<
     this._updateProperties();
   }
 
-  private _updateProperties() {
-    const valueFunctionOptions = {
-      displayObject: this._options.displayObject,
-      pixiAppChip: this.pixiAppChip,
-      renderSize: this.pixiAppChip.renderSize,
-    };
-
-    // TODO: optionally update ideal size
-
-    for (const property of this._propertiesToUpdateOnResize) {
-      const f = this._options.properties[
-        property
-      ] as DisplayObjectValueFunction<
-        DisplayObjectType,
-        keyof DisplayObjectType
-      >;
-      const value = f(valueFunctionOptions);
-      updateProperty(this._options.displayObject, property, value);
-    }
-
-    this._options.onResize?.({
-      displayObject: this._options.displayObject,
-      pixiAppChip: this.pixiAppChip,
-      renderSize: this.pixiAppChip.renderSize,
-    });
-  }
-
   updateIdealSize() {
     this._localBounds = this._options.displayObject.getLocalBounds();
 
@@ -1315,18 +1150,6 @@ export class DisplayObjectChip<
     }
   }
 
-  get pixiAppChip() {
-    return this._chipContext.pixiAppChip as PixiAppChip;
-  }
-
-  get parentDisplayItem() {
-    return this._chipContext.displayItem as DisplayItem | undefined;
-  }
-
-  protected get _layoutOptions() {
-    return this._options.layoutOptions as DisplayObjectLayoutOptions;
-  }
-
   get idealWidth() {
     return this._idealWidth;
   }
@@ -1351,18 +1174,18 @@ export class DisplayObjectChip<
   }
 }
 
-export class SpriteChipLayoutOptions extends DisplayObjectLayoutOptions {
+export class SpriteChipLayoutOptions extends DisplayLeafLayoutOptions {
   keepAspectRatio = true;
 
   maxWidth: LayoutValue = "idealWidth";
   maxHeight: LayoutValue = "idealHeight";
 }
 
-export class SpriteChipOptions extends DisplayObjectChipOptions<PIXI.Sprite> {
+export class SpriteChipOptions extends DisplayLeafChipOptions<PIXI.Sprite> {
   texture?: PIXI.Texture | string;
 }
 
-export class SpriteChip extends DisplayObjectChip<PIXI.Sprite> {
+export class SpriteChip extends DisplayLeafChip<PIXI.Sprite> {
   constructor(options: Partial<SpriteChipOptions>) {
     const filledOptions = chip.fillInOptions(options, new SpriteChipOptions());
     filledOptions.layoutOptions = chip.fillInOptions(
@@ -1399,12 +1222,12 @@ export class NineSliceWidths {
   bottom = 0;
 }
 
-export class NineSlicePlaneChipOptions extends DisplayObjectChipOptions<PIXI.NineSlicePlane> {
+export class NineSlicePlaneChipOptions extends DisplayLeafChipOptions<PIXI.NineSlicePlane> {
   texture?: PIXI.Texture | string;
   nineSliceWidths?: Partial<NineSliceWidths>;
 }
 
-export class NineSlicePlaneChip extends DisplayObjectChip<PIXI.NineSlicePlane> {
+export class NineSlicePlaneChip extends DisplayLeafChip<PIXI.NineSlicePlane> {
   constructor(options: Partial<NineSlicePlaneChipOptions>) {
     const filledOptions = chip.fillInOptions(
       options,
@@ -1456,7 +1279,7 @@ export class NineSlicePlaneChip extends DisplayObjectChip<PIXI.NineSlicePlane> {
   }
 }
 
-export class TextChipLayoutOptions extends DisplayObjectLayoutOptions {
+export class TextChipLayoutOptions extends DisplayLeafLayoutOptions {
   keepAspectRatio = true;
 
   minWidth: LayoutValue = "idealWidth";
@@ -1465,12 +1288,12 @@ export class TextChipLayoutOptions extends DisplayObjectLayoutOptions {
   maxHeight: LayoutValue = "idealHeight";
 }
 
-export class TextChipOptions extends DisplayObjectChipOptions<PIXI.Text> {
+export class TextChipOptions extends DisplayLeafChipOptions<PIXI.Text> {
   message?: string;
   style?: Partial<PIXI.ITextStyle> | PIXI.TextStyle;
 }
 
-export class TextChip extends DisplayObjectChip<PIXI.Text> {
+export class TextChip extends DisplayLeafChip<PIXI.Text> {
   constructor(options: Partial<TextChipOptions>) {
     const filledOptions = chip.fillInOptions(options, new TextChipOptions());
     filledOptions.layoutOptions = chip.fillInOptions(
@@ -1486,6 +1309,457 @@ export class TextChip extends DisplayObjectChip<PIXI.Text> {
     }
 
     super(filledOptions);
+  }
+}
+
+export abstract class ContainerChip extends DisplayObjectChip<PIXI.Container> {
+  // protected readonly _options: DisplayObjectChipOptions<PIXI.Container>;
+
+  protected _childDisplayItems: Array<DisplayItem>;
+
+  // constructor(options: Partial<DisplayObjectChipOptions<PIXI.Container>>) {
+  //   const filledOptions = chip.fillInOptions(
+  //     options,
+  //     new DisplayObjectChipOptions<PIXI.Container>(),
+  //   );
+  //   super(options.children);
+
+  //   filledOptions.layoutOptions = chip.fillInOptions(
+  //     filledOptions.layoutOptions,
+  //     new DisplayObjectLayoutOptions(),
+  //   );
+
+  //   if (!filledOptions.displayObject) {
+  //     filledOptions.displayObject = new PIXI.Container();
+  //   }
+
+  //   this._options = filledOptions;
+  // }
+
+  protected _onActivate(): void {
+    this._childDisplayItems = [];
+
+    super._onActivate();
+  }
+
+  addChildDisplayItem(child: DisplayItem): void {
+    const index = this._childDisplayItems.indexOf(child);
+    if (index !== -1)
+      throw new Error("Cannot add duplicate child display item");
+
+    this._childDisplayItems.push(child);
+
+    this._subscribe(child, "updated", this._requestRefresh);
+    this._requestRefresh();
+  }
+
+  removeChildDisplayItem(child: DisplayItem): void {
+    const index = this._childDisplayItems.indexOf(child);
+    if (index === -1)
+      throw new Error("Cannot find child display item to remove");
+
+    this._childDisplayItems.splice(index, 1);
+    this._unsubscribe(child);
+
+    this._requestRefresh();
+  }
+
+  protected _onPrepareRefresh(): void {
+    for (const child of this._childDisplayItems)
+      child.prepareRefresh(this._lastRenderInfo);
+  }
+
+  get parentDisplayItem() {
+    return this._chipContext.displayItem as DisplayItem | undefined;
+  }
+
+  get contextModification(): chip.ChipContextResolvable {
+    return {
+      displayItem: this,
+      container: this._options.displayObject,
+    };
+  }
+
+  aggregateChildValues(
+    prop:
+      | "minWidth"
+      | "minHeight"
+      | "idealWidth"
+      | "idealHeight"
+      | "maxWidth"
+      | "maxHeight",
+    operation: "sum" | "max",
+  ) {
+    return this._childDisplayItems.reduce((agg, child) => {
+      const childValue = child[prop] || 0;
+      if (operation === "sum") return agg + childValue;
+      else return Math.max(agg, childValue);
+    }, 0);
+  }
+}
+
+export class StackingContainerChip extends ContainerChip {
+  // protected _layoutOptions: LayoutOptions;
+
+  // constructor(options?: Partial<LayoutOptions>) {
+  //   super();
+
+  //   this._layoutOptions = util.fillInOptions(options, new LayoutOptions());
+  // }
+
+  protected readonly _options: DisplayObjectChipOptions<PIXI.Container>;
+
+  constructor(options?: Partial<DisplayObjectChipOptions<PIXI.Container>>) {
+    const filledOptions = chip.fillInOptions(
+      options,
+      new DisplayObjectChipOptions<PIXI.Container>(),
+    );
+    super(filledOptions.children);
+
+    filledOptions.layoutOptions = chip.fillInOptions(
+      filledOptions.layoutOptions,
+      new DisplayObjectLayoutOptions(),
+    );
+
+    if (!filledOptions.displayObject) {
+      filledOptions.displayObject = new PIXI.Container();
+    }
+
+    this._options = filledOptions;
+  }
+
+  protected _onRefresh(
+    outerBounds: PIXI.Rectangle,
+    innerBounds: PIXI.Rectangle,
+  ): void {
+    // Refresh all children
+    for (const child of this._childDisplayItems) child.refresh(innerBounds);
+  }
+
+  get minWidth() {
+    return super.minWidth ?? this.aggregateChildValues("minWidth", "max");
+  }
+  get minHeight() {
+    return super.minHeight ?? this.aggregateChildValues("minHeight", "max");
+  }
+
+  get idealWidth() {
+    return super.idealWidth ?? this.aggregateChildValues("idealWidth", "max");
+  }
+  get idealHeight() {
+    return super.idealHeight ?? this.aggregateChildValues("idealHeight", "max");
+  }
+
+  get maxWidth() {
+    return super.minWidth ?? this.aggregateChildValues("maxWidth", "max");
+  }
+  get maxHeight() {
+    return super.minHeight ?? this.aggregateChildValues("maxHeight", "max");
+  }
+}
+
+export class AxisContainerLayoutOptions extends LayoutOptions {
+  direction: "horizontal" | "vertical" = "horizontal";
+
+  distributeSpace:
+    | "atStart"
+    | "atEnd"
+    | "atStartAndEnd"
+    | "between"
+    | "around" = "atEnd";
+
+  gap = 0;
+}
+
+export class AxisContainerOptions extends DisplayObjectChipOptions<PIXI.Container> {
+  layoutOptions?: Partial<AxisContainerLayoutOptions>;
+}
+
+export class AxisContainerChip extends ContainerChip {
+  // protected _layoutOptions: AxisContainerOptions;
+
+  protected readonly _options: AxisContainerOptions;
+
+  constructor(options?: Partial<AxisContainerOptions>) {
+    const filledOptions = chip.fillInOptions(
+      options,
+      new AxisContainerOptions(),
+    );
+    super(filledOptions.children);
+
+    filledOptions.layoutOptions = chip.fillInOptions(
+      filledOptions.layoutOptions,
+      new AxisContainerLayoutOptions(),
+    );
+
+    if (!filledOptions.displayObject) {
+      filledOptions.displayObject = new PIXI.Container();
+    }
+
+    this._options = filledOptions;
+  }
+
+  // constructor(options?: Partial<AxisContainerOptions>) {
+  //   super();
+
+  //   this._layoutOptions = util.fillInOptions(
+  //     options,
+  //     new AxisContainerOptions(),
+  //   );
+  // }
+
+  protected _onActivate(): void {
+    super._onActivate();
+
+    // this._container = new PIXI.Container();
+    // this.chipContext.container.addChild(this._container);
+  }
+
+  protected _onTerminate(): void {
+    super._onTerminate();
+
+    // this.chipContext.container.removeChild(this._container);
+    // delete this._container;
+  }
+
+  protected _onRefresh(
+    outerBounds: PIXI.Rectangle,
+    innerBounds: PIXI.Rectangle,
+  ): void {
+    // Determine which properties will be used depending on the direction
+    const minLengthProp =
+      this._options.layoutOptions.direction === "vertical"
+        ? "minHeight"
+        : "minWidth";
+    const idealLengthProp =
+      this._options.layoutOptions.direction === "vertical"
+        ? "idealHeight"
+        : "idealWidth";
+    const maxLengthProp =
+      this._options.layoutOptions.direction === "vertical"
+        ? "maxHeight"
+        : "maxWidth";
+    const lengthProp =
+      this._options.layoutOptions.direction === "vertical" ? "height" : "width";
+
+    // Do a first pass to gather minimum space and element types
+    const lengths: Array<number> = [];
+    let childIndexesToGrow: Array<number> = [];
+
+    let minUsedSpace = 0;
+    for (let i = 0; i < this._childDisplayItems.length; i++) {
+      // Account for the gap
+      if (i > 0) minUsedSpace += this._options.layoutOptions.gap;
+
+      const child = this._childDisplayItems[i];
+
+      const childMinLength = child[minLengthProp] || 0;
+      minUsedSpace += childMinLength;
+      lengths.push(childMinLength);
+
+      // Prepare the next step by identifying those items with larger ideal lengths
+      const childIdealLength = child[idealLengthProp];
+      if (
+        typeof childIdealLength !== "undefined" &&
+        childIdealLength > childMinLength
+      ) {
+        childIndexesToGrow.push(i);
+      }
+    }
+
+    // Do a second pass to bring elements to their ideal lengths
+    let availableExtraSpace = innerBounds[lengthProp] - minUsedSpace;
+    while (availableExtraSpace > 1 && childIndexesToGrow.length > 0) {
+      const extraSpacePerChild =
+        availableExtraSpace / childIndexesToGrow.length;
+      for (let i = 0; i < childIndexesToGrow.length; i++) {
+        const childIndex = childIndexesToGrow[i];
+        const child = this._childDisplayItems[childIndex];
+        const childIdealLength = child[idealLengthProp] || 0;
+
+        // Expand the element, but not beyond the ideal length
+        const spaceToGive = Math.min(
+          extraSpacePerChild,
+          childIdealLength - lengths[childIndex],
+        );
+        lengths[childIndex] += spaceToGive;
+        availableExtraSpace -= spaceToGive;
+
+        if (lengths[childIndex] >= childIdealLength) {
+          // Remove the child from the array of indexes to grow. Keep i at the same value for the next loop
+          childIndexesToGrow.splice(i, 1);
+          i--;
+        }
+      }
+    }
+
+    // Identify elements that can still grow (no max length, or max length greater than current)
+    if (availableExtraSpace > 1) {
+      childIndexesToGrow = [];
+
+      for (let i = 0; i < this._childDisplayItems.length; i++) {
+        const child = this._childDisplayItems[i];
+
+        if (
+          typeof child[maxLengthProp] === "undefined" ||
+          child[maxLengthProp] > lengths[i]
+        ) {
+          childIndexesToGrow.push(i);
+        }
+      }
+    }
+
+    // Do extra passes, giving space to growing elements
+    while (availableExtraSpace > 1 && childIndexesToGrow.length > 0) {
+      const extraSpacePerChild =
+        availableExtraSpace / childIndexesToGrow.length;
+      for (let i = 0; i < childIndexesToGrow.length; i++) {
+        const childIndex = childIndexesToGrow[i];
+        const child = this._childDisplayItems[childIndex];
+
+        if (typeof child[maxLengthProp] !== "undefined") {
+          // Expand the element, but not beyond the max length
+          const spaceToGive = Math.min(
+            extraSpacePerChild,
+            child[maxLengthProp] - lengths[childIndex],
+          );
+          lengths[childIndex] += spaceToGive;
+          availableExtraSpace -= spaceToGive;
+
+          if (lengths[childIndex] >= child[maxLengthProp]) {
+            // Remove the child from the array of indexes to grow. Keep i at the same value for the next loop
+            childIndexesToGrow.splice(i, 1);
+            i--;
+          }
+        } else {
+          // Increase the length in an unbounded way
+          lengths[childIndex] += extraSpacePerChild;
+          availableExtraSpace -= extraSpacePerChild;
+        }
+      }
+    }
+
+    // Distribute any extra space around or between elements at the same time as you assign lengths
+    let axisOffset = 0;
+
+    if (this._options.layoutOptions.distributeSpace === "atStart") {
+      axisOffset += availableExtraSpace;
+    } else if (
+      this._options.layoutOptions.distributeSpace === "atStartAndEnd"
+    ) {
+      axisOffset += availableExtraSpace / 2;
+    } else if (this._options.layoutOptions.distributeSpace === "around") {
+      axisOffset += availableExtraSpace / this._childDisplayItems.length / 2;
+    }
+
+    for (let i = 0; i < this._childDisplayItems.length; i++) {
+      // Handle gap
+      if (i > 0) axisOffset += this._options.layoutOptions.gap;
+
+      const child = this._childDisplayItems[i];
+
+      let itemBounds: PIXI.Rectangle;
+      if (this._options.layoutOptions.direction === "vertical") {
+        itemBounds = new PIXI.Rectangle(
+          innerBounds.x,
+          innerBounds.y + axisOffset,
+          innerBounds.width,
+          lengths[i],
+        );
+      } else {
+        itemBounds = new PIXI.Rectangle(
+          innerBounds.x + axisOffset,
+          innerBounds.y,
+          lengths[i],
+          innerBounds.height,
+        );
+      }
+
+      // Update item
+      child.refresh(itemBounds);
+
+      // Add space used to y offset
+      axisOffset += lengths[i];
+
+      // Distribute extra space between items
+      if (this._options.layoutOptions.distributeSpace === "between") {
+        if (this._childDisplayItems.length > 1)
+          axisOffset +=
+            availableExtraSpace / (this._childDisplayItems.length - 1);
+      } else if (this._options.layoutOptions.distributeSpace === "around") {
+        axisOffset += availableExtraSpace / this._childDisplayItems.length;
+      }
+    }
+  }
+
+  get minWidth() {
+    if (typeof super.minWidth !== "undefined") return super.minWidth;
+
+    if (this._options.layoutOptions.direction === "horizontal") {
+      const childrenSum = this.aggregateChildValues("minWidth", "sum");
+      return childrenSum + this._calcuateGapSum();
+    } else {
+      return this.aggregateChildValues("minWidth", "max");
+    }
+  }
+  get minHeight() {
+    if (typeof super.minHeight !== "undefined") return super.minWidth;
+
+    if (this._options.layoutOptions.direction === "vertical") {
+      const childrenSum = this.aggregateChildValues("minHeight", "sum");
+      return childrenSum + this._calcuateGapSum();
+    } else {
+      return this.aggregateChildValues("minHeight", "max");
+    }
+  }
+
+  get idealWidth() {
+    if (typeof super.idealWidth !== "undefined") return super.idealWidth;
+
+    if (this._options.layoutOptions.direction === "horizontal") {
+      const childrenSum = this.aggregateChildValues("idealWidth", "sum");
+      return childrenSum + this._calcuateGapSum();
+    } else {
+      return this.aggregateChildValues("idealWidth", "max");
+    }
+  }
+  get idealHeight() {
+    if (typeof super.idealHeight !== "undefined") return super.minWidth;
+
+    if (this._options.layoutOptions.direction === "vertical") {
+      const childrenSum = this.aggregateChildValues("idealHeight", "sum");
+      return childrenSum + this._calcuateGapSum();
+    } else {
+      return this.aggregateChildValues("idealHeight", "max");
+    }
+  }
+
+  get maxWidth() {
+    if (typeof super.maxWidth !== "undefined") return super.maxWidth;
+
+    if (this._options.layoutOptions.direction === "horizontal") {
+      const childrenSum = this.aggregateChildValues("maxWidth", "sum");
+      return childrenSum + this._calcuateGapSum();
+    } else {
+      return this.aggregateChildValues("maxWidth", "max");
+    }
+  }
+
+  get maxHeight() {
+    if (typeof super.maxHeight !== "undefined") return super.minWidth;
+
+    if (this._options.layoutOptions.direction === "vertical") {
+      const childrenSum = this.aggregateChildValues("maxHeight", "sum");
+      return childrenSum + this._calcuateGapSum();
+    } else {
+      return this.aggregateChildValues("maxHeight", "max");
+    }
+  }
+
+  private _calcuateGapSum() {
+    return this._childDisplayItems.length > 1
+      ? (this._childDisplayItems.length - 1) * this._options.layoutOptions.gap
+      : 0;
   }
 }
 
@@ -1813,8 +2087,10 @@ export class LayoutTest extends chip.Composite {
 
   private _addHorizontalLayout() {
     const containerChip = new AxisContainerChip({
-      distributeSpace: "between",
-      paddingBottom: 10,
+      layoutOptions: {
+        distributeSpace: "between",
+        paddingBottom: 10,
+      },
     });
     this._activateChildChip(containerChip);
 
@@ -1860,7 +2136,7 @@ export class LayoutTest extends chip.Composite {
       green.endFill();
 
       containerChip.addChildChip(
-        new DisplayObjectChip({
+        new DisplayLeafChip({
           displayObject: green,
           layoutOptions: {
             maxWidth: 200,
