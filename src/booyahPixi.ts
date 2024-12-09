@@ -424,9 +424,13 @@ export abstract class DisplayItemBase
     );
   }
 
-  /** Child classes can call this to request a new refresh cycle */
-  protected _requestRefresh() {
+  /** Request a new refresh cycle */
+  requestRefresh() {
     this.emit("updated");
+  }
+
+  get layoutOptions() {
+    return this._layoutOptions;
   }
 
   get parentDisplayItem() {
@@ -1132,8 +1136,8 @@ export abstract class ContainerChip extends DisplayObjectChip<PIXI.Container> {
 
     this._childDisplayItems.push(child);
 
-    this._subscribe(child, "updated", this._requestRefresh);
-    this._requestRefresh();
+    this._subscribe(child, "updated", this.requestRefresh);
+    this.requestRefresh();
   }
 
   removeChildDisplayItem(child: DisplayItem): void {
@@ -1144,7 +1148,7 @@ export abstract class ContainerChip extends DisplayObjectChip<PIXI.Container> {
     this._childDisplayItems.splice(index, 1);
     this._unsubscribe(child);
 
-    this._requestRefresh();
+    this.requestRefresh();
   }
 
   protected _onPrepareRefresh(): void {
