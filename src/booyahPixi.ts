@@ -1037,10 +1037,6 @@ export class NineSlicePlaneChip extends DisplayLeafChip<PIXI.NineSlicePlane> {
       options,
       new NineSlicePlaneChipOptions(),
     );
-    filledOptions.nineSliceWidths = chip.fillInOptions(
-      filledOptions.nineSliceWidths,
-      new NineSliceWidths(),
-    );
 
     if (!filledOptions.displayObject) {
       if (!options.texture) {
@@ -1059,13 +1055,17 @@ export class NineSlicePlaneChip extends DisplayLeafChip<PIXI.NineSlicePlane> {
         options.texture = resolvedTexture;
       }
 
-      filledOptions.displayObject = new PIXI.NineSlicePlane(
-        options.texture,
-        options.nineSliceWidths.left,
-        options.nineSliceWidths.top,
-        options.nineSliceWidths.right,
-        options.nineSliceWidths.bottom,
-      );
+      if (options.nineSliceWidths) {
+        filledOptions.displayObject = new PIXI.NineSlicePlane(
+          options.texture,
+          options.nineSliceWidths.left,
+          options.nineSliceWidths.top,
+          options.nineSliceWidths.right,
+          options.nineSliceWidths.bottom,
+        );
+      } else {
+        filledOptions.displayObject = new PIXI.NineSlicePlane(options.texture);
+      }
     }
 
     super(filledOptions);
