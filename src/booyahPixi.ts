@@ -1143,7 +1143,31 @@ export class TextChip extends DisplayLeafChip<PIXI.Text> {
   }
 }
 
-export abstract class ContainerChip extends DisplayObjectChip<PIXI.Container> {
+/**
+ * Manages a container that will be layed out, but will not act as a parent for other layout children
+ * */
+export class ContainerLeafChip extends DisplayLeafChip<PIXI.Container> {
+  constructor(options: Partial<DisplayLeafChipOptions<PIXI.Container>>) {
+    const filledOptions = chip.fillInOptions(
+      options,
+      new DisplayLeafChipOptions<PIXI.Container>(),
+    );
+
+    if (!filledOptions.displayObject) {
+      filledOptions.displayObject = new PIXI.Container();
+    }
+
+    super(filledOptions);
+  }
+
+  get contextModification(): chip.ChipContextResolvable {
+    return {
+      container: this.displayObject,
+    };
+  }
+}
+
+export abstract class ContainerBase extends DisplayObjectChip<PIXI.Container> {
   protected _childLayoutItems: Array<LayoutItem>;
 
   protected _onActivate(): void {
@@ -1226,7 +1250,7 @@ export abstract class ContainerChip extends DisplayObjectChip<PIXI.Container> {
   }
 }
 
-export class StackingContainerChip extends ContainerChip {
+export class StackingContainerChip extends ContainerBase {
   protected readonly _options: DisplayObjectChipOptions<PIXI.Container>;
 
   constructor(options?: Partial<DisplayObjectChipOptions<PIXI.Container>>) {
@@ -1298,7 +1322,7 @@ export class AxisContainerOptions extends DisplayObjectChipOptions<PIXI.Containe
   layoutOptions?: Partial<AxisContainerLayoutOptions>;
 }
 
-export class AxisContainerChip extends ContainerChip {
+export class AxisContainerChip extends ContainerBase {
   protected readonly _options: AxisContainerOptions;
 
   constructor(options?: Partial<AxisContainerOptions>) {
