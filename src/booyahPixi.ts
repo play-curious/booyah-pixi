@@ -264,8 +264,8 @@ export interface RefreshInfo {
 /**
  * Emits:
  *  - updated() - something changed, requesting an update
- *  - willRefresh(bounds)
- *  - didRefresh(bounds)
+ *  - willRefresh(RefreshInfo)
+ *  - didRefresh(RefreshInfo)
  */
 export interface LayoutItem extends chip.NodeEventSource {
   readonly minWidth?: number;
