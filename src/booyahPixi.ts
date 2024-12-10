@@ -256,6 +256,11 @@ export type DisplayItemChildChipOptions = Array<
   chip.ActivateChildChipOptions | chip.ChipResolvable
 >;
 
+export interface RefreshInfo {
+  readonly absoluteBounds: PIXI.Rectangle;
+  readonly localBounds: PIXI.Rectangle;
+}
+
 /**
  * Emits:
  *  - updated() - something changed, requesting an update
@@ -271,7 +276,7 @@ export interface DisplayItem extends chip.NodeEventSource {
   readonly maxHeight?: number;
 
   prepareRefresh(renderInfo: RenderInfo): void;
-  refresh(bounds: PIXI.Rectangle): void;
+  refresh(refreshInfo: RefreshInfo): void;
 
   addChildDisplayItem(child: DisplayItem): void;
   removeChildDisplayItem(child: DisplayItem): void;
@@ -284,7 +289,7 @@ export abstract class DisplayItemBase
   protected abstract _layoutOptions: LayoutOptions;
 
   protected _lastRenderInfo?: RenderInfo;
-  protected _lastBounds?: PIXI.Rectangle;
+  protected _lastRefreshInfo?: RefreshInfo;
 
   constructor(childChipOptions: DisplayItemChildChipOptions = []) {
     super(childChipOptions, { terminateOnCompletion: false });
@@ -308,36 +313,41 @@ export abstract class DisplayItemBase
     // no op
   }
 
-  protected _onRefresh(
-    outerBounds: PIXI.Rectangle,
-    innerBounds: PIXI.Rectangle,
-  ): void {
+  protected _onRefresh(): void {
     // no op
   }
 
-  refresh(bounds: PIXI.Rectangle): void {
-    this._lastBounds = bounds;
-    this.emit("willRefresh", bounds);
+  refresh(refreshInfo: RefreshInfo): void {
+    this._lastRefreshInfo = refreshInfo;
+    this.emit("willRefresh", refreshInfo);
 
-    if (typeof this.minWidth !== "undefined" && bounds.width < this.minWidth)
+    if (
+      typeof this.minWidth !== "undefined" &&
+      refreshInfo.absoluteBounds.width < this.minWidth
+    )
       console.error(
-        `Insufficient width to displayitem display item. Bounds.width = ${bounds.width} and minWidth = ${this.minWidth}`,
+        `Insufficient width to displayitem display item. Bounds.width = ${refreshInfo.absoluteBounds.width} and minWidth = ${this.minWidth}`,
       );
-    if (typeof this.minHeight !== "undefined" && bounds.height < this.minHeight)
+    if (
+      typeof this.minHeight !== "undefined" &&
+      refreshInfo.absoluteBounds.height < this.minHeight
+    )
       console.error(
-        `Insufficient height to displayitem display item. Bounds.height = ${bounds.height} and minHeight = ${this.minHeight}`,
+        `Insufficient height to displayitem display item. Bounds.height = ${refreshInfo.absoluteBounds.height} and minHeight = ${this.minHeight}`,
       );
 
-    const innerBounds = new PIXI.Rectangle(
+    this._onRefresh();
+
+    this.emit("didRefresh", refreshInfo);
+  }
+
+  calculateInnerBounds(bounds: PIXI.Rectangle) {
+    return new PIXI.Rectangle(
       bounds.x + this.paddingLeft,
       bounds.y + this.paddingTop,
       bounds.width - this.paddingLeft - this.paddingRight,
       bounds.height - this.paddingTop - this.paddingBottom,
     );
-
-    this._onRefresh(bounds, innerBounds);
-
-    this.emit("didRefresh", bounds);
   }
 
   get minWidth(): number | undefined {
@@ -435,6 +445,14 @@ export abstract class DisplayItemBase
 
   get parentDisplayItem() {
     return this._chipContext.displayItem as DisplayItem | undefined;
+  }
+
+  get lastRefreshInfo() {
+    return this._lastRefreshInfo;
+  }
+
+  get lastRenderInfo() {
+    return this._lastRenderInfo;
   }
 }
 
@@ -553,14 +571,19 @@ export class PixiAppChip extends chip.Composite {
   }
 
   private _handleResize() {
+    this.emit("willResize");
+
     if (this._stackingContainerChip) {
       this._stackingContainerChip.prepareRefresh({
         renderSize: this.renderSize,
       });
-      this._stackingContainerChip.refresh(this._pixiApplication.screen);
+      this._stackingContainerChip.refresh({
+        absoluteBounds: this._pixiApplication.screen,
+        localBounds: this._pixiApplication.screen,
+      });
     }
 
-    this.emit("resize");
+    this.emit("didResize");
   }
 
   get renderSize() {
@@ -701,7 +724,7 @@ export abstract class DisplayObjectChip<
       this.parentDisplayItem.addChildDisplayItem(this);
     } else {
       // Call _updateProperties() directly
-      this._subscribe(this.pixiAppChip, "resize", this._updateProperties);
+      this._subscribe(this.pixiAppChip, "didResize", this._updateProperties);
     }
   }
 
@@ -765,6 +788,9 @@ export class DisplayLeafLayoutOptions extends LayoutOptions {
 
   horizontalAlign: "left" | "right" | "center" = "left";
   verticalAlign: "top" | "bottom" | "middle" = "top";
+
+  /** When aligning, adjust for non-zero anchor points */
+  alignBasedOnAnchor = true;
 }
 
 export class DisplayLeafChipOptions<
@@ -810,12 +836,9 @@ export class DisplayLeafChip<
     this.updateIdealSize();
   }
 
-  protected override _onRefresh(
-    outerBounds: PIXI.Rectangle,
-    innerBounds: PIXI.Rectangle,
-  ): void {
-    // if (!this._displayObject.parent)
-    //   throw new Error("Cannot layout display object without a parent");
+  protected override _onRefresh(): void {
+    if (!this.displayObject.parent)
+      throw new Error("Cannot layout display object without a parent");
 
     let horizontalScale = 1;
     let verticalScale = 1;
@@ -827,6 +850,10 @@ export class DisplayLeafChip<
     const idealInnerHeight = this.idealHeight
       ? this.idealHeight - (this.paddingTop + this.paddingBottom)
       : 0;
+
+    const innerBounds = this.calculateInnerBounds(
+      this.lastRefreshInfo.localBounds,
+    );
 
     if (innerBounds.width < idealInnerWidth) {
       // Shrink, but not beyond the min size
@@ -887,17 +914,13 @@ export class DisplayLeafChip<
       verticalScale,
     });
 
-    // Start with the position within the padding area
-    const position = this._options.displayObject.parent.toLocal(
-      new PIXI.Point(innerBounds.x, innerBounds.y),
-    );
+    const position = new PIXI.Point(innerBounds.x, innerBounds.y);
 
     // If the object has an non-zero anchor point, adjust the position
-    if (!this._localBounds) {
-      this._localBounds = this._options.displayObject.getLocalBounds();
+    if (this._options.layoutOptions.alignBasedOnAnchor) {
+      position.x -= this._localBounds.left;
+      position.y -= this._localBounds.top;
     }
-    position.x -= this._localBounds.left;
-    position.y -= this._localBounds.top;
 
     // Handle horizontal alignment
     if (
@@ -1151,9 +1174,31 @@ export abstract class ContainerChip extends DisplayObjectChip<PIXI.Container> {
     this.requestRefresh();
   }
 
-  protected _onPrepareRefresh(): void {
+  override prepareRefresh(renderInfo: RenderInfo): void {
+    super.prepareRefresh(renderInfo);
+
     for (const child of this._childDisplayItems)
       child.prepareRefresh(this._lastRenderInfo);
+  }
+
+  override refresh(refreshInfo: RefreshInfo): void {
+    // Position the container and adjust local bounds
+    this.displayObject.position.set(
+      refreshInfo.localBounds.x,
+      refreshInfo.localBounds.y,
+    );
+
+    const childLocalBounds = new PIXI.Rectangle(
+      0,
+      0,
+      refreshInfo.localBounds.width,
+      refreshInfo.localBounds.height,
+    );
+
+    super.refresh({
+      localBounds: childLocalBounds,
+      absoluteBounds: refreshInfo.absoluteBounds,
+    });
   }
 
   get contextModification(): chip.ChipContextResolvable {
@@ -1203,12 +1248,16 @@ export class StackingContainerChip extends ContainerChip {
     this._options = filledOptions;
   }
 
-  protected _onRefresh(
-    outerBounds: PIXI.Rectangle,
-    innerBounds: PIXI.Rectangle,
-  ): void {
+  protected _onRefresh(): void {
     // Refresh all children
-    for (const child of this._childDisplayItems) child.refresh(innerBounds);
+    const childRefreshInfo: RefreshInfo = {
+      absoluteBounds: this.calculateInnerBounds(
+        this.lastRefreshInfo.absoluteBounds,
+      ),
+      localBounds: this.calculateInnerBounds(this.lastRefreshInfo.localBounds),
+    };
+    for (const child of this._childDisplayItems)
+      child.refresh(childRefreshInfo);
   }
 
   get minWidth() {
@@ -1272,10 +1321,7 @@ export class AxisContainerChip extends ContainerChip {
     this._options = filledOptions;
   }
 
-  protected _onRefresh(
-    outerBounds: PIXI.Rectangle,
-    innerBounds: PIXI.Rectangle,
-  ): void {
+  protected _onRefresh(): void {
     // Determine which properties will be used depending on the direction
     const minLengthProp =
       this._options.layoutOptions.direction === "vertical"
@@ -1317,8 +1363,15 @@ export class AxisContainerChip extends ContainerChip {
       }
     }
 
+    const innerLocalBounds = this.calculateInnerBounds(
+      this.lastRefreshInfo.localBounds,
+    );
+    const innerAbsoluteBounds = this.calculateInnerBounds(
+      this.lastRefreshInfo.absoluteBounds,
+    );
+
     // Do a second pass to bring elements to their ideal lengths
-    let availableExtraSpace = innerBounds[lengthProp] - minUsedSpace;
+    let availableExtraSpace = innerLocalBounds[lengthProp] - minUsedSpace;
     while (availableExtraSpace > 1 && childIndexesToGrow.length > 0) {
       const extraSpacePerChild =
         availableExtraSpace / childIndexesToGrow.length;
@@ -1408,25 +1461,41 @@ export class AxisContainerChip extends ContainerChip {
 
       const child = this._childDisplayItems[i];
 
-      let itemBounds: PIXI.Rectangle;
+      let itemLocalBounds: PIXI.Rectangle;
+      let itemAbsoluteBounds: PIXI.Rectangle;
       if (this._options.layoutOptions.direction === "vertical") {
-        itemBounds = new PIXI.Rectangle(
-          innerBounds.x,
-          innerBounds.y + axisOffset,
-          innerBounds.width,
+        itemLocalBounds = new PIXI.Rectangle(
+          innerLocalBounds.x,
+          innerLocalBounds.y + axisOffset,
+          innerLocalBounds.width,
+          lengths[i],
+        );
+        itemAbsoluteBounds = new PIXI.Rectangle(
+          innerAbsoluteBounds.x,
+          innerAbsoluteBounds.y + axisOffset,
+          innerAbsoluteBounds.width,
           lengths[i],
         );
       } else {
-        itemBounds = new PIXI.Rectangle(
-          innerBounds.x + axisOffset,
-          innerBounds.y,
+        itemLocalBounds = new PIXI.Rectangle(
+          innerLocalBounds.x + axisOffset,
+          innerLocalBounds.y,
           lengths[i],
-          innerBounds.height,
+          innerLocalBounds.height,
+        );
+        itemAbsoluteBounds = new PIXI.Rectangle(
+          innerAbsoluteBounds.x + axisOffset,
+          innerAbsoluteBounds.y,
+          lengths[i],
+          innerAbsoluteBounds.height,
         );
       }
 
       // Update item
-      child.refresh(itemBounds);
+      child.refresh({
+        absoluteBounds: itemAbsoluteBounds,
+        localBounds: itemLocalBounds,
+      });
 
       // Add space used to y offset
       axisOffset += lengths[i];
@@ -1688,7 +1757,7 @@ export class AnimatedSpriteChip extends chip.ChipBase {
       renderSize: this.pixiAppChip.renderSize,
     });
 
-    this._subscribe(this.pixiAppChip, "resize", this._onResize);
+    this._subscribe(this.pixiAppChip, "didResize", this._onResize);
   }
 
   _onTick() {
@@ -1932,61 +2001,4 @@ export class LayoutTest extends chip.Composite {
       );
     }
   }
-
-  // private _addVerticalLayout() {
-  //   const layout = new VerticalLayout([], {
-  //     distributeSpace: "between",
-  //     paddingBottom: 10,
-  //   });
-
-  //   {
-  //     const red = new PIXI.Graphics();
-  //     red.beginFill(0xff0000);
-  //     red.drawRoundedRect(0, 0, 100, 100, 10);
-  //     red.endFill();
-  //     this._container.addChild(red);
-
-  //     layout.addChildLayout(
-  //       new DisplayObjectLayout(red, {
-  //         maxWidth: 100,
-  //         minHeight: 10,
-  //         maxHeight: 100,
-  //         horizontalAlign: "right",
-  //         paddingTop: 10,
-  //         paddingRight: 15,
-  //       })
-  //     );
-  //   }
-
-  //   layout.addChildLayout(new SpacerLayout({ minHeight: 10, maxHeight: 10 }));
-
-  //   {
-  //     const blue = new PIXI.Graphics();
-  //     blue.beginFill(0x00ff00);
-  //     blue.drawRoundedRect(0, 0, 50, 100, 10);
-  //     blue.endFill();
-  //     this._container.addChild(blue);
-
-  //     layout.addChildLayout(
-  //       new DisplayObjectLayout(blue, {
-  //         maxHeight: 200,
-  //         idealHeight: 200,
-  //       })
-  //     );
-  //   }
-
-  //   {
-  //     const green = new PIXI.Graphics();
-  //     green.beginFill(0x0000ff);
-  //     green.drawRoundedRect(0, 0, 100, 50, 10);
-  //     green.endFill();
-  //     this._container.addChild(green);
-
-  //     layout.addChildLayout(
-  //       new DisplayObjectLayout(green, { horizontalAlign: "center" })
-  //     );
-  //   }
-
-  //   this._activateChildChip(new LayoutChip(layout));
-  // }
 }
