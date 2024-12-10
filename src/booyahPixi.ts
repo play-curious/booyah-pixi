@@ -180,14 +180,14 @@ export interface RenderInfo {
 
 export interface DynamicLayoutValueOptions extends RenderInfo {
   layoutOptions: Partial<LayoutOptions>;
-  displayItem: DisplayItem;
+  layoutItem: LayoutItem;
 }
 
-export type DynamicDisplayItemValue = (
+export type DynamicLayoutItemValue = (
   options: DynamicLayoutValueOptions,
 ) => StaticLayoutValue;
 
-export type LayoutValue = StaticLayoutValue | DynamicDisplayItemValue;
+export type LayoutValue = StaticLayoutValue | DynamicLayoutItemValue;
 
 export class LayoutOptions {
   minWidth: LayoutValue;
@@ -206,17 +206,17 @@ export class LayoutOptions {
 }
 
 function safeParseLayoutProperty(
-  displayItem: DisplayItem,
+  layoutItem: LayoutItem,
   layoutOptions: Partial<LayoutOptions>,
   prop: keyof LayoutOptions,
   renderInfo: RenderInfo,
 ): number {
-  return parseLayoutProperty(displayItem, layoutOptions, prop, renderInfo) || 0;
+  return parseLayoutProperty(layoutItem, layoutOptions, prop, renderInfo) || 0;
 }
 
-// Parses a property in the displayitem options as a number
+// Parses a property in the layout item options as a number
 function parseLayoutProperty(
-  displayItem: DisplayItem,
+  layoutItem: LayoutItem,
   layoutOptions: Partial<LayoutOptions>,
   prop: keyof LayoutOptions,
   renderInfo: RenderInfo,
@@ -231,9 +231,9 @@ function parseLayoutProperty(
 
   // If property is a function (dynamic) call it and parse the result
   if (typeof propValue === "function") {
-    const evaluatedValue = (propValue as DynamicDisplayItemValue)({
+    const evaluatedValue = (propValue as DynamicLayoutItemValue)({
       layoutOptions: layoutOptions,
-      displayItem,
+      layoutItem,
       ...renderInfo,
     });
     if (typeof evaluatedValue === "undefined") return 0;
@@ -242,17 +242,17 @@ function parseLayoutProperty(
 
   // Find matching property and return it
   const matchingProp = propValue as LayoutProperty;
-  const matchingValue = displayItem[matchingProp];
+  const matchingValue = layoutItem[matchingProp];
   if (typeof matchingValue !== "number") {
     throw new Error(
-      `DisplayItem referencing property ${matchingProp} which is not a number. Value: ${matchingValue}`,
+      `LayoutItem referencing property ${matchingProp} which is not a number. Value: ${matchingValue}`,
     );
   }
 
   return matchingValue;
 }
 
-export type DisplayItemChildChipOptions = Array<
+export type LayoutItemChildChipOptions = Array<
   chip.ActivateChildChipOptions | chip.ChipResolvable
 >;
 
@@ -267,7 +267,7 @@ export interface RefreshInfo {
  *  - willRefresh(bounds)
  *  - didRefresh(bounds)
  */
-export interface DisplayItem extends chip.NodeEventSource {
+export interface LayoutItem extends chip.NodeEventSource {
   readonly minWidth?: number;
   readonly minHeight?: number;
   readonly idealWidth?: number;
@@ -278,28 +278,28 @@ export interface DisplayItem extends chip.NodeEventSource {
   prepareRefresh(renderInfo: RenderInfo): void;
   refresh(refreshInfo: RefreshInfo): void;
 
-  addChildDisplayItem(child: DisplayItem): void;
-  removeChildDisplayItem(child: DisplayItem): void;
+  addChildLayoutItem(child: LayoutItem): void;
+  removeChildLayoutItem(child: LayoutItem): void;
 }
 
-export abstract class DisplayItemBase
+export abstract class LayoutItemBase
   extends chip.Parallel
-  implements DisplayItem
+  implements LayoutItem
 {
   protected abstract _layoutOptions: LayoutOptions;
 
   protected _lastRenderInfo?: RenderInfo;
   protected _lastRefreshInfo?: RefreshInfo;
 
-  constructor(childChipOptions: DisplayItemChildChipOptions = []) {
+  constructor(childChipOptions: LayoutItemChildChipOptions = []) {
     super(childChipOptions, { terminateOnCompletion: false });
   }
 
-  addChildDisplayItem(child: DisplayItem): void {
+  addChildLayoutItem(child: LayoutItem): void {
     throw new Error(`${this.constructor.name} can't have child display items`);
   }
 
-  removeChildDisplayItem(child: DisplayItem): void {
+  removeChildLayoutItem(child: LayoutItem): void {
     throw new Error(`${this.constructor.name}  can't have child display items`);
   }
 
@@ -326,14 +326,14 @@ export abstract class DisplayItemBase
       refreshInfo.absoluteBounds.width < this.minWidth
     )
       console.error(
-        `Insufficient width to displayitem display item. Bounds.width = ${refreshInfo.absoluteBounds.width} and minWidth = ${this.minWidth}`,
+        `Insufficient width to layout item. Bounds.width = ${refreshInfo.absoluteBounds.width} and minWidth = ${this.minWidth}`,
       );
     if (
       typeof this.minHeight !== "undefined" &&
       refreshInfo.absoluteBounds.height < this.minHeight
     )
       console.error(
-        `Insufficient height to displayitem display item. Bounds.height = ${refreshInfo.absoluteBounds.height} and minHeight = ${this.minHeight}`,
+        `Insufficient height to layout item. Bounds.height = ${refreshInfo.absoluteBounds.height} and minHeight = ${this.minHeight}`,
       );
 
     this._onRefresh();
@@ -443,8 +443,8 @@ export abstract class DisplayItemBase
     return this._layoutOptions;
   }
 
-  get parentDisplayItem() {
-    return this._chipContext.displayItem as DisplayItem | undefined;
+  get parentLayoutItem() {
+    return this._chipContext.layoutItem as LayoutItem | undefined;
   }
 
   get lastRefreshInfo() {
@@ -457,7 +457,7 @@ export abstract class DisplayItemBase
 }
 
 /** Just takes up space */
-export class SpacerChip extends DisplayItemBase {
+export class SpacerChip extends LayoutItemBase {
   protected _layoutOptions: LayoutOptions;
 
   constructor(options?: Partial<LayoutOptions>) {
@@ -467,11 +467,11 @@ export class SpacerChip extends DisplayItemBase {
   }
 
   protected _onActivate(): void {
-    this.parentDisplayItem?.addChildDisplayItem(this);
+    this.parentLayoutItem?.addChildLayoutItem(this);
   }
 
   protected _onTerminate(): void {
-    this.parentDisplayItem?.removeChildDisplayItem(this);
+    this.parentLayoutItem?.removeChildLayoutItem(this);
   }
 }
 
@@ -659,13 +659,13 @@ export class DisplayObjectChipOptions<
   ) => unknown;
   layoutOptions?: Partial<LayoutOptions>;
 
-  addToParentDisplayItem = true;
+  addToParentLayoutItem = true;
   addToContainer = true;
 }
 
 export abstract class DisplayObjectChip<
   DisplayObjectType extends PIXI.DisplayObject,
-> extends DisplayItemBase {
+> extends LayoutItemBase {
   protected abstract readonly _options: DisplayObjectChipOptions<DisplayObjectType>;
 
   private _propertiesToUpdateOnResize: Array<keyof DisplayObjectType>;
@@ -719,9 +719,9 @@ export abstract class DisplayObjectChip<
     }
 
     // Optionally participate in the layout
-    if (this._options.addToParentDisplayItem && this.parentDisplayItem) {
+    if (this._options.addToParentLayoutItem && this.parentLayoutItem) {
       // When _onRefresh() is called, it will call _updateProperties()
-      this.parentDisplayItem.addChildDisplayItem(this);
+      this.parentLayoutItem.addChildLayoutItem(this);
     } else {
       // Call _updateProperties() directly
       this._subscribe(this.pixiAppChip, "didResize", this._updateProperties);
@@ -729,8 +729,8 @@ export abstract class DisplayObjectChip<
   }
 
   protected _onTerminate() {
-    if (this._options.addToParentDisplayItem && this.parentDisplayItem) {
-      this.parentDisplayItem.removeChildDisplayItem(this);
+    if (this._options.addToParentLayoutItem && this.parentLayoutItem) {
+      this.parentLayoutItem.removeChildLayoutItem(this);
     }
 
     if (
@@ -1144,31 +1144,31 @@ export class TextChip extends DisplayLeafChip<PIXI.Text> {
 }
 
 export abstract class ContainerChip extends DisplayObjectChip<PIXI.Container> {
-  protected _childDisplayItems: Array<DisplayItem>;
+  protected _childLayoutItems: Array<LayoutItem>;
 
   protected _onActivate(): void {
-    this._childDisplayItems = [];
+    this._childLayoutItems = [];
 
     super._onActivate();
   }
 
-  addChildDisplayItem(child: DisplayItem): void {
-    const index = this._childDisplayItems.indexOf(child);
+  addChildLayoutItem(child: LayoutItem): void {
+    const index = this._childLayoutItems.indexOf(child);
     if (index !== -1)
       throw new Error("Cannot add duplicate child display item");
 
-    this._childDisplayItems.push(child);
+    this._childLayoutItems.push(child);
 
     this._subscribe(child, "updated", this.requestRefresh);
     this.requestRefresh();
   }
 
-  removeChildDisplayItem(child: DisplayItem): void {
-    const index = this._childDisplayItems.indexOf(child);
+  removeChildLayoutItem(child: LayoutItem): void {
+    const index = this._childLayoutItems.indexOf(child);
     if (index === -1)
       throw new Error("Cannot find child display item to remove");
 
-    this._childDisplayItems.splice(index, 1);
+    this._childLayoutItems.splice(index, 1);
     this._unsubscribe(child);
 
     this.requestRefresh();
@@ -1177,7 +1177,7 @@ export abstract class ContainerChip extends DisplayObjectChip<PIXI.Container> {
   override prepareRefresh(renderInfo: RenderInfo): void {
     super.prepareRefresh(renderInfo);
 
-    for (const child of this._childDisplayItems)
+    for (const child of this._childLayoutItems)
       child.prepareRefresh(this._lastRenderInfo);
   }
 
@@ -1203,7 +1203,7 @@ export abstract class ContainerChip extends DisplayObjectChip<PIXI.Container> {
 
   get contextModification(): chip.ChipContextResolvable {
     return {
-      displayItem: this,
+      layoutItem: this,
       container: this._options.displayObject,
     };
   }
@@ -1218,7 +1218,7 @@ export abstract class ContainerChip extends DisplayObjectChip<PIXI.Container> {
       | "maxHeight",
     operation: "sum" | "max",
   ) {
-    return this._childDisplayItems.reduce((agg, child) => {
+    return this._childLayoutItems.reduce((agg, child) => {
       const childValue = child[prop] || 0;
       if (operation === "sum") return agg + childValue;
       else return Math.max(agg, childValue);
@@ -1256,8 +1256,7 @@ export class StackingContainerChip extends ContainerChip {
       ),
       localBounds: this.calculateInnerBounds(this.lastRefreshInfo.localBounds),
     };
-    for (const child of this._childDisplayItems)
-      child.refresh(childRefreshInfo);
+    for (const child of this._childLayoutItems) child.refresh(childRefreshInfo);
   }
 
   get minWidth() {
@@ -1343,11 +1342,11 @@ export class AxisContainerChip extends ContainerChip {
     let childIndexesToGrow: Array<number> = [];
 
     let minUsedSpace = 0;
-    for (let i = 0; i < this._childDisplayItems.length; i++) {
+    for (let i = 0; i < this._childLayoutItems.length; i++) {
       // Account for the gap
       if (i > 0) minUsedSpace += this._options.layoutOptions.gap;
 
-      const child = this._childDisplayItems[i];
+      const child = this._childLayoutItems[i];
 
       const childMinLength = child[minLengthProp] || 0;
       minUsedSpace += childMinLength;
@@ -1377,7 +1376,7 @@ export class AxisContainerChip extends ContainerChip {
         availableExtraSpace / childIndexesToGrow.length;
       for (let i = 0; i < childIndexesToGrow.length; i++) {
         const childIndex = childIndexesToGrow[i];
-        const child = this._childDisplayItems[childIndex];
+        const child = this._childLayoutItems[childIndex];
         const childIdealLength = child[idealLengthProp] || 0;
 
         // Expand the element, but not beyond the ideal length
@@ -1400,8 +1399,8 @@ export class AxisContainerChip extends ContainerChip {
     if (availableExtraSpace > 1) {
       childIndexesToGrow = [];
 
-      for (let i = 0; i < this._childDisplayItems.length; i++) {
-        const child = this._childDisplayItems[i];
+      for (let i = 0; i < this._childLayoutItems.length; i++) {
+        const child = this._childLayoutItems[i];
 
         if (
           typeof child[maxLengthProp] === "undefined" ||
@@ -1418,7 +1417,7 @@ export class AxisContainerChip extends ContainerChip {
         availableExtraSpace / childIndexesToGrow.length;
       for (let i = 0; i < childIndexesToGrow.length; i++) {
         const childIndex = childIndexesToGrow[i];
-        const child = this._childDisplayItems[childIndex];
+        const child = this._childLayoutItems[childIndex];
 
         if (typeof child[maxLengthProp] !== "undefined") {
           // Expand the element, but not beyond the max length
@@ -1452,14 +1451,14 @@ export class AxisContainerChip extends ContainerChip {
     ) {
       axisOffset += availableExtraSpace / 2;
     } else if (this._options.layoutOptions.distributeSpace === "around") {
-      axisOffset += availableExtraSpace / this._childDisplayItems.length / 2;
+      axisOffset += availableExtraSpace / this._childLayoutItems.length / 2;
     }
 
-    for (let i = 0; i < this._childDisplayItems.length; i++) {
+    for (let i = 0; i < this._childLayoutItems.length; i++) {
       // Handle gap
       if (i > 0) axisOffset += this._options.layoutOptions.gap;
 
-      const child = this._childDisplayItems[i];
+      const child = this._childLayoutItems[i];
 
       let itemLocalBounds: PIXI.Rectangle;
       let itemAbsoluteBounds: PIXI.Rectangle;
@@ -1502,11 +1501,11 @@ export class AxisContainerChip extends ContainerChip {
 
       // Distribute extra space between items
       if (this._options.layoutOptions.distributeSpace === "between") {
-        if (this._childDisplayItems.length > 1)
+        if (this._childLayoutItems.length > 1)
           axisOffset +=
-            availableExtraSpace / (this._childDisplayItems.length - 1);
+            availableExtraSpace / (this._childLayoutItems.length - 1);
       } else if (this._options.layoutOptions.distributeSpace === "around") {
-        axisOffset += availableExtraSpace / this._childDisplayItems.length;
+        axisOffset += availableExtraSpace / this._childLayoutItems.length;
       }
     }
   }
@@ -1576,8 +1575,8 @@ export class AxisContainerChip extends ContainerChip {
   }
 
   private _calcuateGapSum() {
-    return this._childDisplayItems.length > 1
-      ? (this._childDisplayItems.length - 1) * this._options.layoutOptions.gap
+    return this._childLayoutItems.length > 1
+      ? (this._childLayoutItems.length - 1) * this._options.layoutOptions.gap
       : 0;
   }
 }
