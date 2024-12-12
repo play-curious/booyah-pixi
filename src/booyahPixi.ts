@@ -256,9 +256,30 @@ export type LayoutItemChildChipOptions = Array<
   chip.ActivateChildChipOptions | chip.ChipResolvable
 >;
 
+export class Bounds {
+  static fromRectangle(rect: PIXI.Rectangle) {
+    return new Bounds(rect.x, rect.y, rect.width, rect.height);
+  }
+
+  constructor(
+    public readonly x: number,
+    public readonly y: number,
+    public readonly width?: number,
+    public readonly height?: number,
+  ) {}
+
+  isBoundedHorizontally() {
+    return typeof this.width !== "undefined";
+  }
+
+  isBoundedVertically() {
+    return typeof this.height !== "undefined";
+  }
+}
+
 export interface RefreshInfo {
-  readonly absoluteBounds: PIXI.Rectangle;
-  readonly localBounds: PIXI.Rectangle;
+  readonly absoluteBounds: Bounds;
+  readonly localBounds: Bounds;
 }
 
 /**
@@ -323,6 +344,7 @@ export abstract class LayoutItemBase
 
     if (
       typeof this.minWidth !== "undefined" &&
+      typeof refreshInfo.absoluteBounds.width !== "undefined" &&
       refreshInfo.absoluteBounds.width < this.minWidth
     )
       console.error(
@@ -330,6 +352,7 @@ export abstract class LayoutItemBase
       );
     if (
       typeof this.minHeight !== "undefined" &&
+      typeof refreshInfo.absoluteBounds.height !== "undefined" &&
       refreshInfo.absoluteBounds.height < this.minHeight
     )
       console.error(
@@ -341,12 +364,16 @@ export abstract class LayoutItemBase
     this.emit("didRefresh", refreshInfo);
   }
 
-  calculateInnerBounds(bounds: PIXI.Rectangle) {
-    return new PIXI.Rectangle(
+  calculateInnerBounds(bounds: Bounds) {
+    return new Bounds(
       bounds.x + this.paddingLeft,
       bounds.y + this.paddingTop,
-      bounds.width - this.paddingLeft - this.paddingRight,
-      bounds.height - this.paddingTop - this.paddingBottom,
+      bounds.isBoundedHorizontally()
+        ? bounds.width - this.paddingLeft - this.paddingRight
+        : undefined,
+      bounds.isBoundedHorizontally()
+        ? bounds.height - this.paddingTop - this.paddingBottom
+        : undefined,
     );
   }
 
@@ -577,9 +604,11 @@ export class PixiAppChip extends chip.Composite {
       this._stackingContainerChip.prepareRefresh({
         renderSize: this.renderSize,
       });
+
+      const screenBounds = Bounds.fromRectangle(this._pixiApplication.screen);
       this._stackingContainerChip.refresh({
-        absoluteBounds: this._pixiApplication.screen,
-        localBounds: this._pixiApplication.screen,
+        absoluteBounds: screenBounds,
+        localBounds: screenBounds,
       });
     }
 
@@ -805,7 +834,7 @@ export class DisplayLeafChip<
   protected readonly _options: DisplayLeafChipOptions<DisplayObjectType>;
 
   // Cache of the local bounds so as not to recalculate it
-  private _localBounds?: PIXI.Rectangle;
+  private _localBounds?: Bounds;
   private _idealWidth?: number;
   private _idealHeight?: number;
 
@@ -855,47 +884,51 @@ export class DisplayLeafChip<
       this.lastRefreshInfo.localBounds,
     );
 
-    if (innerBounds.width < idealInnerWidth) {
-      // Shrink, but not beyond the min size
-      if (typeof this.minWidth !== "undefined") {
-        const minInnerWidth =
-          this.minWidth - (this.paddingLeft + this.paddingRight);
-        horizontalScale =
-          Math.max(innerBounds.width, minInnerWidth) / idealInnerWidth;
-      } else {
-        horizontalScale = innerBounds.width / idealInnerWidth;
-      }
-    } else if (innerBounds.width > idealInnerWidth) {
-      // Grow, but not beyond the max size
-      if (typeof this.maxWidth !== "undefined") {
-        const maxInnerWidth =
-          this.maxWidth - (this.paddingLeft + this.paddingRight);
-        horizontalScale =
-          Math.min(maxInnerWidth, innerBounds.width) / idealInnerWidth;
-      } else {
-        horizontalScale = innerBounds.width / idealInnerWidth;
+    if (innerBounds.isBoundedHorizontally()) {
+      if (innerBounds.width < idealInnerWidth) {
+        // Shrink, but not beyond the min size
+        if (typeof this.minWidth !== "undefined") {
+          const minInnerWidth =
+            this.minWidth - (this.paddingLeft + this.paddingRight);
+          horizontalScale =
+            Math.max(innerBounds.width, minInnerWidth) / idealInnerWidth;
+        } else {
+          horizontalScale = innerBounds.width / idealInnerWidth;
+        }
+      } else if (innerBounds.width > idealInnerWidth) {
+        // Grow, but not beyond the max size
+        if (typeof this.maxWidth !== "undefined") {
+          const maxInnerWidth =
+            this.maxWidth - (this.paddingLeft + this.paddingRight);
+          horizontalScale =
+            Math.min(maxInnerWidth, innerBounds.width) / idealInnerWidth;
+        } else {
+          horizontalScale = innerBounds.width / idealInnerWidth;
+        }
       }
     }
 
-    if (innerBounds.height < idealInnerHeight) {
-      // Shrink, but not beyond the min size
-      if (typeof this.minHeight !== "undefined") {
-        const minInnerHeight =
-          this.minHeight - (this.paddingTop + this.paddingBottom);
-        verticalScale =
-          Math.max(innerBounds.height, minInnerHeight) / idealInnerHeight;
-      } else {
-        verticalScale = innerBounds.height / idealInnerHeight;
-      }
-    } else if (innerBounds.height > idealInnerHeight) {
-      // Grow, but not beyond the max size
-      if (typeof this.maxHeight !== "undefined") {
-        const maxInnerHeight =
-          this.maxHeight - (this.paddingTop + this.paddingBottom);
-        verticalScale =
-          Math.min(maxInnerHeight, innerBounds.height) / idealInnerHeight;
-      } else {
-        verticalScale = innerBounds.height / idealInnerHeight;
+    if (innerBounds.isBoundedVertically()) {
+      if (innerBounds.height < idealInnerHeight) {
+        // Shrink, but not beyond the min size
+        if (typeof this.minHeight !== "undefined") {
+          const minInnerHeight =
+            this.minHeight - (this.paddingTop + this.paddingBottom);
+          verticalScale =
+            Math.max(innerBounds.height, minInnerHeight) / idealInnerHeight;
+        } else {
+          verticalScale = innerBounds.height / idealInnerHeight;
+        }
+      } else if (innerBounds.height > idealInnerHeight) {
+        // Grow, but not beyond the max size
+        if (typeof this.maxHeight !== "undefined") {
+          const maxInnerHeight =
+            this.maxHeight - (this.paddingTop + this.paddingBottom);
+          verticalScale =
+            Math.min(maxInnerHeight, innerBounds.height) / idealInnerHeight;
+        } else {
+          verticalScale = innerBounds.height / idealInnerHeight;
+        }
       }
     }
 
@@ -918,43 +951,57 @@ export class DisplayLeafChip<
 
     // If the object has an non-zero anchor point, adjust the position
     if (this._options.layoutOptions.alignBasedOnAnchor) {
-      position.x -= this._localBounds.left;
-      position.y -= this._localBounds.top;
+      position.x -= this._localBounds.x;
+      position.y -= this._localBounds.y;
     }
 
     // Handle horizontal alignment
-    if (
-      this._options.layoutOptions.horizontalAlign !== "left" &&
-      innerBounds.width > scaledWidth
-    ) {
-      const extraSpace = innerBounds.width - scaledWidth;
-      if (this._options.layoutOptions.horizontalAlign === "right") {
-        position.x += extraSpace;
-      } else if (this._options.layoutOptions.horizontalAlign === "center") {
-        position.x += extraSpace / 2;
+    if (innerBounds.isBoundedHorizontally()) {
+      if (
+        this._options.layoutOptions.horizontalAlign !== "left" &&
+        innerBounds.width > scaledWidth
+      ) {
+        const extraSpace = innerBounds.width - scaledWidth;
+        if (this._options.layoutOptions.horizontalAlign === "right") {
+          position.x += extraSpace;
+        } else if (this._options.layoutOptions.horizontalAlign === "center") {
+          position.x += extraSpace / 2;
+        }
       }
+    } else if (this._options.layoutOptions.horizontalAlign !== "left") {
+      console.error(
+        `DisplayLeafChip: Within unbounded layout, cannot horizontally align as requested: ${this._options.layoutOptions.horizontalAlign}`,
+      );
     }
 
     // Handle vertical alignment
-    if (
-      this._options.layoutOptions.verticalAlign !== "top" &&
-      innerBounds.height > scaledHeight
-    ) {
-      const extraSpace = innerBounds.height - scaledHeight;
-      if (this._options.layoutOptions.verticalAlign === "bottom") {
-        position.y += extraSpace;
-      } else if (this._options.layoutOptions.verticalAlign === "middle") {
-        position.y += extraSpace / 2;
+    if (innerBounds.isBoundedVertically()) {
+      if (
+        this._options.layoutOptions.verticalAlign !== "top" &&
+        innerBounds.height > scaledHeight
+      ) {
+        const extraSpace = innerBounds.height - scaledHeight;
+        if (this._options.layoutOptions.verticalAlign === "bottom") {
+          position.y += extraSpace;
+        } else if (this._options.layoutOptions.verticalAlign === "middle") {
+          position.y += extraSpace / 2;
+        }
       }
+
+      this._setPosition(position);
+
+      this._updateProperties();
+    } else if (this._options.layoutOptions.verticalAlign !== "top") {
+      console.error(
+        `DisplayLeafChip: Within unbounded layout, cannot vertically align as requested: ${this._options.layoutOptions.verticalAlign}`,
+      );
     }
-
-    this._setPosition(position);
-
-    this._updateProperties();
   }
 
   updateIdealSize() {
-    this._localBounds = this._options.displayObject.getLocalBounds();
+    this._localBounds = Bounds.fromRectangle(
+      this._options.displayObject.getLocalBounds(),
+    );
 
     if (typeof this._options.layoutOptions.idealWidth === "undefined") {
       this._idealWidth =
@@ -1212,7 +1259,7 @@ export abstract class ContainerBase extends DisplayObjectChip<PIXI.Container> {
       refreshInfo.localBounds.y,
     );
 
-    const childLocalBounds = new PIXI.Rectangle(
+    const childLocalBounds = new Bounds(
       0,
       0,
       refreshInfo.localBounds.width,
@@ -1305,7 +1352,7 @@ export class StackingContainerChip extends ContainerBase {
   }
 }
 
-export class AxisContainerLayoutOptions extends LayoutOptions {
+export class DirectionalContainerLayoutOptions extends LayoutOptions {
   direction: "horizontal" | "vertical" = "horizontal";
 
   distributeSpace:
@@ -1318,23 +1365,23 @@ export class AxisContainerLayoutOptions extends LayoutOptions {
   gap = 0;
 }
 
-export class AxisContainerOptions extends DisplayObjectChipOptions<PIXI.Container> {
-  layoutOptions?: Partial<AxisContainerLayoutOptions>;
+export class DirectionalContainerOptions extends DisplayObjectChipOptions<PIXI.Container> {
+  layoutOptions?: Partial<DirectionalContainerLayoutOptions>;
 }
 
-export class AxisContainerChip extends ContainerBase {
-  protected readonly _options: AxisContainerOptions;
+export class DirectionalContainerChip extends ContainerBase {
+  protected readonly _options: DirectionalContainerOptions;
 
-  constructor(options?: Partial<AxisContainerOptions>) {
+  constructor(options?: Partial<DirectionalContainerOptions>) {
     const filledOptions = chip.fillInOptions(
       options,
-      new AxisContainerOptions(),
+      new DirectionalContainerOptions(),
     );
     super(filledOptions.children);
 
     filledOptions.layoutOptions = chip.fillInOptions(
       filledOptions.layoutOptions,
-      new AxisContainerLayoutOptions(),
+      new DirectionalContainerLayoutOptions(),
     );
 
     if (!filledOptions.displayObject) {
@@ -1345,6 +1392,22 @@ export class AxisContainerChip extends ContainerBase {
   }
 
   protected _onRefresh(): void {
+    if (this._options.layoutOptions.direction === "horizontal") {
+      if (this._lastRefreshInfo.localBounds.isBoundedHorizontally()) {
+        this._handleBoundedLayout();
+      } else {
+        this._handleUnboundedLayout();
+      }
+    } else {
+      if (this._lastRefreshInfo.localBounds.isBoundedVertically()) {
+        this._handleBoundedLayout();
+      } else {
+        this._handleUnboundedLayout();
+      }
+    }
+  }
+
+  private _handleBoundedLayout(): void {
     // Determine which properties will be used depending on the direction
     const minLengthProp =
       this._options.layoutOptions.direction === "vertical"
@@ -1484,29 +1547,29 @@ export class AxisContainerChip extends ContainerBase {
 
       const child = this._childLayoutItems[i];
 
-      let itemLocalBounds: PIXI.Rectangle;
-      let itemAbsoluteBounds: PIXI.Rectangle;
+      let itemLocalBounds: Bounds;
+      let itemAbsoluteBounds: Bounds;
       if (this._options.layoutOptions.direction === "vertical") {
-        itemLocalBounds = new PIXI.Rectangle(
+        itemLocalBounds = new Bounds(
           innerLocalBounds.x,
           innerLocalBounds.y + axisOffset,
           innerLocalBounds.width,
           lengths[i],
         );
-        itemAbsoluteBounds = new PIXI.Rectangle(
+        itemAbsoluteBounds = new Bounds(
           innerAbsoluteBounds.x,
           innerAbsoluteBounds.y + axisOffset,
           innerAbsoluteBounds.width,
           lengths[i],
         );
       } else {
-        itemLocalBounds = new PIXI.Rectangle(
+        itemLocalBounds = new Bounds(
           innerLocalBounds.x + axisOffset,
           innerLocalBounds.y,
           lengths[i],
           innerLocalBounds.height,
         );
-        itemAbsoluteBounds = new PIXI.Rectangle(
+        itemAbsoluteBounds = new Bounds(
           innerAbsoluteBounds.x + axisOffset,
           innerAbsoluteBounds.y,
           lengths[i],
@@ -1531,6 +1594,76 @@ export class AxisContainerChip extends ContainerBase {
       } else if (this._options.layoutOptions.distributeSpace === "around") {
         axisOffset += availableExtraSpace / this._childLayoutItems.length;
       }
+    }
+  }
+
+  private _handleUnboundedLayout(): void {
+    if (this._options.layoutOptions.distributeSpace !== "atEnd") {
+      console.error(
+        `DirectionalContainer: Within unbounded layout, cannot distribute space as requested: ${this._options.layoutOptions.distributeSpace}`,
+      );
+    }
+
+    const idealLengthProp =
+      this._options.layoutOptions.direction === "vertical"
+        ? "idealHeight"
+        : "idealWidth";
+    const lengthProp =
+      this._options.layoutOptions.direction === "vertical" ? "height" : "width";
+
+    const innerLocalBounds = this.calculateInnerBounds(
+      this.lastRefreshInfo.localBounds,
+    );
+    const innerAbsoluteBounds = this.calculateInnerBounds(
+      this.lastRefreshInfo.absoluteBounds,
+    );
+
+    let axisOffset = 0;
+    for (let i = 0; i < this._childLayoutItems.length; i++) {
+      // Handle gap
+      if (i > 0) axisOffset += this._options.layoutOptions.gap;
+
+      const child = this._childLayoutItems[i];
+      const childIdealLength = child[idealLengthProp] || 0;
+
+      let itemLocalBounds: Bounds;
+      let itemAbsoluteBounds: Bounds;
+      if (this._options.layoutOptions.direction === "vertical") {
+        itemLocalBounds = new Bounds(
+          innerLocalBounds.x,
+          innerLocalBounds.y + axisOffset,
+          innerLocalBounds.width,
+          childIdealLength,
+        );
+        itemAbsoluteBounds = new Bounds(
+          innerAbsoluteBounds.x,
+          innerAbsoluteBounds.y + axisOffset,
+          innerAbsoluteBounds.width,
+          childIdealLength,
+        );
+      } else {
+        itemLocalBounds = new Bounds(
+          innerLocalBounds.x + axisOffset,
+          innerLocalBounds.y,
+          childIdealLength,
+          innerLocalBounds.height,
+        );
+        itemAbsoluteBounds = new Bounds(
+          innerAbsoluteBounds.x + axisOffset,
+          innerAbsoluteBounds.y,
+          childIdealLength,
+          innerAbsoluteBounds.height,
+        );
+      }
+
+      // Update item
+      child.refresh({
+        absoluteBounds: itemAbsoluteBounds,
+        localBounds: itemLocalBounds,
+      });
+
+      // Add space used to offset
+      axisOffset += childIdealLength;
     }
   }
 
@@ -1928,7 +2061,7 @@ export class LayoutTest extends chip.Composite {
   }
 
   private _addHorizontalLayout() {
-    const containerChip = new AxisContainerChip({
+    const containerChip = new DirectionalContainerChip({
       layoutOptions: {
         distributeSpace: "between",
         paddingBottom: 10,
