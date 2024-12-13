@@ -38,12 +38,6 @@ export interface LayoutValueResolvableContext<LayoutOptionsType>
   layoutItem: LayoutItem;
 }
 
-// export type DynamicLayoutItemValue = (
-//   options: DynamicLayoutValueOptions,
-// ) => StaticLayoutValue;
-
-// export type LayoutValue = StaticLayoutValue; // | DynamicLayoutItemValue;
-
 export class LayoutOptionsBase {
   minWidth: LayoutValue;
   minHeight: LayoutValue;
@@ -59,69 +53,6 @@ export class LayoutOptionsBase {
   paddingTop: LayoutValue = 0;
   paddingBottom: LayoutValue = 0;
 }
-
-// export class LayoutOptions {
-//   minWidth: LayoutValue;
-//   minHeight: LayoutValue;
-
-//   idealWidth: LayoutValue;
-//   idealHeight: LayoutValue;
-
-//   maxWidth: LayoutValue;
-//   maxHeight: LayoutValue;
-
-//   paddingLeft: LayoutValue = 0;
-//   paddingRight: LayoutValue = 0;
-//   paddingTop: LayoutValue = 0;
-//   paddingBottom: LayoutValue = 0;
-// }
-
-// function safeParseLayoutProperty(
-//   layoutItem: LayoutItem,
-//   layoutOptions: Partial<LayoutOptions>,
-//   prop: keyof LayoutOptions,
-//   renderInfo: RenderInfo,
-// ): number {
-//   return parseLayoutProperty(layoutItem, layoutOptions, prop, renderInfo) || 0;
-// }
-
-// // Parses a property in the layout item options as a number
-// function parseLayoutProperty(
-//   layoutItem: LayoutItem,
-//   layoutOptions: Partial<LayoutOptions>,
-//   prop: keyof LayoutOptions,
-//   renderInfo: RenderInfo,
-// ): number | undefined {
-//   const propValue = layoutOptions[prop] as LayoutValue;
-
-//   // If property doesn't exist, return undefined
-//   if (typeof propValue === "undefined") return;
-
-//   // If property is a number, return it directly
-//   if (typeof propValue === "number") return propValue as number;
-
-//   // If property is a function (dynamic) call it and parse the result
-//   if (typeof propValue === "function") {
-//     const evaluatedValue = (propValue as DynamicLayoutItemValue)({
-//       layoutOptions: layoutOptions,
-//       layoutItem,
-//       ...renderInfo,
-//     });
-//     if (typeof evaluatedValue === "undefined") return;
-//     if (typeof evaluatedValue === "number") return evaluatedValue as number;
-//   }
-
-//   // Find matching property and return it
-//   const matchingProp = propValue as LayoutProperty;
-//   const matchingValue = layoutItem[matchingProp];
-//   if (typeof matchingValue !== "number") {
-//     throw new Error(
-//       `LayoutItem referencing property ${matchingProp} which is not a number. Value: ${matchingValue}`,
-//     );
-//   }
-
-//   return matchingValue;
-// }
 
 export type LayoutItemChildChipOptions = Array<
   chip.ActivateChildChipOptions | chip.ChipResolvable
@@ -351,10 +282,6 @@ export abstract class LayoutItemBase<
       // Find matching property and return it
       const matchingProp = value as LayoutProperty;
       const matchingValue = this[matchingProp];
-      //  this._layoutOptionsResolver.resolve(
-      //   matchingProp,
-      //   resolvableContext,
-      // );
 
       if (
         typeof matchingValue !== "number" &&
@@ -433,49 +360,6 @@ export type ResolvablePixiDisplayObject<
   LayoutValueResolvableContext<LayoutOptionsType>
 >;
 
-// /**
-//  * The acceptable values for the property.
-//  * Points can be set with a single number.
-//  */
-// export type DisplayObjectValueType<
-//   DisplayObjectType extends PIXI.DisplayObject,
-//   Property extends keyof DisplayObjectType,
-// > = DisplayObjectType[Property] extends PIXI.ObservablePoint
-//   ? PIXI.IPointData | number
-//   : DisplayObjectType[Property];
-
-// export type DisplayObjectValueFunction<
-//   DisplayObjectType extends PIXI.DisplayObject,
-//   Property extends keyof DisplayObjectType,
-// > = (
-//   options: DisplayObjectValueFunctionOptions<DisplayObjectType>,
-// ) => DisplayObjectValueType<DisplayObjectType, Property>;
-
-// export type DisplayObjectValueResolvable<
-//   DisplayObjectType extends PIXI.DisplayObject,
-//   Property extends keyof DisplayObjectType,
-// > =
-//   | DisplayObjectValueType<DisplayObjectType, Property>
-//   | DisplayObjectValueFunction<DisplayObjectType, Property>;
-
-// export function isDisplayObjectValueFunction<
-//   DisplayObjectType extends PIXI.DisplayObject,
-//   Property extends keyof DisplayObjectType,
-// >(
-//   resolvable: DisplayObjectValueResolvable<DisplayObjectType, Property>,
-// ): resolvable is DisplayObjectValueFunction<DisplayObjectType, Property> {
-//   return typeof resolvable === "function";
-// }
-
-// export type DisplayObjectProperties<
-//   DisplayObjectType extends PIXI.DisplayObject,
-// > = {
-//   [Property in keyof DisplayObjectType]?: DisplayObjectValueResolvable<
-//     DisplayObjectType,
-//     Property
-//   >;
-// };
-
 export class DisplayObjectChipOptions<
   DisplayObjectType extends PIXI.DisplayObject,
   LayoutOptionsType extends LayoutOptionsBase,
@@ -530,44 +414,6 @@ export abstract class DisplayObjectChip<
       );
     }
 
-    // this._propertiesToUpdateOnResize = [];
-
-    // const valueFunctionOptions = {
-    //   displayObject: this._options.displayObject,
-    //   pixiAppChip: this.pixiAppChip,
-    //   renderSize: this.pixiAppChip.renderSize,
-    // };
-
-    // for (const property in this._options.properties) {
-    //   const resolvable = this._options.properties[
-    //     property
-    //   ] as DisplayObjectValueResolvable<
-    //     DisplayObjectType,
-    //     keyof DisplayObjectType
-    //   >;
-    //   let value: DisplayObjectValueType<
-    //     DisplayObjectType,
-    //     keyof DisplayObjectType
-    //   >;
-    //   if (isDisplayObjectValueFunction(resolvable)) {
-    //     this._propertiesToUpdateOnResize.push(property);
-    //     value = (
-    //       resolvable as DisplayObjectValueFunction<
-    //         DisplayObjectType,
-    //         keyof DisplayObjectType
-    //       >
-    //     )(valueFunctionOptions);
-    //   } else {
-    //     value = resolvable;
-    //   }
-
-    //   updateProperty(
-    //     this._options.displayObject,
-    //     property as keyof DisplayObjectType,
-    //     value,
-    //   );
-    // }
-
     if (
       !this._options.hasOwnProperty("addToContainer") ||
       this._options.addToContainer
@@ -609,25 +455,6 @@ export abstract class DisplayObjectChip<
   }
 
   protected _updateDynamicProperties() {
-    // const valueFunctionOptions = {
-    //   displayObject: this._options.displayObject,
-    //   pixiAppChip: this.pixiAppChip,
-    //   renderSize: this.pixiAppChip.renderSize,
-    // };
-
-    // // TODO: optionally update ideal size
-
-    // for (const property of this._propertiesToUpdateOnResize) {
-    //   const f = this._options.properties[
-    //     property
-    //   ] as DisplayObjectValueFunction<
-    //     DisplayObjectType,
-    //     keyof DisplayObjectType
-    //   >;
-    //   const value = f(valueFunctionOptions);
-    //   updateProperty(this._options.displayObject, property, value);
-    // }
-
     this._propertiesResolver.invalidate();
 
     // Update dynamic properties
@@ -1085,7 +912,11 @@ export class ContainerLeafChip extends DisplayLeafChip<PIXI.Container> {
 
 export abstract class ContainerBase<
   LayoutOptionsType extends LayoutOptionsBase = LayoutOptionsBase,
-> extends DisplayObjectChip<PIXI.Container, LayoutOptionsType> {
+  OptionsType extends DisplayObjectChipOptions<
+    PIXI.Container,
+    LayoutOptionsType
+  > = DisplayObjectChipOptions<PIXI.Container, LayoutOptionsType>,
+> extends DisplayObjectChip<PIXI.Container, LayoutOptionsType, OptionsType> {
   protected _childLayoutItems: Array<LayoutItem>;
 
   constructor(
@@ -1096,13 +927,8 @@ export abstract class ContainerBase<
     const filledOptions = chip.fillInOptions(
       options,
       new DisplayObjectChipOptions<PIXI.Container, LayoutOptionsType>(),
-    );
+    ) as OptionsType;
     super(filledOptions);
-
-    // filledOptions.layoutOptions = chip.fillInOptions(
-    //   filledOptions.layoutOptions,
-    //   new LayoutOptions(),
-    // );
 
     if (!filledOptions.displayObject) {
       filledOptions.displayObject = new PIXI.Container();
@@ -1192,27 +1018,6 @@ export abstract class ContainerBase<
 }
 
 export class StackingContainerChip extends ContainerBase {
-  // protected readonly _options: DisplayObjectChipOptions<PIXI.Container>;
-
-  // constructor(options?: Partial<DisplayObjectChipOptions<PIXI.Container>>) {
-  //   const filledOptions = chip.fillInOptions(
-  //     options,
-  //     new DisplayObjectChipOptions<PIXI.Container>(),
-  //   );
-  //   super(filledOptions.children);
-
-  //   filledOptions.layoutOptions = chip.fillInOptions(
-  //     filledOptions.layoutOptions,
-  //     new LayoutOptions(),
-  //   );
-
-  //   if (!filledOptions.displayObject) {
-  //     filledOptions.displayObject = new PIXI.Container();
-  //   }
-
-  //   this._options = filledOptions;
-  // }
-
   protected _onRefresh(): void {
     // Refresh all children
     const childRefreshInfo: RefreshInfo = {
@@ -1265,8 +1070,6 @@ export class DirectionalContainerOptions extends DisplayObjectChipOptions<
 > {}
 
 export class DirectionalContainerChip extends ContainerBase<DirectionalContainerLayoutOptions> {
-  // protected readonly _options: DirectionalContainerOptions;
-
   constructor(options?: Partial<DirectionalContainerOptions>) {
     const filledOptions = chip.fillInOptions(
       options,
@@ -1280,8 +1083,6 @@ export class DirectionalContainerChip extends ContainerBase<DirectionalContainer
       filledOptions.displayObject = new PIXI.Container();
     }
     super(filledOptions);
-
-    // this._options = filledOptions;
   }
 
   protected _onRefresh(): void {
@@ -1652,11 +1453,6 @@ export class AnimatedSpriteChipOptions extends DisplayLeafChipOptions<PIXI.Anima
   fps?: number;
   startingFrame?: number;
   prepare?: boolean;
-
-  // properties: DisplayObjectProperties<PIXI.AnimatedSprite> = {};
-  // onResize?: (
-  //   options: DisplayObjectValueFunctionOptions<PIXI.AnimatedSprite>,
-  // ) => unknown;
 }
 
 export class AnimatedSpriteChip extends DisplayLeafChip<
@@ -1739,46 +1535,6 @@ export class AnimatedSpriteChip extends DisplayLeafChip<
     // Don't have the sprite auto-update
     this._animatedSprite = new PIXI.AnimatedSprite(textures, false);
 
-    // // Update properties and keep track of which ones to update on resize
-    // this._propertiesToUpdateOnResize = [];
-
-    // const valueFunctionOptions = {
-    //   displayObject: this._animatedSprite,
-    //   pixiAppChip: this.pixiAppChip,
-    //   renderSize: this.pixiAppChip.renderSize,
-    // };
-    // for (const property in this._options.properties) {
-    //   const resolvable = this._options.properties[
-    //     property as keyof PIXI.AnimatedSprite
-    //   ] as DisplayObjectValueResolvable<
-    //     PIXI.AnimatedSprite,
-    //     keyof PIXI.AnimatedSprite
-    //   >;
-    //   let value: DisplayObjectValueType<
-    //     PIXI.AnimatedSprite,
-    //     keyof PIXI.AnimatedSprite
-    //   >;
-    //   if (isDisplayObjectValueFunction(resolvable)) {
-    //     this._propertiesToUpdateOnResize.push(
-    //       property as keyof PIXI.AnimatedSprite,
-    //     );
-    //     value = (
-    //       resolvable as DisplayObjectValueFunction<
-    //         PIXI.AnimatedSprite,
-    //         keyof PIXI.AnimatedSprite
-    //       >
-    //     )(valueFunctionOptions);
-    //   } else {
-    //     value = resolvable;
-    //   }
-
-    //   updateProperty(
-    //     this._animatedSprite,
-    //     property as keyof PIXI.AnimatedSprite,
-    //     value,
-    //   );
-    // }
-
     // If requested, use the PIXI Prepare plugin to make sure the animation is loaded before adding it to the stage
     if (this._options.prepare) {
       this._wasAdded = false;
@@ -1818,14 +1574,6 @@ export class AnimatedSpriteChip extends DisplayLeafChip<
     this._animatedSprite.onComplete = this._onComplete.bind(this);
 
     this.restart();
-
-    // this._options.onResize?.({
-    //   displayObject: this._animatedSprite,
-    //   pixiAppChip: this.pixiAppChip,
-    //   renderSize: this.pixiAppChip.renderSize,
-    // });
-
-    // this._subscribe(this.pixiAppChip, "didResize", this._onResize);
   }
 
   _onTick() {
@@ -1864,25 +1612,6 @@ export class AnimatedSpriteChip extends DisplayLeafChip<
   private _onFrameChange(currentFrame: number) {
     this.emit("frameChange", currentFrame);
   }
-
-  // private _onResize() {
-  //   const valueFunctionOptions = {
-  //     displayObject: this._animatedSprite,
-  //     pixiAppChip: this.pixiAppChip,
-  //     renderSize: this.pixiAppChip.renderSize,
-  //   };
-
-  //   for (const property of this._propertiesToUpdateOnResize) {
-  //     const f = this._options.properties[
-  //       property
-  //     ] as DisplayObjectValueFunction<
-  //       PIXI.AnimatedSprite,
-  //       keyof PIXI.AnimatedSprite
-  //     >;
-  //     const value = f(valueFunctionOptions);
-  //     updateProperty(this.animatedSprite, property, value);
-  //   }
-  // }
 
   get animatedSprite() {
     return this._animatedSprite;

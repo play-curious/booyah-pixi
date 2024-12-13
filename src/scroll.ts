@@ -1,9 +1,11 @@
-// import * as chip from "booyah/dist/chip";
-// import * as geom from "booyah/dist/geom";
-// import * as PIXI from "pixi.js";
-// import * as _ from "underscore";
+import * as chip from "booyah/dist/chip";
+import * as geom from "booyah/dist/geom";
+import * as PIXI from "pixi.js";
+import * as _ from "underscore";
 
-// import * as booyahPixi from "./layout";
+import * as layout from "./layout";
+import * as math from "./math";
+import * as resolvable from "./resolvable";
 
 // type ResolvableFunction<Type, Context> = (context: Context) => Type;
 // type Resolvable<Type, Context> = Type | ResolvableFunction<Type, Context>;
@@ -60,447 +62,474 @@
 
 // type ResolvingContext = { renderSize: PIXI.IPointData };
 
-// function isTexture(object: any): object is PIXI.Texture {
-//   return object.baseTexture;
-// }
+function isTexture(object: any): object is PIXI.Texture {
+  return object.baseTexture;
+}
 
-// export type OverflowSettings = "auto" | "hidden" | "scroll";
-// export type Direction = "vertical" | "horizontal";
+export type OverflowSettings = "auto" | "hidden" | "scroll";
+export type Direction = "vertical" | "horizontal";
 
-// export class ScrollboxOptions {
-//   content: any = null;
-//   boxWidth: number = 100;
-//   boxHeight: number = 100;
-//   overflow: OverflowSettings = "auto";
-//   direction: Direction = "horizontal";
-//   scrollbarOffset: number = 10;
-//   scrollbarWidth: number = 20;
-//   scrollbarBackground: PIXI.Texture | PIXI.ColorSource = 0xaaaaaa;
-//   scrollbarHandle: PIXI.Texture | PIXI.ColorSource = 0x555555;
-//   dragScroll: boolean = true;
-//   dragThreshold: number = 5;
-//   stopPropagation: boolean = true;
-//   wheelScroll: boolean = true;
-// }
+export class ScrollboxOptions extends layout.DisplayObjectChipOptions<
+  PIXI.Container,
+  layout.LayoutOptionsBase
+> {
+  content?: PIXI.DisplayObject;
+  boxWidth: number = 100;
+  boxHeight: number = 100;
+  overflow: OverflowSettings = "auto";
+  direction: Direction = "horizontal";
+  scrollbarOffset: number = 10;
+  scrollbarWidth: number = 20;
+  scrollbarBackground: PIXI.Texture | PIXI.ColorSource = 0xaaaaaa;
+  scrollbarHandle: PIXI.Texture | PIXI.ColorSource = 0x555555;
+  dragScroll: boolean = true;
+  dragThreshold: number = 5;
+  stopPropagation: boolean = true;
+  wheelScroll: boolean = true;
+}
 
-// /**
-//  * Based on David Fig's pixi-scrollbox https://github.com/davidfig/pixi-scrollbox/, but adapted to Booyah
-//  *
-//  * Events:
-//  *  moved ({ reason })
-//  *  refreshed
-//  **/
-// export class Scrollbox extends chip.Composite {
-//   public options: ScrollboxOptions;
-//   public readonly resolvableOptions: ResolvableCollection<
-//     ScrollboxOptions,
-//     ResolvingContext
-//   >;
-//   private _myResolver: MyResolver<ScrollboxOptions, ResolvingContext>;
+type ScrollboxResolvableContext =
+  layout.LayoutValueResolvableContext<layout.LayoutOptionsBase>;
 
-//   private _pointerDown: any;
-//   private _container: PIXI.Container;
-//   private _content: PIXI.Container;
-//   private _scrollbarAnchor: PIXI.Container;
-//   private _scrollbarBackground: PIXI.NineSlicePlane;
-//   private _scrollbarHandle: PIXI.NineSlicePlane;
+/**
+ * Based on David Fig's pixi-scrollbox https://github.com/davidfig/pixi-scrollbox/, but adapted to Booyah
+ *
+ * Events:
+ *  moved ({ reason })
+ *  refreshedContents
+ **/
+export class Scrollbox extends layout.ContainerBase<
+  layout.LayoutOptionsBase,
+  ScrollboxOptions
+> {
+  // public options: ScrollboxOptions;
+  // public readonly resolvableOptions: ResolvableCollection<
+  //   ScrollboxOptions,
+  //   ResolvingContext
+  // >;
+  // private _optionsResolver: resolvable.Resolver<
+  //   ScrollboxOptions,
+  //   ScrollboxResolvableContext
+  // >;
 
-//   /**
-//    * Can be provided with an existing container
-//    */
-//   constructor(
-//     partialOptions: Partial<
-//       ResolvableCollection<ScrollboxOptions, ResolvingContext>
-//     >,
-//   ) {
-//     super();
-//     this.resolvableOptions = chip.fillInOptions(
-//       partialOptions,
-//       new ScrollboxOptions(),
-//     );
-//     this._myResolver = new MyResolver<ScrollboxOptions, ResolvingContext>();
-//   }
+  private _pointerDown?: { type: "drag" | "scrollbar"; last: PIXI.IPointData };
+  // private _container: PIXI.Container;
+  private _content: PIXI.Container;
+  private _scrollbarAnchor: PIXI.Container;
+  private _scrollbarBackground: PIXI.NineSlicePlane;
+  private _scrollbarHandle: PIXI.NineSlicePlane;
 
-//   protected _onActivate() {
-//     this._myResolver.setResovableCollection(this.resolvableOptions);
-//     this._myResolver.resolve({
-//       renderSize: this.chipContext.pixiAppChip.renderSize,
-//     });
-//     this.options = this._myResolver.getResolvedCollection();
+  /**
+   * Can be provided with an existing container
+   */
+  constructor(
+    partialOptions: Partial<
+      resolvable.ResolvableObject<ScrollboxOptions, ScrollboxResolvableContext>
+    >,
+  ) {
+    const filledOptions = chip.fillInOptions(
+      partialOptions,
+      new ScrollboxOptions(),
+    );
+    super(filledOptions);
 
-//     // Last pointerdown event
-//     this._pointerDown = null;
+    // this._optionsResolver = new resolvable.Resolver(filledOptions);
+  }
 
-//     this._container = new PIXI.Container();
-//     this._activateChildChip(new booyahPixi.DisplayObjectChip(this._container));
-//     this._container.eventMode = "static";
-//     this._subscribe(this._container, "globalpointermove", this._onMove as any);
-//     this._subscribe(this._container, "pointerup", this._onUp as any);
-//     this._subscribe(this._container, "pointercancel", this._onUp as any);
-//     this._subscribe(this._container, "pointerupoutside", this._onUp as any);
+  protected _onActivate() {
+    super._onActivate();
 
-//     this._content = new PIXI.Container();
-//     if (this.options.content) this._content.addChild(this.options.content);
+    // this._optionsResolver.setResovableCollection(this.resolvableOptions);
+    // this._optionsResolver.resolve({
+    //   renderSize: this.chipContext.pixiAppChip.renderSize,
+    // });
+    // this._options = this._optionsResolver.getResolvedCollection();
 
-//     if (this.options.dragScroll) {
-//       const dragBackground = new PIXI.Sprite(PIXI.Texture.WHITE);
-//       dragBackground.eventMode = "static";
-//       dragBackground.alpha = 0;
+    // Last pointerdown event
+    // this._pointerDown = null;
 
-//       this._subscribe(dragBackground, "pointerdown", this._dragDown as any);
-//       this._subscribe(this._content, "pointerdown", this._dragDown as any);
-//       this._content.eventMode = "static";
+    // this.displayObject = new PIXI.Container();
+    // this._activateChildChip(new layout.DisplayObjectChip(this.displayObject));
 
-//       this._activateChildChip({
-//         chip: new booyahPixi.DisplayObjectChip(dragBackground, {
-//           properties: {
-//             width: this.resolvableOptions.boxWidth,
-//             height: this.resolvableOptions.boxHeight,
-//           },
-//         }),
-//         context: { container: this._container },
-//       });
-//     }
+    this.displayObject.eventMode = "static";
+    this._subscribe(this.displayObject, "globalpointermove", this._onMove);
+    this._subscribe(this.displayObject, "pointerup", this._onUp);
+    this._subscribe(this.displayObject, "pointercancel", this._onUp);
+    this._subscribe(this.displayObject, "pointerupoutside", this._onUp);
 
-//     this._activateChildChip({
-//       chip: new booyahPixi.DisplayObjectChip(this._content),
-//       context: { container: this._container },
-//     });
+    this._content = new PIXI.Container();
+    if (this._options.content) this._content.addChild(this._options.content);
 
-//     const mask = new PIXI.Sprite(PIXI.Texture.WHITE);
-//     this._content.mask = mask;
-//     this._activateChildChip({
-//       chip: new booyahPixi.DisplayObjectChip(mask, {
-//         properties: {
-//           width: this.resolvableOptions.boxWidth,
-//           height: this.resolvableOptions.boxHeight,
-//         },
-//       }),
-//       context: { container: this.container },
-//     });
+    if (this._options.dragScroll) {
+      const dragBackground = new PIXI.Sprite(PIXI.Texture.WHITE);
+      dragBackground.eventMode = "static";
+      dragBackground.alpha = 0;
 
-//     if (this.options.wheelScroll) {
-//       this._subscribe(this._container, "wheel", (event) =>
-//         this._onWheel(event),
-//       );
-//     }
+      this._subscribe(dragBackground, "pointerdown", this._dragDown);
+      this._subscribe(this._content, "pointerdown", this._dragDown);
+      this._content.eventMode = "static";
 
-//     this._scrollbarAnchor = new PIXI.Container();
+      this._activateChildChip({
+        chip: new layout.SpriteChip({
+          displayObject: dragBackground,
+          properties: {
+            width: this._options.boxWidth,
+            height: this._options.boxHeight,
+          },
+        }),
+        context: { container: this.displayObject },
+      });
+    }
 
-//     if (isTexture(this.options.scrollbarBackground)) {
-//       this._scrollbarBackground = new PIXI.NineSlicePlane(
-//         this.options.scrollbarBackground,
-//       );
-//     } else {
-//       this._scrollbarBackground = new PIXI.NineSlicePlane(PIXI.Texture.WHITE);
-//       this._scrollbarBackground.tint = this.options.scrollbarBackground;
-//     }
+    this._activateChildChip({
+      chip: new layout.ContainerLeafChip({ displayObject: this._content }),
+      context: { container: this.displayObject },
+    });
 
-//     if (isTexture(this.options.scrollbarHandle)) {
-//       this._scrollbarHandle = new PIXI.NineSlicePlane(
-//         this.options.scrollbarHandle,
-//       );
-//     } else {
-//       this._scrollbarHandle = new PIXI.NineSlicePlane(PIXI.Texture.WHITE);
-//       this._scrollbarHandle.tint = this.options.scrollbarHandle;
-//     }
+    const mask = new PIXI.Sprite(PIXI.Texture.WHITE);
+    this._content.mask = mask;
+    this._activateChildChip({
+      chip: new layout.SpriteChip({
+        displayObject: mask,
+        properties: {
+          width: this._options.boxWidth,
+          height: this._options.boxHeight,
+        },
+      }),
+      context: { container: this.container },
+    });
 
-//     let anchorProperties;
-//     let backroundProperties;
-//     let handleProperties;
+    if (this._options.wheelScroll) {
+      this._subscribe(this.displayObject, "wheel", (event) =>
+        this._onWheel(event),
+      );
+    }
 
-//     switch (this.options.direction) {
-//       case "horizontal": {
-//         backroundProperties = {
-//           height: this.resolvableOptions.scrollbarWidth,
-//           y: this.resolvableOptions.scrollbarOffset,
-//         };
-//         handleProperties = {
-//           height: this.resolvableOptions.scrollbarWidth,
-//           y: this.resolvableOptions.scrollbarOffset,
-//         };
-//         anchorProperties = { y: this.resolvableOptions.boxHeight };
-//         break;
-//       }
-//       case "vertical": {
-//         backroundProperties = {
-//           x: this.resolvableOptions.scrollbarOffset,
-//           width: this.resolvableOptions.scrollbarWidth,
-//         };
-//         handleProperties = {
-//           x: this.resolvableOptions.scrollbarOffset,
-//           width: this.resolvableOptions.scrollbarWidth,
-//         };
-//         anchorProperties = { x: this.resolvableOptions.boxWidth };
-//         break;
-//       }
-//     }
+    this._scrollbarAnchor = new PIXI.Container();
 
-//     this._activateChildChip({
-//       chip: new booyahPixi.DisplayObjectChip(this._scrollbarAnchor, {
-//         properties: anchorProperties,
-//       }),
-//       context: { container: this._container },
-//     });
+    if (isTexture(this._options.scrollbarBackground)) {
+      this._scrollbarBackground = new PIXI.NineSlicePlane(
+        this._options.scrollbarBackground,
+      );
+    } else {
+      this._scrollbarBackground = new PIXI.NineSlicePlane(PIXI.Texture.WHITE);
+      this._scrollbarBackground.tint = this._options.scrollbarBackground;
+    }
 
-//     this._activateChildChip({
-//       chip: new booyahPixi.DisplayObjectChip(this._scrollbarBackground, {
-//         properties: backroundProperties,
-//       }),
-//       context: { container: this._scrollbarAnchor },
-//     });
+    if (isTexture(this._options.scrollbarHandle)) {
+      this._scrollbarHandle = new PIXI.NineSlicePlane(
+        this._options.scrollbarHandle,
+      );
+    } else {
+      this._scrollbarHandle = new PIXI.NineSlicePlane(PIXI.Texture.WHITE);
+      this._scrollbarHandle.tint = this._options.scrollbarHandle;
+    }
 
-//     this._activateChildChip({
-//       chip: new booyahPixi.DisplayObjectChip(this._scrollbarHandle, {
-//         properties: handleProperties,
-//       }),
-//       context: { container: this._scrollbarAnchor },
-//     });
+    let anchorProperties;
+    let backroundProperties;
+    let handleProperties;
 
-//     this._scrollbarHandle.eventMode = "static";
-//     this._subscribe(
-//       this._scrollbarHandle,
-//       "pointerdown",
-//       this._scrollbarDown as any,
-//     );
+    switch (this._options.direction) {
+      case "horizontal": {
+        backroundProperties = {
+          height: this._options.scrollbarWidth,
+          y: this._options.scrollbarOffset,
+        };
+        handleProperties = {
+          height: this._options.scrollbarWidth,
+          y: this._options.scrollbarOffset,
+        };
+        anchorProperties = { y: this._options.boxHeight };
+        break;
+      }
+      case "vertical": {
+        backroundProperties = {
+          x: this._options.scrollbarOffset,
+          width: this._options.scrollbarWidth,
+        };
+        handleProperties = {
+          x: this._options.scrollbarOffset,
+          width: this._options.scrollbarWidth,
+        };
+        anchorProperties = { x: this._options.boxWidth };
+        break;
+      }
+    }
 
-//     this.refresh();
+    this._activateChildChip({
+      chip: new layout.ContainerLeafChip({
+        displayObject: this._scrollbarAnchor,
+        properties: anchorProperties,
+      }),
+      context: { container: this.displayObject },
+    });
 
-//     this._subscribe(this.chipContext.pixiAppChip, "resize", () => {
-//       this._myResolver.setResovableCollection(this.resolvableOptions);
-//       this._myResolver.resolve({
-//         renderSize: this.chipContext.pixiAppChip.renderSize,
-//       });
-//       this.options = this._myResolver.getResolvedCollection();
-//       this.refresh();
-//     });
-//   }
+    this._activateChildChip({
+      chip: new layout.NineSlicePlaneChip({
+        displayObject: this._scrollbarBackground,
+        properties: backroundProperties,
+      }),
+      context: { container: this._scrollbarAnchor },
+    });
 
-//   /** Call when container contents have changed  */
-//   public refresh() {
-//     this.scrollTo(this.content.position);
-//     this._updateScrollbars();
-//     this.emit("refreshed");
-//   }
+    this._activateChildChip({
+      chip: new layout.NineSlicePlaneChip({
+        displayObject: this._scrollbarHandle,
+        properties: handleProperties,
+      }),
+      context: { container: this._scrollbarAnchor },
+    });
 
-//   private _updateScrollbars() {
-//     let boxSize: number;
-//     let contentSize: number;
+    this._scrollbarHandle.eventMode = "static";
+    this._subscribe(
+      this._scrollbarHandle,
+      "pointerdown",
+      this._scrollbarDown as any,
+    );
 
-//     switch (this.options.direction) {
-//       case "horizontal": {
-//         boxSize = this.options.boxWidth;
-//         contentSize = this._content.width;
-//         break;
-//       }
-//       case "vertical": {
-//         boxSize = this.options.boxHeight;
-//         contentSize = this._content.height;
-//         break;
-//       }
-//     }
+    this.refreshContents();
 
-//     if (
-//       this.options.overflow === "hidden" ||
-//       (this.options.overflow === "auto" && boxSize > contentSize)
-//     ) {
-//       this._scrollbarAnchor.visible = false;
-//       return;
-//     }
+    // TODO: check that resize event is working
+    this._subscribe(this, "didResize", this.refreshContents);
 
-//     this._scrollbarAnchor.visible = true;
-//     const ratio = geom.clamp(boxSize / contentSize, 0, 1);
+    // this._subscribe(this.chipContext.pixiAppChip, "resize", () => {
+    //   this._optionsResolver.setResovableCollection(this.resolvableOptions);
+    //   this._optionsResolver.resolve({
+    //     renderSize: this.chipContext.pixiAppChip.renderSize,
+    //   });
+    //   this._options = this._optionsResolver.getResolvedCollection();
+    //   this.refresh();
+    // });
+  }
 
-//     switch (this.options.direction) {
-//       case "horizontal": {
-//         this._scrollbarBackground.width = boxSize;
-//         this._scrollbarHandle.width = boxSize * ratio;
-//         this._scrollbarHandle.x = -1 * this.currentScroll * ratio;
-//         break;
-//       }
-//       case "vertical": {
-//         this._scrollbarBackground.height = boxSize;
-//         this._scrollbarHandle.height = boxSize * ratio;
-//         this._scrollbarHandle.y = -this._content.y * ratio;
-//         break;
-//       }
-//     }
-//   }
+  protected _onTerminate(): void {
+    delete this._pointerDown;
+  }
 
-//   private _onMove(e: PIXI.FederatedPointerEvent) {
-//     if (!this._pointerDown) return;
+  /** Call when container contents have changed  */
+  public refreshContents() {
+    this.scrollTo(this.content.position);
+    this._updateScrollbars();
+    this.emit("refreshedContents");
+  }
 
-//     if (this._pointerDown.type === "scrollbar") this._scrollbarMove(e);
-//     else if (this._pointerDown.type === "drag") this._dragMove(e);
-//     else throw new Error("no such type");
-//   }
+  private _updateScrollbars() {
+    let boxSize: number;
+    let contentSize: number;
 
-//   private _onUp(e: PIXI.FederatedPointerEvent) {
-//     if (!this._pointerDown) return;
+    switch (this._options.direction) {
+      case "horizontal": {
+        boxSize = this._options.boxWidth;
+        contentSize = this._content.width;
+        break;
+      }
+      case "vertical": {
+        boxSize = this._options.boxHeight;
+        contentSize = this._content.height;
+        break;
+      }
+    }
 
-//     if (this._pointerDown.type === "scrollbar") this._scrollbarUp();
-//     else if (this._pointerDown.type === "drag") this._dragUp();
-//     else throw new Error("no such type");
-//   }
+    if (
+      this._options.overflow === "hidden" ||
+      (this._options.overflow === "auto" && boxSize > contentSize)
+    ) {
+      this._scrollbarAnchor.visible = false;
+      return;
+    }
 
-//   /**
-//    * handle pointer down on scrollbar
-//    * @param {PIXI.FederatedPointerEvent} e
-//    * @private
-//    */
-//   private _scrollbarDown(e: PIXI.FederatedPointerEvent) {
-//     if (this._pointerDown) return;
+    this._scrollbarAnchor.visible = true;
+    const ratio = geom.clamp(boxSize / contentSize, 0, 1);
 
-//     const local = this._container.toLocal(e.global);
-//     this._pointerDown = {
-//       type: "scrollbar",
-//       last: local,
-//     };
+    switch (this._options.direction) {
+      case "horizontal": {
+        this._scrollbarBackground.width = boxSize;
+        this._scrollbarHandle.width = boxSize * ratio;
+        this._scrollbarHandle.x = -1 * this.currentScroll * ratio;
+        break;
+      }
+      case "vertical": {
+        this._scrollbarBackground.height = boxSize;
+        this._scrollbarHandle.height = boxSize * ratio;
+        this._scrollbarHandle.y = -this._content.y * ratio;
+        break;
+      }
+    }
+  }
 
-//     if (this.options.stopPropagation) {
-//       e.stopPropagation();
-//     }
-//     return;
-//   }
+  private _onMove(e: PIXI.FederatedPointerEvent) {
+    if (!this._pointerDown) return;
 
-//   /**
-//    * handle pointer move on scrollbar
-//    * @param {PIXI.FederatedPointerEvent} e
-//    * @private
-//    */
-//   private _scrollbarMove(e: PIXI.FederatedPointerEvent) {
-//     const local = this._container.toLocal(e.global);
+    if (this._pointerDown.type === "scrollbar") this._scrollbarMove(e);
+    else if (this._pointerDown.type === "drag") this._dragMove(e);
+    else throw new Error("no such type");
+  }
 
-//     if (this.options.direction === "horizontal") {
-//       const deltaPosition = local.x - this._pointerDown.last.x;
-//       const ratio = this.options.boxWidth / this._content.width;
-//       const fraction = deltaPosition / ratio;
-//       this.scrollBy({ x: -fraction, y: 0 });
-//     } else {
-//       const deltaPosition = local.y - this._pointerDown.last.y;
-//       const ratio = this.options.boxHeight / this._content.height;
-//       const fraction = deltaPosition / ratio;
-//       this.scrollBy({ x: 0, y: -fraction });
-//     }
+  private _onUp(e: PIXI.FederatedPointerEvent) {
+    if (!this._pointerDown) return;
 
-//     this._pointerDown.last = local;
+    if (this._pointerDown.type === "scrollbar") this._scrollbarUp();
+    else if (this._pointerDown.type === "drag") this._dragUp();
+    else throw new Error("no such type");
+  }
 
-//     if (this.options.stopPropagation) {
-//       e.stopPropagation();
-//     }
-//   }
+  /**
+   * handle pointer down on scrollbar
+   * @param {PIXI.FederatedPointerEvent} e
+   * @private
+   */
+  private _scrollbarDown(e: PIXI.FederatedPointerEvent) {
+    if (this._pointerDown) return;
 
-//   /**
-//    * handle pointer up on scrollbar
-//    * @private
-//    */
-//   private _scrollbarUp() {
-//     this._pointerDown = null;
-//     this._content.interactiveChildren = true;
-//   }
+    const local = this.displayObject.toLocal(e.global);
+    this._pointerDown = {
+      type: "scrollbar",
+      last: local,
+    };
 
-//   /**
-//    * handle pointer down on content
-//    * @param {PIXI.FederatedPointerEvent} e
-//    * @private
-//    */
-//   private _dragDown(e: PIXI.FederatedPointerEvent) {
-//     if (this._pointerDown) return;
+    if (this._options.stopPropagation) {
+      e.stopPropagation();
+    }
+    return;
+  }
 
-//     const local = this._container.toLocal(e.global);
-//     this._pointerDown = { type: "drag", last: local };
+  /**
+   * handle pointer move on scrollbar
+   * @param {PIXI.FederatedPointerEvent} e
+   * @private
+   */
+  private _scrollbarMove(e: PIXI.FederatedPointerEvent) {
+    const local = this.displayObject.toLocal(e.global);
 
-//     if (this.options.stopPropagation) {
-//       e.stopPropagation();
-//     }
-//   }
+    if (this._options.direction === "horizontal") {
+      const deltaPosition = local.x - this._pointerDown.last.x;
+      const ratio = this._options.boxWidth / this._content.width;
+      const fraction = deltaPosition / ratio;
+      this.scrollBy({ x: -fraction, y: 0 });
+    } else {
+      const deltaPosition = local.y - this._pointerDown.last.y;
+      const ratio = this._options.boxHeight / this._content.height;
+      const fraction = deltaPosition / ratio;
+      this.scrollBy({ x: 0, y: -fraction });
+    }
 
-//   /**
-//    * handle pointer move on content
-//    * @param {PIXI.FederatedPointerEvent} e
-//    * @private
-//    */
+    this._pointerDown.last = local;
 
-//   private _dragMove(e: PIXI.FederatedPointerEvent) {
-//     const local = this._container.toLocal(e.global) as PIXI.Point;
-//     const deltaPosition: PIXI.IPointData = { x: 0, y: 0 };
+    if (this._options.stopPropagation) {
+      e.stopPropagation();
+    }
+  }
 
-//     if (this.options.direction === "horizontal") {
-//       deltaPosition.x = local.x - this._pointerDown.last.x;
-//     } else {
-//       deltaPosition.y = local.y - this._pointerDown.last.y;
-//     }
+  /**
+   * handle pointer up on scrollbar
+   * @private
+   */
+  private _scrollbarUp() {
+    this._pointerDown = null;
+    this._content.interactiveChildren = true;
+  }
 
-//     if (booyahPixi.magnitude(deltaPosition) <= this.options.dragThreshold)
-//       return;
+  /**
+   * handle pointer down on content
+   * @param {PIXI.FederatedPointerEvent} e
+   * @private
+   */
+  private _dragDown(e: PIXI.FederatedPointerEvent) {
+    if (this._pointerDown) return;
 
-//     this.scrollBy(deltaPosition);
-//     this._pointerDown.last = local;
-//     this._content.interactiveChildren = false;
+    const local = this.displayObject.toLocal(e.global);
+    this._pointerDown = { type: "drag", last: local };
 
-//     if (this.options.stopPropagation) {
-//       e.stopPropagation();
-//     }
-//   }
+    if (this._options.stopPropagation) {
+      e.stopPropagation();
+    }
+  }
 
-//   /**
-//    * handle pointer up on content
-//    * @private
-//    */
-//   private _dragUp() {
-//     this._pointerDown = null;
-//     this._content.interactiveChildren = true;
-//   }
+  /**
+   * handle pointer move on content
+   * @param {PIXI.FederatedPointerEvent} e
+   * @private
+   */
 
-//   /**
-//    * handle wheel events
-//    * @param {WheelEvent} e
-//    */
-//   private _onWheel(e: WheelEvent) {
-//     // Finally, scroll!
-//     const scrollAmount = -e.deltaY / 5;
-//     if (this.options.direction === "horizontal") {
-//       this.scrollBy({ x: scrollAmount, y: 0 });
-//     } else {
-//       this.scrollBy({ x: 0, y: scrollAmount });
-//     }
+  private _dragMove(e: PIXI.FederatedPointerEvent) {
+    const local = this.displayObject.toLocal(e.global) as PIXI.Point;
+    const deltaPosition: PIXI.IPointData = { x: 0, y: 0 };
 
-//     e.preventDefault();
-//   }
+    if (this._options.direction === "horizontal") {
+      deltaPosition.x = local.x - this._pointerDown.last.x;
+    } else {
+      deltaPosition.y = local.y - this._pointerDown.last.y;
+    }
 
-//   public scrollBy(amount: PIXI.IPointData, reason = "user") {
-//     this.scrollTo(booyahPixi.add(this._content.position, amount), reason);
-//   }
+    if (math.magnitude(deltaPosition) <= this._options.dragThreshold) return;
 
-//   public scrollTo(position: PIXI.IPointData, reason = "user") {
-//     position.x = geom.clamp(
-//       position.x,
-//       this.options.boxWidth - this._content.width,
-//       0,
-//     );
-//     position.y = geom.clamp(
-//       position.y,
-//       this.options.boxHeight - this._content.height,
-//       0,
-//     );
-//     this._content.position.copyFrom(position);
+    this.scrollBy(deltaPosition);
+    this._pointerDown.last = local;
+    this._content.interactiveChildren = false;
 
-//     this._updateScrollbars();
+    if (this._options.stopPropagation) {
+      e.stopPropagation();
+    }
+  }
 
-//     this.emit("moved", { reason });
-//   }
+  /**
+   * handle pointer up on content
+   * @private
+   */
+  private _dragUp() {
+    this._pointerDown = null;
+    this._content.interactiveChildren = true;
+  }
 
-//   public get currentScroll() {
-//     return this.options.direction === "horizontal"
-//       ? this._content.x
-//       : this._content.y;
-//   }
+  /**
+   * handle wheel events
+   * @param {WheelEvent} e
+   */
+  private _onWheel(e: WheelEvent) {
+    // Finally, scroll!
+    const scrollAmount = -e.deltaY / 5;
+    if (this._options.direction === "horizontal") {
+      this.scrollBy({ x: scrollAmount, y: 0 });
+    } else {
+      this.scrollBy({ x: 0, y: scrollAmount });
+    }
 
-//   public get container() {
-//     return this._container;
-//   }
+    e.preventDefault();
+  }
 
-//   public get content() {
-//     return this._content;
-//   }
-// }
+  public scrollBy(amount: PIXI.IPointData, reason = "user") {
+    this.scrollTo(math.add(this._content.position, amount), reason);
+  }
+
+  public scrollTo(position: PIXI.IPointData, reason = "user") {
+    position.x = geom.clamp(
+      position.x,
+      this._options.boxWidth - this._content.width,
+      0,
+    );
+    position.y = geom.clamp(
+      position.y,
+      this._options.boxHeight - this._content.height,
+      0,
+    );
+    this._content.position.copyFrom(position);
+
+    this._updateScrollbars();
+
+    this.emit("moved", { reason });
+  }
+
+  public get currentScroll() {
+    return this._options.direction === "horizontal"
+      ? this._content.x
+      : this._content.y;
+  }
+
+  public get container() {
+    return this.displayObject;
+  }
+
+  public get content() {
+    return this._content;
+  }
+}

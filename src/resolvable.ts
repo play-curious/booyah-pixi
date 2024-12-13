@@ -1,11 +1,3 @@
-// /**
-//  * The acceptable values for the property.
-//  * Points can be set with a single number.
-//  */
-// export type ResolvableValueType<Type> = Type extends PIXI.ObservablePoint
-//   ? PIXI.IPointData | number
-//   : Type;
-
 export type DynamicResolvable<Type, ResolvableContext> = (
   context: ResolvableContext,
 ) => Type;
