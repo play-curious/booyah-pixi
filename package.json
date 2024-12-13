@@ -2,7 +2,9 @@
   "name": "booyah-pixi",
   "version": "4.0.1",
   "description": "Tools for using PixiJS with the Booyah game engine",
+  "main": "dist/index.js",
   "scripts": {
+    "clean": "rimraf dist",
     "build": "tsc",
     "watch": "tsc --watch",
     "checkTypes": "tsc --noEmit",
@@ -19,6 +21,7 @@
   "devDependencies": {
     "eslint": "^8.23.0",
     "eslint-config-prettier": "^8.5.0",
+    "rimraf": "^5.0.5",
     "typescript": "^5.4.5"
   },
   "peerDependencies": {

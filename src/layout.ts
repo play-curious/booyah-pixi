@@ -3,193 +3,48 @@ import * as util from "booyah/dist/util";
 import * as PIXI from "pixi.js";
 import * as _ from "underscore";
 
-/** Returns the vector length of a a PIXI Point */
-export function magnitude(a: PIXI.IPointData): number {
-  return Math.sqrt(a.x * a.x + a.y * a.y);
+import * as pixiApp from "./pixiApp";
+import * as resolvable from "./resolvable";
+
+export const layoutProperties = [
+  "minWidth",
+  "minHeight",
+  "idealWidth",
+  "idealHeight",
+  "maxWidth",
+  "maxHeight",
+] as const;
+
+export type LayoutProperty = (typeof layoutProperties)[number];
+
+export function isLayoutProperty(value: string): value is LayoutProperty {
+  return layoutProperties.includes(value as LayoutProperty);
 }
 
-/** Returns a copy of the PIXI Point x that has a magnitude between min and max */
-export function clampMagnitude(
-  a: PIXI.IPointData,
-  min: number,
-  max: number,
-): PIXI.Point {
-  const mag = magnitude(a);
-  if (mag < min) {
-    return multiply(a, min / mag);
-  } else if (mag > max) {
-    return multiply(a, max / mag);
-  } else {
-    return new PIXI.Point(a.x, a.y);
-  }
-}
-
-/** Returns the distance between two PIXI Points */
-export function distance(a: PIXI.IPointData, b: PIXI.IPointData): number {
-  const x = a.x - b.x;
-  const y = a.y - b.y;
-  return Math.sqrt(x * x + y * y);
-}
-
-/** Linear interpolation between points a and b, using the fraction p */
-export function lerpPoint(
-  a: PIXI.IPointData,
-  b: PIXI.IPointData,
-  p: number,
-): PIXI.Point {
-  const x = b.x - a.x;
-  const y = b.y - a.y;
-  return new PIXI.Point(a.x + p * x, a.y + p * y);
-}
-
-/** Returns the sum of PIXI points */
-export function add(...points: PIXI.IPointData[]): PIXI.Point {
-  const r = new PIXI.Point();
-  for (const p of points) {
-    r.x += p.x;
-    r.y += p.y;
-  }
-  return r;
-}
-
-/** Returns the difference of PIXI points */
-export function subtract(...points: PIXI.IPointData[]): PIXI.IPointData {
-  const r = new PIXI.Point(points[0].x, points[0].y);
-  for (let i = 1; i < points.length; i++) {
-    r.x -= points[i].x;
-    r.y -= points[i].y;
-  }
-  return r;
-}
-
-/** Returns the multiplication of a PIXI point by a scalar */
-export function multiply(a: PIXI.IPointData, p: number): PIXI.Point {
-  return new PIXI.Point(a.x * p, a.y * p);
-}
-
-/** Returns the division of a PIXI point by a scalar */
-export function divide(a: PIXI.IPointData, p: number): PIXI.Point {
-  return new PIXI.Point(a.x / p, a.y / p);
-}
-
-/** Returns a PIXI point with each element rounded down */
-export function floor(p: PIXI.IPointData): PIXI.Point {
-  return new PIXI.Point(Math.floor(p.x), Math.floor(p.y));
-}
-
-/** Returns a PIXI point with each element rounded */
-export function round(p: PIXI.IPointData): PIXI.Point {
-  return new PIXI.Point(Math.round(p.x), Math.round(p.y));
-}
-
-/** Returns a PIXI point that has the minimum of each component */
-export function min(...points: PIXI.IPointData[]): PIXI.Point {
-  const r = new PIXI.Point(Infinity, Infinity);
-  for (const p of points) {
-    r.x = Math.min(p.x, r.x);
-    r.y = Math.min(p.y, r.y);
-  }
-  return r;
-}
-
-/** Returns a PIXI point that has the maximum of each component */
-export function max(...points: PIXI.IPointData[]): PIXI.Point {
-  const r = new PIXI.Point(-Infinity, -Infinity);
-  for (const p of points) {
-    r.x = Math.max(p.x, r.x);
-    r.y = Math.max(p.y, r.y);
-  }
-  return r;
-}
-
-/** Returns true if the point p is between points min and max */
-export function inRectangle(
-  p: PIXI.IPointData,
-  min: PIXI.IPointData,
-  max: PIXI.IPointData,
-) {
-  return p.x >= min.x && p.x <= max.x && p.y >= min.y && p.y <= max.y;
-}
-
-/** Takes the mean of PIXI points */
-export function average(...points: PIXI.IPointData[]): PIXI.Point {
-  let sum = new PIXI.Point();
-  for (const point of points) sum = add(sum, point);
-  return divide(sum, points.length);
-}
-
-/**
- Returs a point along the line between a and b, moving at a given speed.
- Will not "overshoot" b.
- */
-export function moveTowards(
-  a: PIXI.IPointData,
-  b: PIXI.IPointData,
-  speed: number,
-): PIXI.Point {
-  const d = distance(a, b);
-  return lerpPoint(a, b, util.clamp(speed / d, 0, 1));
-}
-
-export const moveTowardsPoint = moveTowards;
-
-/** Returns a random point between a amd b, with each component considered separately */
-export function randomPointInRange(
-  min: PIXI.IPointData,
-  max: PIXI.IPointData,
-): PIXI.Point {
-  return new PIXI.Point(
-    util.randomInRange(min.x, max.x),
-    util.randomInRange(min.y, max.y),
-  );
-}
-
-/** Creates a vector pointing in the direction angle, with the length magnitude */
-export function vectorFromAngle(angle: number, magnitude = 1): PIXI.IPointData {
-  return new PIXI.Point(
-    Math.cos(angle) * magnitude,
-    Math.sin(angle) * magnitude,
-  );
-}
-
-/* Returns true if point is within distance d of otherPoints */
-export function withinDistanceOfPoints(
-  point: PIXI.IPointData,
-  d: number,
-  otherPoints: PIXI.IPointData[],
-): boolean {
-  for (const otherPoint of otherPoints) {
-    if (distance(point, otherPoint) <= d) return true;
-  }
-  return false;
-}
-
-export type LayoutProperty =
-  | "minWidth"
-  | "minHeight"
-  | "idealWidth"
-  | "idealHeight"
-  | "maxWidth"
-  | "maxHeight";
-
-export type StaticLayoutValue = number | LayoutProperty;
+export type LayoutValue = number | LayoutProperty;
 
 export interface RenderInfo {
   renderSize: PIXI.IPointData;
 }
 
-export interface DynamicLayoutValueOptions extends RenderInfo {
-  layoutOptions: Partial<LayoutOptions>;
+export interface LayoutValueResolvableContext<LayoutOptionsType>
+  extends RenderInfo {
+  layoutOptions: Partial<
+    resolvable.ResolvableObject<
+      LayoutOptionsType,
+      LayoutValueResolvableContext<LayoutOptionsType>
+    >
+  >;
   layoutItem: LayoutItem;
 }
 
-export type DynamicLayoutItemValue = (
-  options: DynamicLayoutValueOptions,
-) => StaticLayoutValue;
+// export type DynamicLayoutItemValue = (
+//   options: DynamicLayoutValueOptions,
+// ) => StaticLayoutValue;
 
-export type LayoutValue = StaticLayoutValue | DynamicLayoutItemValue;
+// export type LayoutValue = StaticLayoutValue; // | DynamicLayoutItemValue;
 
-export class LayoutOptions {
+export class LayoutOptionsBase {
   minWidth: LayoutValue;
   minHeight: LayoutValue;
 
@@ -205,52 +60,68 @@ export class LayoutOptions {
   paddingBottom: LayoutValue = 0;
 }
 
-function safeParseLayoutProperty(
-  layoutItem: LayoutItem,
-  layoutOptions: Partial<LayoutOptions>,
-  prop: keyof LayoutOptions,
-  renderInfo: RenderInfo,
-): number {
-  return parseLayoutProperty(layoutItem, layoutOptions, prop, renderInfo) || 0;
-}
+// export class LayoutOptions {
+//   minWidth: LayoutValue;
+//   minHeight: LayoutValue;
 
-// Parses a property in the layout item options as a number
-function parseLayoutProperty(
-  layoutItem: LayoutItem,
-  layoutOptions: Partial<LayoutOptions>,
-  prop: keyof LayoutOptions,
-  renderInfo: RenderInfo,
-): number | undefined {
-  const propValue = layoutOptions[prop] as LayoutValue;
+//   idealWidth: LayoutValue;
+//   idealHeight: LayoutValue;
 
-  // If property doesn't exist, return undefined
-  if (typeof propValue === "undefined") return;
+//   maxWidth: LayoutValue;
+//   maxHeight: LayoutValue;
 
-  // If property is a number, return it directly
-  if (typeof propValue === "number") return propValue as number;
+//   paddingLeft: LayoutValue = 0;
+//   paddingRight: LayoutValue = 0;
+//   paddingTop: LayoutValue = 0;
+//   paddingBottom: LayoutValue = 0;
+// }
 
-  // If property is a function (dynamic) call it and parse the result
-  if (typeof propValue === "function") {
-    const evaluatedValue = (propValue as DynamicLayoutItemValue)({
-      layoutOptions: layoutOptions,
-      layoutItem,
-      ...renderInfo,
-    });
-    if (typeof evaluatedValue === "undefined") return 0;
-    if (typeof evaluatedValue === "number") return evaluatedValue as number;
-  }
+// function safeParseLayoutProperty(
+//   layoutItem: LayoutItem,
+//   layoutOptions: Partial<LayoutOptions>,
+//   prop: keyof LayoutOptions,
+//   renderInfo: RenderInfo,
+// ): number {
+//   return parseLayoutProperty(layoutItem, layoutOptions, prop, renderInfo) || 0;
+// }
 
-  // Find matching property and return it
-  const matchingProp = propValue as LayoutProperty;
-  const matchingValue = layoutItem[matchingProp];
-  if (typeof matchingValue !== "number") {
-    throw new Error(
-      `LayoutItem referencing property ${matchingProp} which is not a number. Value: ${matchingValue}`,
-    );
-  }
+// // Parses a property in the layout item options as a number
+// function parseLayoutProperty(
+//   layoutItem: LayoutItem,
+//   layoutOptions: Partial<LayoutOptions>,
+//   prop: keyof LayoutOptions,
+//   renderInfo: RenderInfo,
+// ): number | undefined {
+//   const propValue = layoutOptions[prop] as LayoutValue;
 
-  return matchingValue;
-}
+//   // If property doesn't exist, return undefined
+//   if (typeof propValue === "undefined") return;
+
+//   // If property is a number, return it directly
+//   if (typeof propValue === "number") return propValue as number;
+
+//   // If property is a function (dynamic) call it and parse the result
+//   if (typeof propValue === "function") {
+//     const evaluatedValue = (propValue as DynamicLayoutItemValue)({
+//       layoutOptions: layoutOptions,
+//       layoutItem,
+//       ...renderInfo,
+//     });
+//     if (typeof evaluatedValue === "undefined") return;
+//     if (typeof evaluatedValue === "number") return evaluatedValue as number;
+//   }
+
+//   // Find matching property and return it
+//   const matchingProp = propValue as LayoutProperty;
+//   const matchingValue = layoutItem[matchingProp];
+//   if (typeof matchingValue !== "number") {
+//     throw new Error(
+//       `LayoutItem referencing property ${matchingProp} which is not a number. Value: ${matchingValue}`,
+//     );
+//   }
+
+//   return matchingValue;
+// }
 
 export type LayoutItemChildChipOptions = Array<
   chip.ActivateChildChipOptions | chip.ChipResolvable
@@ -303,17 +174,48 @@ export interface LayoutItem extends chip.NodeEventSource {
   removeChildLayoutItem(child: LayoutItem): void;
 }
 
-export abstract class LayoutItemBase
+export class LayoutItemBaseOptions<LayoutOptionsType> {
+  layoutOptions: Partial<
+    resolvable.ResolvableObject<
+      LayoutOptionsType,
+      LayoutValueResolvableContext<LayoutOptionsType>
+    >
+  >;
+  children: LayoutItemChildChipOptions = [];
+}
+
+export abstract class LayoutItemBase<
+    LayoutOptionsType extends LayoutOptionsBase = LayoutOptionsBase,
+    OptionsType extends
+      LayoutItemBaseOptions<LayoutOptionsType> = LayoutItemBaseOptions<LayoutOptionsType>,
+  >
   extends chip.Parallel
   implements LayoutItem
 {
-  protected abstract _layoutOptions: LayoutOptions;
+  // protected abstract _layoutOptions: resolvable.ResolvableObject<LayoutOptions, LayoutValueResolvableContext>;
+  protected _options: OptionsType;
+
+  protected _layoutOptionsResolver: resolvable.Resolver<
+    OptionsType["layoutOptions"],
+    LayoutValueResolvableContext<OptionsType["layoutOptions"]>
+  >;
 
   protected _lastRenderInfo?: RenderInfo;
   protected _lastRefreshInfo?: RefreshInfo;
 
-  constructor(childChipOptions: LayoutItemChildChipOptions = []) {
-    super(childChipOptions, { terminateOnCompletion: false });
+  constructor(options?: Partial<OptionsType>) {
+    const filledOptions = chip.fillInOptions(
+      options,
+      new LayoutItemBaseOptions(),
+    );
+    super(filledOptions.children, { terminateOnCompletion: false });
+
+    this._options = filledOptions as OptionsType;
+
+    this._layoutOptionsResolver = new resolvable.Resolver<
+      OptionsType["layoutOptions"],
+      LayoutValueResolvableContext<OptionsType["layoutOptions"]>
+    >(this.layoutOptions);
   }
 
   addChildLayoutItem(child: LayoutItem): void {
@@ -339,6 +241,7 @@ export abstract class LayoutItemBase
   }
 
   refresh(refreshInfo: RefreshInfo): void {
+    this._layoutOptionsResolver.invalidate();
     this._lastRefreshInfo = refreshInfo;
     this.emit("willRefresh", refreshInfo);
 
@@ -378,87 +281,37 @@ export abstract class LayoutItemBase
   }
 
   get minWidth(): number | undefined {
-    return parseLayoutProperty(
-      this,
-      this._layoutOptions,
-      "minWidth",
-      this._lastRenderInfo,
-    );
+    return this.parseLayoutPropertyAsNumber("minWidth");
   }
   get minHeight(): number | undefined {
-    return parseLayoutProperty(
-      this,
-      this._layoutOptions,
-      "minHeight",
-      this._lastRenderInfo,
-    );
+    return this.parseLayoutPropertyAsNumber("minHeight");
   }
 
   get idealWidth(): number | undefined {
-    return parseLayoutProperty(
-      this,
-      this._layoutOptions,
-      "idealWidth",
-      this._lastRenderInfo,
-    );
+    return this.parseLayoutPropertyAsNumber("idealWidth");
   }
   get idealHeight(): number | undefined {
-    return parseLayoutProperty(
-      this,
-      this._layoutOptions,
-      "idealHeight",
-      this._lastRenderInfo,
-    );
+    return this.parseLayoutPropertyAsNumber("idealHeight");
   }
 
   get maxWidth(): number | undefined {
-    return parseLayoutProperty(
-      this,
-      this._layoutOptions,
-      "maxWidth",
-      this._lastRenderInfo,
-    );
+    return this.parseLayoutPropertyAsNumber("maxWidth");
   }
   get maxHeight(): number | undefined {
-    return parseLayoutProperty(
-      this,
-      this._layoutOptions,
-      "maxHeight",
-      this._lastRenderInfo,
-    );
+    return this.parseLayoutPropertyAsNumber("maxHeight");
   }
 
   get paddingLeft(): number {
-    return safeParseLayoutProperty(
-      this,
-      this._layoutOptions,
-      "paddingLeft",
-      this._lastRenderInfo,
-    );
+    return this.safeParseLayoutPropertyAsNumber("paddingLeft");
   }
   get paddingRight(): number {
-    return safeParseLayoutProperty(
-      this,
-      this._layoutOptions,
-      "paddingRight",
-      this._lastRenderInfo,
-    );
+    return this.safeParseLayoutPropertyAsNumber("paddingRight");
   }
   get paddingTop(): number {
-    return safeParseLayoutProperty(
-      this,
-      this._layoutOptions,
-      "paddingTop",
-      this._lastRenderInfo,
-    );
+    return this.safeParseLayoutPropertyAsNumber("paddingTop");
   }
   get paddingBottom(): number {
-    return safeParseLayoutProperty(
-      this,
-      this._layoutOptions,
-      "paddingBottom",
-      this._lastRenderInfo,
-    );
+    return this.safeParseLayoutPropertyAsNumber("paddingBottom");
   }
 
   /** Request a new refresh cycle */
@@ -467,7 +320,7 @@ export abstract class LayoutItemBase
   }
 
   get layoutOptions() {
-    return this._layoutOptions;
+    return this._options.layoutOptions;
   }
 
   get parentLayoutItem() {
@@ -481,18 +334,63 @@ export abstract class LayoutItemBase
   get lastRenderInfo() {
     return this._lastRenderInfo;
   }
+
+  parseLayoutProperty(
+    prop: keyof OptionsType["layoutOptions"],
+  ): number | string | undefined {
+    const resolvableContext: LayoutValueResolvableContext<
+      OptionsType["layoutOptions"]
+    > = {
+      layoutOptions: this.layoutOptions,
+      layoutItem: this,
+      ...this.lastRenderInfo,
+    };
+    const value = this._layoutOptionsResolver.resolve(prop, resolvableContext);
+
+    if (typeof value === "string" && isLayoutProperty(value)) {
+      // Find matching property and return it
+      const matchingProp = value as LayoutProperty;
+      const matchingValue = this[matchingProp];
+      //  this._layoutOptionsResolver.resolve(
+      //   matchingProp,
+      //   resolvableContext,
+      // );
+
+      if (
+        typeof matchingValue !== "number" &&
+        typeof matchingValue !== undefined
+      ) {
+        throw new Error(
+          `LayoutItem referencing property ${matchingProp} which is not a number. Value: ${matchingValue}`,
+        );
+      }
+
+      return matchingValue;
+    }
+
+    return value;
+  }
+
+  parseLayoutPropertyAsNumber(
+    prop: keyof OptionsType["layoutOptions"],
+  ): number | undefined {
+    const value = this.parseLayoutProperty(prop);
+    if (typeof value === "string")
+      throw new Error(
+        `Cannot parseLayoutPropertyAsNumber the string "${value}"`,
+      );
+    return value;
+  }
+
+  safeParseLayoutPropertyAsNumber(
+    prop: keyof OptionsType["layoutOptions"],
+  ): number {
+    return this.parseLayoutPropertyAsNumber(prop) || 0;
+  }
 }
 
 /** Just takes up space */
 export class SpacerChip extends LayoutItemBase {
-  protected _layoutOptions: LayoutOptions;
-
-  constructor(options?: Partial<LayoutOptions>) {
-    super();
-
-    this._layoutOptions = util.fillInOptions(options, new LayoutOptions());
-  }
-
   protected _onActivate(): void {
     this.parentLayoutItem?.addChildLayoutItem(this);
   }
@@ -502,142 +400,16 @@ export class SpacerChip extends LayoutItemBase {
   }
 }
 
-class PixiAppChipOptions {
-  /* Provide either a parent element or a canvas */
-  parentElement?: HTMLElement;
-  canvas?: PIXI.ICanvas;
+// /** Options provided to all the value functions on resize */
+// export interface DisplayObjectValueFunctionOptions<
+//   DisplayObjectType extends PIXI.DisplayObject,
+// > {
+//   displayObject: DisplayObjectType;
+//   pixiAppChip: pixiApp.PixiAppChip;
+//   renderSize: PIXI.IPointData;
+// }
 
-  appOptions?: Partial<PIXI.IApplicationOptions & PIXI.IRendererOptions>;
-
-  /** If true, set up a container to handle layout */
-  addContainerChip = false;
-}
-
-export class PixiAppChip extends chip.Composite {
-  private readonly _options: PixiAppChipOptions;
-
-  private _pixiApplication: PIXI.Application;
-  private _stackingContainerChip?: StackingContainerChip;
-  private _refreshNeeded: boolean;
-
-  constructor(options?: Partial<PixiAppChipOptions>) {
-    super();
-
-    this._options = chip.fillInOptions(options, new PixiAppChipOptions());
-  }
-
-  protected _onActivate(): void {
-    this._refreshNeeded = false;
-
-    const appOptions = this._options?.appOptions || {};
-    appOptions.autoStart = false;
-    if (this._options.canvas) {
-      appOptions.view = this._options.canvas;
-    }
-
-    this._pixiApplication = new PIXI.Application(appOptions);
-    if (!this._options.canvas) {
-      const parent = this._options?.parentElement || document.body;
-      parent.appendChild(this._pixiApplication.view as unknown as Node);
-    }
-
-    if (this._options.addContainerChip) {
-      this._activateChildChip(new StackingContainerChip(), {
-        context: {
-          pixiAppChip: this,
-          pixiApplication: this._pixiApplication,
-          container: this._pixiApplication.stage,
-        },
-        attribute: "_stackingContainerChip",
-      });
-
-      this._subscribe(this._stackingContainerChip, "updated", this._onResize);
-    }
-
-    // If PIXI handles resizing, listen to that event. Otherwise listen to the window
-    if (this._pixiApplication.resizeTo) {
-      this._subscribe(this._pixiApplication.renderer, "resize", this._onResize);
-    } else {
-      this._subscribe(window, "resize", this._onResize);
-    }
-
-    this._handleResize();
-  }
-
-  protected _onTick(): void {
-    if (this._refreshNeeded) {
-      this._handleResize();
-      this._refreshNeeded = false;
-    }
-
-    this._pixiApplication.render();
-  }
-
-  protected _onTerminate(): void {
-    this._pixiApplication.destroy(true);
-  }
-
-  get contextModification(): chip.ChipContextResolvable {
-    if (this._stackingContainerChip) {
-      return {
-        pixiAppChip: this,
-        pixiApplication: this._pixiApplication,
-        ...this._stackingContainerChip.contextModification,
-      };
-    } else {
-      return {
-        pixiAppChip: this,
-        pixiApplication: this._pixiApplication,
-        container: this._pixiApplication.stage,
-      };
-    }
-  }
-
-  private _onResize() {
-    this._refreshNeeded = true;
-  }
-
-  private _handleResize() {
-    this.emit("willResize");
-
-    if (this._stackingContainerChip) {
-      this._stackingContainerChip.prepareRefresh({
-        renderSize: this.renderSize,
-      });
-
-      const screenBounds = Bounds.fromRectangle(this._pixiApplication.screen);
-      this._stackingContainerChip.refresh({
-        absoluteBounds: screenBounds,
-        localBounds: screenBounds,
-      });
-    }
-
-    this.emit("didResize");
-  }
-
-  get renderSize() {
-    const renderer = this._pixiApplication.renderer;
-    return new PIXI.Point(renderer.width, renderer.height);
-  }
-
-  get pixiApplication() {
-    return this._pixiApplication;
-  }
-}
-
-/** Options provided to all the value functions on resize */
-export interface DisplayObjectValueFunctionOptions<
-  DisplayObjectType extends PIXI.DisplayObject,
-> {
-  displayObject: DisplayObjectType;
-  pixiAppChip: PixiAppChip;
-  renderSize: PIXI.IPointData;
-}
-
-/**
- * The acceptable values for the property.
- * Points can be set with a single number.
- */
+/** When resolving pixi display objects, accept numbers or IPointData for points */
 export type DisplayObjectValueType<
   DisplayObjectType extends PIXI.DisplayObject,
   Property extends keyof DisplayObjectType,
@@ -645,48 +417,76 @@ export type DisplayObjectValueType<
   ? PIXI.IPointData | number
   : DisplayObjectType[Property];
 
-export type DisplayObjectValueFunction<
-  DisplayObjectType extends PIXI.DisplayObject,
-  Property extends keyof DisplayObjectType,
-> = (
-  options: DisplayObjectValueFunctionOptions<DisplayObjectType>,
-) => DisplayObjectValueType<DisplayObjectType, Property>;
+export type DisplayObjectTypeMap<DisplayObjectType extends PIXI.DisplayObject> =
+  {
+    [Property in keyof DisplayObjectType]: DisplayObjectValueType<
+      DisplayObjectType,
+      Property
+    >;
+  };
 
-export type DisplayObjectValueResolvable<
+export type ResolvablePixiDisplayObject<
   DisplayObjectType extends PIXI.DisplayObject,
-  Property extends keyof DisplayObjectType,
-> =
-  | DisplayObjectValueType<DisplayObjectType, Property>
-  | DisplayObjectValueFunction<DisplayObjectType, Property>;
+  LayoutOptionsType,
+> = resolvable.ResolvableObject<
+  DisplayObjectTypeMap<DisplayObjectType>,
+  LayoutValueResolvableContext<LayoutOptionsType>
+>;
 
-export function isDisplayObjectValueFunction<
-  DisplayObjectType extends PIXI.DisplayObject,
-  Property extends keyof DisplayObjectType,
->(
-  resolvable: DisplayObjectValueResolvable<DisplayObjectType, Property>,
-): resolvable is DisplayObjectValueFunction<DisplayObjectType, Property> {
-  return typeof resolvable === "function";
-}
+// /**
+//  * The acceptable values for the property.
+//  * Points can be set with a single number.
+//  */
+// export type DisplayObjectValueType<
+//   DisplayObjectType extends PIXI.DisplayObject,
+//   Property extends keyof DisplayObjectType,
+// > = DisplayObjectType[Property] extends PIXI.ObservablePoint
+//   ? PIXI.IPointData | number
+//   : DisplayObjectType[Property];
 
-export type DisplayObjectProperties<
-  DisplayObjectType extends PIXI.DisplayObject,
-> = {
-  [Property in keyof DisplayObjectType]?: DisplayObjectValueResolvable<
-    DisplayObjectType,
-    Property
-  >;
-};
+// export type DisplayObjectValueFunction<
+//   DisplayObjectType extends PIXI.DisplayObject,
+//   Property extends keyof DisplayObjectType,
+// > = (
+//   options: DisplayObjectValueFunctionOptions<DisplayObjectType>,
+// ) => DisplayObjectValueType<DisplayObjectType, Property>;
+
+// export type DisplayObjectValueResolvable<
+//   DisplayObjectType extends PIXI.DisplayObject,
+//   Property extends keyof DisplayObjectType,
+// > =
+//   | DisplayObjectValueType<DisplayObjectType, Property>
+//   | DisplayObjectValueFunction<DisplayObjectType, Property>;
+
+// export function isDisplayObjectValueFunction<
+//   DisplayObjectType extends PIXI.DisplayObject,
+//   Property extends keyof DisplayObjectType,
+// >(
+//   resolvable: DisplayObjectValueResolvable<DisplayObjectType, Property>,
+// ): resolvable is DisplayObjectValueFunction<DisplayObjectType, Property> {
+//   return typeof resolvable === "function";
+// }
+
+// export type DisplayObjectProperties<
+//   DisplayObjectType extends PIXI.DisplayObject,
+// > = {
+//   [Property in keyof DisplayObjectType]?: DisplayObjectValueResolvable<
+//     DisplayObjectType,
+//     Property
+//   >;
+// };
 
 export class DisplayObjectChipOptions<
   DisplayObjectType extends PIXI.DisplayObject,
-> {
+  LayoutOptionsType extends LayoutOptionsBase,
+> extends LayoutItemBaseOptions<LayoutOptionsType> {
   displayObject: DisplayObjectType;
-  children: Array<chip.ActivateChildChipOptions | chip.ChipResolvable> = [];
-  properties?: DisplayObjectProperties<DisplayObjectType> = {};
+  properties?: Partial<
+    ResolvablePixiDisplayObject<DisplayObjectType, LayoutOptionsType>
+  > = {};
   onResize?: (
-    options: DisplayObjectValueFunctionOptions<DisplayObjectType>,
+    context: LayoutValueResolvableContext<LayoutOptionsType>,
   ) => unknown;
-  layoutOptions?: Partial<LayoutOptions>;
 
   addToParentLayoutItem = true;
   addToContainer = true;
@@ -694,51 +494,79 @@ export class DisplayObjectChipOptions<
 
 export abstract class DisplayObjectChip<
   DisplayObjectType extends PIXI.DisplayObject,
-> extends LayoutItemBase {
-  protected abstract readonly _options: DisplayObjectChipOptions<DisplayObjectType>;
+  LayoutOptionsType extends LayoutOptionsBase = LayoutOptionsBase,
+  OptionsType extends DisplayObjectChipOptions<
+    DisplayObjectType,
+    LayoutOptionsType
+  > = DisplayObjectChipOptions<DisplayObjectType, LayoutOptionsType>,
+> extends LayoutItemBase<LayoutOptionsType, OptionsType> {
+  // private _propertiesToUpdateOnResize: Array<keyof DisplayObjectType>;
 
-  private _propertiesToUpdateOnResize: Array<keyof DisplayObjectType>;
+  protected _propertiesResolver: resolvable.Resolver<
+    ResolvablePixiDisplayObject<DisplayObjectType, LayoutOptionsType>,
+    LayoutValueResolvableContext<LayoutOptionsType>
+  >;
+
+  constructor(options: OptionsType) {
+    super(options);
+
+    this._propertiesResolver = new resolvable.Resolver(options.properties);
+  }
 
   protected _onActivate() {
     super._onActivate();
 
-    this._propertiesToUpdateOnResize = [];
-
-    const valueFunctionOptions = {
-      displayObject: this._options.displayObject,
-      pixiAppChip: this.pixiAppChip,
+    // Set initial values for properties
+    const resolvableContext: LayoutValueResolvableContext<LayoutOptionsType> = {
+      layoutOptions: this.layoutOptions,
+      layoutItem: this,
       renderSize: this.pixiAppChip.renderSize,
     };
 
-    for (const property in this._options.properties) {
-      const resolvable = this._options.properties[
-        property
-      ] as DisplayObjectValueResolvable<
-        DisplayObjectType,
-        keyof DisplayObjectType
-      >;
-      let value: DisplayObjectValueType<
-        DisplayObjectType,
-        keyof DisplayObjectType
-      >;
-      if (isDisplayObjectValueFunction(resolvable)) {
-        this._propertiesToUpdateOnResize.push(property);
-        value = (
-          resolvable as DisplayObjectValueFunction<
-            DisplayObjectType,
-            keyof DisplayObjectType
-          >
-        )(valueFunctionOptions);
-      } else {
-        value = resolvable;
-      }
-
-      updateProperty(
-        this._options.displayObject,
-        property as keyof DisplayObjectType,
-        value,
+    for (const prop of this._propertiesResolver.properties) {
+      this.updateProperty(
+        prop,
+        this._propertiesResolver.resolve(prop, resolvableContext),
       );
     }
+
+    // this._propertiesToUpdateOnResize = [];
+
+    // const valueFunctionOptions = {
+    //   displayObject: this._options.displayObject,
+    //   pixiAppChip: this.pixiAppChip,
+    //   renderSize: this.pixiAppChip.renderSize,
+    // };
+
+    // for (const property in this._options.properties) {
+    //   const resolvable = this._options.properties[
+    //     property
+    //   ] as DisplayObjectValueResolvable<
+    //     DisplayObjectType,
+    //     keyof DisplayObjectType
+    //   >;
+    //   let value: DisplayObjectValueType<
+    //     DisplayObjectType,
+    //     keyof DisplayObjectType
+    //   >;
+    //   if (isDisplayObjectValueFunction(resolvable)) {
+    //     this._propertiesToUpdateOnResize.push(property);
+    //     value = (
+    //       resolvable as DisplayObjectValueFunction<
+    //         DisplayObjectType,
+    //         keyof DisplayObjectType
+    //       >
+    //     )(valueFunctionOptions);
+    //   } else {
+    //     value = resolvable;
+    //   }
+
+    //   updateProperty(
+    //     this._options.displayObject,
+    //     property as keyof DisplayObjectType,
+    //     value,
+    //   );
+    // }
 
     if (
       !this._options.hasOwnProperty("addToContainer") ||
@@ -753,7 +581,11 @@ export abstract class DisplayObjectChip<
       this.parentLayoutItem.addChildLayoutItem(this);
     } else {
       // Call _updateProperties() directly
-      this._subscribe(this.pixiAppChip, "didResize", this._updateProperties);
+      this._subscribe(
+        this.pixiAppChip,
+        "didResize",
+        this._updateDynamicProperties,
+      );
     }
   }
 
@@ -772,47 +604,83 @@ export abstract class DisplayObjectChip<
     super._onTerminate();
   }
 
-  protected _updateProperties() {
-    const valueFunctionOptions = {
-      displayObject: this._options.displayObject,
-      pixiAppChip: this.pixiAppChip,
-      renderSize: this.pixiAppChip.renderSize,
+  protected _onRefresh(): void {
+    this._updateDynamicProperties();
+  }
+
+  protected _updateDynamicProperties() {
+    // const valueFunctionOptions = {
+    //   displayObject: this._options.displayObject,
+    //   pixiAppChip: this.pixiAppChip,
+    //   renderSize: this.pixiAppChip.renderSize,
+    // };
+
+    // // TODO: optionally update ideal size
+
+    // for (const property of this._propertiesToUpdateOnResize) {
+    //   const f = this._options.properties[
+    //     property
+    //   ] as DisplayObjectValueFunction<
+    //     DisplayObjectType,
+    //     keyof DisplayObjectType
+    //   >;
+    //   const value = f(valueFunctionOptions);
+    //   updateProperty(this._options.displayObject, property, value);
+    // }
+
+    this._propertiesResolver.invalidate();
+
+    // Update dynamic properties
+    const resolvableContext: LayoutValueResolvableContext<LayoutOptionsType> = {
+      layoutOptions: this.layoutOptions,
+      layoutItem: this,
+      ...this.lastRenderInfo,
     };
 
-    // TODO: optionally update ideal size
-
-    for (const property of this._propertiesToUpdateOnResize) {
-      const f = this._options.properties[
-        property
-      ] as DisplayObjectValueFunction<
-        DisplayObjectType,
-        keyof DisplayObjectType
-      >;
-      const value = f(valueFunctionOptions);
-      updateProperty(this._options.displayObject, property, value);
+    for (const prop of this._propertiesResolver.dynamicProperties) {
+      this.updateProperty(
+        prop,
+        this._propertiesResolver.resolve(prop, resolvableContext),
+      );
     }
 
-    this._options.onResize?.({
-      displayObject: this._options.displayObject,
-      pixiAppChip: this.pixiAppChip,
-      renderSize: this.pixiAppChip.renderSize,
-    });
+    this._options.onResize?.(resolvableContext);
   }
 
   get pixiAppChip() {
-    return this._chipContext.pixiAppChip as PixiAppChip;
+    return this._chipContext.pixiAppChip as pixiApp.PixiAppChip;
   }
 
   protected get _layoutOptions() {
-    return this._options.layoutOptions as LayoutOptions;
+    return this._options.layoutOptions as LayoutOptionsBase;
   }
 
   get displayObject() {
     return this._options.displayObject;
   }
+
+  updateProperty<Property extends keyof DisplayObjectType>(
+    property: Property,
+    value: DisplayObjectValueType<DisplayObjectType, Property>,
+  ) {
+    if (this.displayObject[property] instanceof PIXI.ObservablePoint) {
+      if (typeof value === "number") {
+        (this.displayObject[property] as PIXI.ObservablePoint).set(
+          value as number,
+        );
+      } else {
+        // Assume it's a IPointData
+        (this.displayObject[property] as PIXI.ObservablePoint).copyFrom(
+          value as PIXI.IPointData,
+        );
+      }
+    } else {
+      this.displayObject[property] = value as DisplayObjectType[Property];
+    }
+  }
 }
 
-export class DisplayLeafLayoutOptions extends LayoutOptions {
+export class DisplayLeafLayoutOptions extends LayoutOptionsBase {
   keepAspectRatio = false;
 
   horizontalAlign: "left" | "right" | "center" = "left";
@@ -824,14 +692,18 @@ export class DisplayLeafLayoutOptions extends LayoutOptions {
 
 export class DisplayLeafChipOptions<
   DisplayObjectType extends PIXI.DisplayObject,
-> extends DisplayObjectChipOptions<DisplayObjectType> {
-  layoutOptions?: Partial<DisplayLeafLayoutOptions>;
-}
+  LayoutOptionsType extends DisplayLeafLayoutOptions = DisplayLeafLayoutOptions,
+> extends DisplayObjectChipOptions<DisplayObjectType, LayoutOptionsType> {}
 
 export class DisplayLeafChip<
   DisplayObjectType extends PIXI.DisplayObject,
-> extends DisplayObjectChip<DisplayObjectType> {
-  protected readonly _options: DisplayLeafChipOptions<DisplayObjectType>;
+  LayoutOptionsType extends DisplayLeafLayoutOptions = DisplayLeafLayoutOptions,
+  OptionsType extends DisplayLeafChipOptions<
+    DisplayObjectType,
+    LayoutOptionsType
+  > = DisplayLeafChipOptions<DisplayObjectType, LayoutOptionsType>,
+> extends DisplayObjectChip<DisplayObjectType, LayoutOptionsType, OptionsType> {
+  // protected readonly _options: DisplayLeafChipOptions<DisplayObjectType>;
 
   // Cache of the local bounds so as not to recalculate it
   private _localBounds?: Bounds;
@@ -840,18 +712,23 @@ export class DisplayLeafChip<
 
   // private _propertiesToUpdateOnResize: Array<keyof DisplayObjectType>;
 
-  constructor(options: Partial<DisplayLeafChipOptions<DisplayObjectType>>) {
+  constructor(
+    options: Partial<
+      DisplayLeafChipOptions<DisplayObjectType, LayoutOptionsType>
+    >,
+  ) {
     const filledOptions = chip.fillInOptions(
       options,
-      new DisplayLeafChipOptions<DisplayObjectType>(),
+      new DisplayLeafChipOptions<DisplayObjectType, LayoutOptionsType>(),
     );
-    super(options.children);
-
     filledOptions.layoutOptions = chip.fillInOptions(
       filledOptions.layoutOptions,
       new DisplayLeafLayoutOptions(),
-    );
-    this._options = filledOptions;
+    ) as resolvable.ResolvableObject<
+      LayoutOptionsType,
+      LayoutValueResolvableContext<LayoutOptionsType>
+    >;
+    super(filledOptions as OptionsType);
   }
 
   protected override _onPrepareRefresh() {
@@ -990,12 +867,14 @@ export class DisplayLeafChip<
 
       this._setPosition(position);
 
-      this._updateProperties();
+      this._updateDynamicProperties();
     } else if (this._options.layoutOptions.verticalAlign !== "top") {
       console.error(
         `DisplayLeafChip: Within unbounded layout, cannot vertically align as requested: ${this._options.layoutOptions.verticalAlign}`,
       );
     }
+
+    super._onRefresh();
   }
 
   updateIdealSize() {
@@ -1007,24 +886,14 @@ export class DisplayLeafChip<
       this._idealWidth =
         this._localBounds.width + this.paddingLeft + this.paddingRight;
     } else {
-      this._idealWidth = parseLayoutProperty(
-        this,
-        this._options.layoutOptions,
-        "idealWidth",
-        this._lastRenderInfo,
-      );
+      this._idealWidth = this.parseLayoutPropertyAsNumber("idealWidth");
     }
 
     if (typeof this._options.layoutOptions.idealHeight === "undefined") {
       this._idealHeight =
         this._localBounds.height + this.paddingTop + this.paddingBottom;
     } else {
-      this._idealHeight = parseLayoutProperty(
-        this,
-        this._options.layoutOptions,
-        "idealHeight",
-        this._lastRenderInfo,
-      );
+      this._idealHeight = this.parseLayoutPropertyAsNumber("idealHeight");
     }
   }
 
@@ -1214,8 +1083,33 @@ export class ContainerLeafChip extends DisplayLeafChip<PIXI.Container> {
   }
 }
 
-export abstract class ContainerBase extends DisplayObjectChip<PIXI.Container> {
+export abstract class ContainerBase<
+  LayoutOptionsType extends LayoutOptionsBase = LayoutOptionsBase,
+> extends DisplayObjectChip<PIXI.Container, LayoutOptionsType> {
   protected _childLayoutItems: Array<LayoutItem>;
+
+  constructor(
+    options?: Partial<
+      DisplayObjectChipOptions<PIXI.Container, LayoutOptionsType>
+    >,
+  ) {
+    const filledOptions = chip.fillInOptions(
+      options,
+      new DisplayObjectChipOptions<PIXI.Container, LayoutOptionsType>(),
+    );
+    super(filledOptions);
+
+    // filledOptions.layoutOptions = chip.fillInOptions(
+    //   filledOptions.layoutOptions,
+    //   new LayoutOptions(),
+    // );
+
+    if (!filledOptions.displayObject) {
+      filledOptions.displayObject = new PIXI.Container();
+    }
+
+    this._options = filledOptions;
+  }
 
   protected _onActivate(): void {
     this._childLayoutItems = [];
@@ -1298,26 +1192,26 @@ export abstract class ContainerBase extends DisplayObjectChip<PIXI.Container> {
 }
 
 export class StackingContainerChip extends ContainerBase {
-  protected readonly _options: DisplayObjectChipOptions<PIXI.Container>;
+  // protected readonly _options: DisplayObjectChipOptions<PIXI.Container>;
 
-  constructor(options?: Partial<DisplayObjectChipOptions<PIXI.Container>>) {
-    const filledOptions = chip.fillInOptions(
-      options,
-      new DisplayObjectChipOptions<PIXI.Container>(),
-    );
-    super(filledOptions.children);
+  // constructor(options?: Partial<DisplayObjectChipOptions<PIXI.Container>>) {
+  //   const filledOptions = chip.fillInOptions(
+  //     options,
+  //     new DisplayObjectChipOptions<PIXI.Container>(),
+  //   );
+  //   super(filledOptions.children);
 
-    filledOptions.layoutOptions = chip.fillInOptions(
-      filledOptions.layoutOptions,
-      new LayoutOptions(),
-    );
+  //   filledOptions.layoutOptions = chip.fillInOptions(
+  //     filledOptions.layoutOptions,
+  //     new LayoutOptions(),
+  //   );
 
-    if (!filledOptions.displayObject) {
-      filledOptions.displayObject = new PIXI.Container();
-    }
+  //   if (!filledOptions.displayObject) {
+  //     filledOptions.displayObject = new PIXI.Container();
+  //   }
 
-    this._options = filledOptions;
-  }
+  //   this._options = filledOptions;
+  // }
 
   protected _onRefresh(): void {
     // Refresh all children
@@ -1352,7 +1246,7 @@ export class StackingContainerChip extends ContainerBase {
   }
 }
 
-export class DirectionalContainerLayoutOptions extends LayoutOptions {
+export class DirectionalContainerLayoutOptions extends LayoutOptionsBase {
   direction: "horizontal" | "vertical" = "horizontal";
 
   distributeSpace:
@@ -1365,34 +1259,33 @@ export class DirectionalContainerLayoutOptions extends LayoutOptions {
   gap = 0;
 }
 
-export class DirectionalContainerOptions extends DisplayObjectChipOptions<PIXI.Container> {
-  layoutOptions?: Partial<DirectionalContainerLayoutOptions>;
-}
+export class DirectionalContainerOptions extends DisplayObjectChipOptions<
+  PIXI.Container,
+  DirectionalContainerLayoutOptions
+> {}
 
-export class DirectionalContainerChip extends ContainerBase {
-  protected readonly _options: DirectionalContainerOptions;
+export class DirectionalContainerChip extends ContainerBase<DirectionalContainerLayoutOptions> {
+  // protected readonly _options: DirectionalContainerOptions;
 
   constructor(options?: Partial<DirectionalContainerOptions>) {
     const filledOptions = chip.fillInOptions(
       options,
       new DirectionalContainerOptions(),
     );
-    super(filledOptions.children);
-
     filledOptions.layoutOptions = chip.fillInOptions(
       filledOptions.layoutOptions,
       new DirectionalContainerLayoutOptions(),
     );
-
     if (!filledOptions.displayObject) {
       filledOptions.displayObject = new PIXI.Container();
     }
+    super(filledOptions);
 
-    this._options = filledOptions;
+    // this._options = filledOptions;
   }
 
   protected _onRefresh(): void {
-    if (this._options.layoutOptions.direction === "horizontal") {
+    if (this.parseLayoutProperty("direction") === "horizontal") {
       if (this._lastRefreshInfo.localBounds.isBoundedHorizontally()) {
         this._handleBoundedLayout();
       } else {
@@ -1423,6 +1316,7 @@ export class DirectionalContainerChip extends ContainerBase {
         : "maxWidth";
     const lengthProp =
       this._options.layoutOptions.direction === "vertical" ? "height" : "width";
+    const gap = this.safeParseLayoutPropertyAsNumber("gap");
 
     // Do a first pass to gather minimum space and element types
     const lengths: Array<number> = [];
@@ -1431,7 +1325,7 @@ export class DirectionalContainerChip extends ContainerBase {
     let minUsedSpace = 0;
     for (let i = 0; i < this._childLayoutItems.length; i++) {
       // Account for the gap
-      if (i > 0) minUsedSpace += this._options.layoutOptions.gap;
+      if (i > 0) minUsedSpace += gap;
 
       const child = this._childLayoutItems[i];
 
@@ -1543,7 +1437,7 @@ export class DirectionalContainerChip extends ContainerBase {
 
     for (let i = 0; i < this._childLayoutItems.length; i++) {
       // Handle gap
-      if (i > 0) axisOffset += this._options.layoutOptions.gap;
+      if (i > 0) axisOffset += gap;
 
       const child = this._childLayoutItems[i];
 
@@ -1621,7 +1515,7 @@ export class DirectionalContainerChip extends ContainerBase {
     let axisOffset = 0;
     for (let i = 0; i < this._childLayoutItems.length; i++) {
       // Handle gap
-      if (i > 0) axisOffset += this._options.layoutOptions.gap;
+      if (i > 0) axisOffset += this.safeParseLayoutPropertyAsNumber("gap");
 
       const child = this._childLayoutItems[i];
       const childIdealLength = child[idealLengthProp] || 0;
@@ -1733,7 +1627,8 @@ export class DirectionalContainerChip extends ContainerBase {
 
   private _calcuateGapSum() {
     return this._childLayoutItems.length > 1
-      ? (this._childLayoutItems.length - 1) * this._options.layoutOptions.gap
+      ? (this._childLayoutItems.length - 1) *
+          this.safeParseLayoutPropertyAsNumber("gap")
       : 0;
   }
 }
@@ -1748,7 +1643,8 @@ export class DirectionalContainerChip extends ContainerBase {
   - loop - When animation loops
   - frameChange(currentFrame: number) - When frame changes 
 */
-export class AnimatedSpriteChipOptions {
+export class AnimatedSpriteChipOptions extends DisplayLeafChipOptions<PIXI.AnimatedSprite> {
+  spritesheet: PIXI.Spritesheet | string;
   behaviorOnComplete: "loop" | "remove" | "keepLastFrame" = "remove";
   behaviorOnStart: "play" | "stop" = "play";
   animationName?: string;
@@ -1757,56 +1653,72 @@ export class AnimatedSpriteChipOptions {
   startingFrame?: number;
   prepare?: boolean;
 
-  properties: DisplayObjectProperties<PIXI.AnimatedSprite> = {};
-  onResize?: (
-    options: DisplayObjectValueFunctionOptions<PIXI.AnimatedSprite>,
-  ) => unknown;
+  // properties: DisplayObjectProperties<PIXI.AnimatedSprite> = {};
+  // onResize?: (
+  //   options: DisplayObjectValueFunctionOptions<PIXI.AnimatedSprite>,
+  // ) => unknown;
 }
 
-export class AnimatedSpriteChip extends chip.ChipBase {
-  private readonly _options: AnimatedSpriteChipOptions;
+export class AnimatedSpriteChip extends DisplayLeafChip<
+  PIXI.AnimatedSprite,
+  DisplayLeafLayoutOptions,
+  AnimatedSpriteChipOptions
+> {
+  // private readonly _options: AnimatedSpriteChipOptions;
 
   private _animatedSprite?: PIXI.AnimatedSprite;
   private _wasPlaying: boolean;
   private _wasAdded?: boolean;
   private _propertiesToUpdateOnResize: Array<keyof PIXI.AnimatedSprite>;
 
-  constructor(
-    private readonly _spritesheet: PIXI.Spritesheet,
-    options?: Partial<AnimatedSpriteChipOptions>,
-  ) {
-    super();
-
-    this._options = chip.fillInOptions(
+  constructor(options?: Partial<AnimatedSpriteChipOptions>) {
+    const filledOptions = chip.fillInOptions(
       options,
       new AnimatedSpriteChipOptions(),
     );
+
+    if (typeof filledOptions.spritesheet === "undefined") {
+      throw new Error("AnimatedSpriteChip requires a spritesheet");
+    }
+    if (typeof filledOptions.spritesheet === "string") {
+      const resolvedSpritesheet = PIXI.Assets.get<PIXI.Spritesheet>(
+        filledOptions.spritesheet,
+      );
+      if (!resolvedSpritesheet)
+        throw new Error(
+          `Cannot find spritesheet for AnimatedSpriteChip "${options.spritesheet}"`,
+        );
+
+      filledOptions.spritesheet = resolvedSpritesheet;
+    }
+
+    super(filledOptions);
   }
 
-  _onActivate() {
+  protected _onActivate(): void {
+    super._onActivate();
+
     this._wasPlaying = false;
+
+    // Any conversion has already been handled in the constructor
+    const spritesheet = this._options.spritesheet as PIXI.Spritesheet;
 
     let textures: PIXI.Texture[];
     if (this._options.animationName) {
       // Use the specified animation
-      if (
-        !_.has(this._spritesheet.data.animations, this._options.animationName)
-      ) {
+      if (!_.has(spritesheet.data.animations, this._options.animationName)) {
         throw new Error(
           `Can't find animation "${this._options.animationName}" in spritesheet`,
         );
       }
 
-      if (this._spritesheet.linkedSheets.length === 0) {
+      if (spritesheet.linkedSheets.length === 0) {
         // PIXI will have loaded the textures directly into the spritesheet object
-        textures = this._spritesheet.animations[this._options.animationName];
+        textures = spritesheet.animations[this._options.animationName];
       } else {
         // Assemble textures from the linked sheets
-        const allSheets = [
-          this._spritesheet,
-          ...this._spritesheet.linkedSheets,
-        ];
-        textures = this._spritesheet.data.animations![
+        const allSheets = [spritesheet, ...spritesheet.linkedSheets];
+        textures = spritesheet.data.animations![
           this._options.animationName
         ].map((imageName) => {
           // Linear search for the texture
@@ -1821,51 +1733,51 @@ export class AnimatedSpriteChip extends chip.ChipBase {
       }
     } else {
       // Take all the textures in the sheet
-      textures = Object.values(this._spritesheet.textures);
+      textures = Object.values(spritesheet.textures);
     }
 
     // Don't have the sprite auto-update
     this._animatedSprite = new PIXI.AnimatedSprite(textures, false);
 
-    // Update properties and keep track of which ones to update on resize
-    this._propertiesToUpdateOnResize = [];
+    // // Update properties and keep track of which ones to update on resize
+    // this._propertiesToUpdateOnResize = [];
 
-    const valueFunctionOptions = {
-      displayObject: this._animatedSprite,
-      pixiAppChip: this.pixiAppChip,
-      renderSize: this.pixiAppChip.renderSize,
-    };
-    for (const property in this._options.properties) {
-      const resolvable = this._options.properties[
-        property as keyof PIXI.AnimatedSprite
-      ] as DisplayObjectValueResolvable<
-        PIXI.AnimatedSprite,
-        keyof PIXI.AnimatedSprite
-      >;
-      let value: DisplayObjectValueType<
-        PIXI.AnimatedSprite,
-        keyof PIXI.AnimatedSprite
-      >;
-      if (isDisplayObjectValueFunction(resolvable)) {
-        this._propertiesToUpdateOnResize.push(
-          property as keyof PIXI.AnimatedSprite,
-        );
-        value = (
-          resolvable as DisplayObjectValueFunction<
-            PIXI.AnimatedSprite,
-            keyof PIXI.AnimatedSprite
-          >
-        )(valueFunctionOptions);
-      } else {
-        value = resolvable;
-      }
+    // const valueFunctionOptions = {
+    //   displayObject: this._animatedSprite,
+    //   pixiAppChip: this.pixiAppChip,
+    //   renderSize: this.pixiAppChip.renderSize,
+    // };
+    // for (const property in this._options.properties) {
+    //   const resolvable = this._options.properties[
+    //     property as keyof PIXI.AnimatedSprite
+    //   ] as DisplayObjectValueResolvable<
+    //     PIXI.AnimatedSprite,
+    //     keyof PIXI.AnimatedSprite
+    //   >;
+    //   let value: DisplayObjectValueType<
+    //     PIXI.AnimatedSprite,
+    //     keyof PIXI.AnimatedSprite
+    //   >;
+    //   if (isDisplayObjectValueFunction(resolvable)) {
+    //     this._propertiesToUpdateOnResize.push(
+    //       property as keyof PIXI.AnimatedSprite,
+    //     );
+    //     value = (
+    //       resolvable as DisplayObjectValueFunction<
+    //         PIXI.AnimatedSprite,
+    //         keyof PIXI.AnimatedSprite
+    //       >
+    //     )(valueFunctionOptions);
+    //   } else {
+    //     value = resolvable;
+    //   }
 
-      updateProperty(
-        this._animatedSprite,
-        property as keyof PIXI.AnimatedSprite,
-        value,
-      );
-    }
+    //   updateProperty(
+    //     this._animatedSprite,
+    //     property as keyof PIXI.AnimatedSprite,
+    //     value,
+    //   );
+    // }
 
     // If requested, use the PIXI Prepare plugin to make sure the animation is loaded before adding it to the stage
     if (this._options.prepare) {
@@ -1907,13 +1819,13 @@ export class AnimatedSpriteChip extends chip.ChipBase {
 
     this.restart();
 
-    this._options.onResize?.({
-      displayObject: this._animatedSprite,
-      pixiAppChip: this.pixiAppChip,
-      renderSize: this.pixiAppChip.renderSize,
-    });
+    // this._options.onResize?.({
+    //   displayObject: this._animatedSprite,
+    //   pixiAppChip: this.pixiAppChip,
+    //   renderSize: this.pixiAppChip.renderSize,
+    // });
 
-    this._subscribe(this.pixiAppChip, "didResize", this._onResize);
+    // this._subscribe(this.pixiAppChip, "didResize", this._onResize);
   }
 
   _onTick() {
@@ -1953,24 +1865,24 @@ export class AnimatedSpriteChip extends chip.ChipBase {
     this.emit("frameChange", currentFrame);
   }
 
-  private _onResize() {
-    const valueFunctionOptions = {
-      displayObject: this._animatedSprite,
-      pixiAppChip: this.pixiAppChip,
-      renderSize: this.pixiAppChip.renderSize,
-    };
+  // private _onResize() {
+  //   const valueFunctionOptions = {
+  //     displayObject: this._animatedSprite,
+  //     pixiAppChip: this.pixiAppChip,
+  //     renderSize: this.pixiAppChip.renderSize,
+  //   };
 
-    for (const property of this._propertiesToUpdateOnResize) {
-      const f = this._options.properties[
-        property
-      ] as DisplayObjectValueFunction<
-        PIXI.AnimatedSprite,
-        keyof PIXI.AnimatedSprite
-      >;
-      const value = f(valueFunctionOptions);
-      updateProperty(this.animatedSprite, property, value);
-    }
-  }
+  //   for (const property of this._propertiesToUpdateOnResize) {
+  //     const f = this._options.properties[
+  //       property
+  //     ] as DisplayObjectValueFunction<
+  //       PIXI.AnimatedSprite,
+  //       keyof PIXI.AnimatedSprite
+  //     >;
+  //     const value = f(valueFunctionOptions);
+  //     updateProperty(this.animatedSprite, property, value);
+  //   }
+  // }
 
   get animatedSprite() {
     return this._animatedSprite;
@@ -2088,7 +2000,7 @@ export class LayoutTest extends chip.Composite {
         new SpriteChip({
           texture: renderTexture,
           properties: {
-            x: ({ displayObject }) => displayObject.x,
+            x: ({ renderSize }) => renderSize.x - 100,
           },
           layoutOptions: {
             // maxWidth: 100,
@@ -2102,7 +2014,9 @@ export class LayoutTest extends chip.Composite {
       );
     }
 
-    containerChip.addChildChip(new SpacerChip({ minWidth: 10, maxWidth: 10 }));
+    containerChip.addChildChip(
+      new SpacerChip({ layoutOptions: { minWidth: 10, maxWidth: 10 } }),
+    );
 
     {
       const green = new PIXI.Graphics();
