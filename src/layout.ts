@@ -79,7 +79,7 @@ export class Bounds {
   }
 }
 
-export interface RefreshInfo {
+export interface ResizeInfo {
   readonly absoluteBounds: Bounds;
   readonly localBounds: Bounds;
 }
@@ -87,8 +87,8 @@ export interface RefreshInfo {
 /**
  * Emits:
  *  - updated() - something changed, requesting an update
- *  - willRefresh(RefreshInfo)
- *  - didRefresh(RefreshInfo)
+ *  - willResize(ResizeInfo)
+ *  - didResize(ResizeInfo)
  */
 export interface LayoutItem extends chip.NodeEventSource {
   readonly minWidth?: number;
@@ -98,8 +98,8 @@ export interface LayoutItem extends chip.NodeEventSource {
   readonly maxWidth?: number;
   readonly maxHeight?: number;
 
-  prepareRefresh(renderInfo: RenderInfo): void;
-  refresh(refreshInfo: RefreshInfo): void;
+  prepareResize(renderInfo: RenderInfo): void;
+  resize(resizeInfo: ResizeInfo): void;
 
   addChildLayoutItem(child: LayoutItem): void;
   removeChildLayoutItem(child: LayoutItem): void;
@@ -111,7 +111,7 @@ export class LayoutItemBaseOptions<LayoutOptionsType> {
       LayoutOptionsType,
       LayoutValueResolvableContext<LayoutOptionsType>
     >
-  >;
+  > = {};
   children: LayoutItemChildChipOptions = [];
 }
 
@@ -132,7 +132,7 @@ export abstract class LayoutItemBase<
   >;
 
   protected _lastRenderInfo?: RenderInfo;
-  protected _lastRefreshInfo?: RefreshInfo;
+  protected _lastResizeInfo?: ResizeInfo;
 
   constructor(options?: Partial<OptionsType>) {
     const filledOptions = chip.fillInOptions(
@@ -157,45 +157,114 @@ export abstract class LayoutItemBase<
     throw new Error(`${this.constructor.name}  can't have child display items`);
   }
 
-  prepareRefresh(renderInfo: RenderInfo): void {
+  prepareResize(renderInfo: RenderInfo): void {
     this._lastRenderInfo = renderInfo;
-    this._onPrepareRefresh();
+    this._onPrepareResize();
+
     // TODO: emit event?
   }
 
-  protected _onPrepareRefresh() {
+  protected _onPrepareResize() {
     // no op
   }
 
-  protected _onRefresh(): void {
+  protected _onResize(): void {
     // no op
   }
 
-  refresh(refreshInfo: RefreshInfo): void {
+  resize(resizeInfo: ResizeInfo): void {
     this._layoutOptionsResolver.invalidate();
-    this._lastRefreshInfo = refreshInfo;
-    this.emit("willRefresh", refreshInfo);
+    this._lastResizeInfo = resizeInfo;
+    this.emit("willResize", resizeInfo);
+
+    // Assert that widths make sense
+    if (typeof this.minWidth !== "undefined") {
+      if (
+        typeof this.idealWidth !== "undefined" &&
+        this.minWidth > this.idealWidth
+      ) {
+        console.error(
+          `Bad widths on layout item. Min width ${this.minWidth} > ideal width ${this.idealWidth}`,
+        );
+      }
+
+      if (
+        typeof this.maxWidth !== "undefined" &&
+        this.minWidth > this.maxWidth
+      ) {
+        console.error(
+          `Bad widths on layout item. Min width ${this.minWidth} > max width ${this.maxWidth}`,
+        );
+      }
+    }
 
     if (
-      typeof this.minWidth !== "undefined" &&
-      typeof refreshInfo.absoluteBounds.width !== "undefined" &&
-      refreshInfo.absoluteBounds.width < this.minWidth
-    )
+      typeof this.idealWidth !== "undefined" &&
+      typeof this.maxWidth !== "undefined" &&
+      this.idealWidth > this.maxWidth
+    ) {
       console.error(
-        `Insufficient width to layout item. Bounds.width = ${refreshInfo.absoluteBounds.width} and minWidth = ${this.minWidth}`,
+        `Bad widths on layout item. Ideal width ${this.idealHeight} > max width ${this.maxWidth}`,
+        this,
       );
+    }
+
+    // Assert that heights make sense
+    if (typeof this.minHeight !== "undefined") {
+      if (
+        typeof this.idealHeight !== "undefined" &&
+        this.minHeight > this.idealHeight
+      ) {
+        console.error(
+          `Bad heights on layout item. Min height ${this.minHeight} > ideal height ${this.idealHeight}`,
+          this,
+        );
+      }
+
+      if (
+        typeof this.maxHeight !== "undefined" &&
+        this.minHeight > this.maxHeight
+      ) {
+        console.error(
+          `Bad heights on layout item. Min height ${this.minHeight} > max height ${this.maxHeight}`,
+          this,
+        );
+      }
+
+      // Assert you have sufficient space
+      if (
+        typeof this.minWidth !== "undefined" &&
+        typeof resizeInfo.absoluteBounds.width !== "undefined" &&
+        resizeInfo.absoluteBounds.width < this.minWidth
+      )
+        console.error(
+          `Insufficient width to layout item. Bounds.width = ${resizeInfo.absoluteBounds.width} and minWidth = ${this.minWidth}`,
+          this,
+        );
+      if (
+        typeof this.minHeight !== "undefined" &&
+        typeof resizeInfo.absoluteBounds.height !== "undefined" &&
+        resizeInfo.absoluteBounds.height < this.minHeight
+      )
+        console.error(
+          `Insufficient height to layout item. Bounds.height = ${resizeInfo.absoluteBounds.height} and minHeight = ${this.minHeight}`,
+          this,
+        );
+    }
+
     if (
-      typeof this.minHeight !== "undefined" &&
-      typeof refreshInfo.absoluteBounds.height !== "undefined" &&
-      refreshInfo.absoluteBounds.height < this.minHeight
-    )
+      typeof this.idealHeight !== "undefined" &&
+      typeof this.maxHeight !== "undefined" &&
+      this.idealHeight > this.maxHeight
+    ) {
       console.error(
-        `Insufficient height to layout item. Bounds.height = ${refreshInfo.absoluteBounds.height} and minHeight = ${this.minHeight}`,
+        `Bad heights on layout item. Ideal height ${this.idealHeight} > max height ${this.maxHeight}`,
       );
+    }
 
-    this._onRefresh();
+    this._onResize();
 
-    this.emit("didRefresh", refreshInfo);
+    this.emit("didResize", resizeInfo);
   }
 
   calculateInnerBounds(bounds: Bounds) {
@@ -205,7 +274,7 @@ export abstract class LayoutItemBase<
       bounds.isBoundedHorizontally()
         ? bounds.width - this.paddingLeft - this.paddingRight
         : undefined,
-      bounds.isBoundedHorizontally()
+      bounds.isBoundedVertically()
         ? bounds.height - this.paddingTop - this.paddingBottom
         : undefined,
     );
@@ -245,8 +314,8 @@ export abstract class LayoutItemBase<
     return this.safeParseLayoutPropertyAsNumber("paddingBottom");
   }
 
-  /** Request a new refresh cycle */
-  requestRefresh() {
+  /** Request a new resize cycle */
+  requestResize() {
     this.emit("updated");
   }
 
@@ -258,8 +327,8 @@ export abstract class LayoutItemBase<
     return this._chipContext.layoutItem as LayoutItem | undefined;
   }
 
-  get lastRefreshInfo() {
-    return this._lastRefreshInfo;
+  get lastResizeInfo() {
+    return this._lastResizeInfo;
   }
 
   get lastRenderInfo() {
@@ -423,7 +492,7 @@ export abstract class DisplayObjectChip<
 
     // Optionally participate in the layout
     if (this._options.addToParentLayoutItem && this.parentLayoutItem) {
-      // When _onRefresh() is called, it will call _updateProperties()
+      // When _onResize() is called, it will call _updateProperties()
       this.parentLayoutItem.addChildLayoutItem(this);
     } else {
       // Call _updateProperties() directly
@@ -450,7 +519,7 @@ export abstract class DisplayObjectChip<
     super._onTerminate();
   }
 
-  protected _onRefresh(): void {
+  protected _onResize(): void {
     this._updateDynamicProperties();
   }
 
@@ -558,7 +627,7 @@ export class DisplayLeafChip<
     super(filledOptions as OptionsType);
   }
 
-  protected override _onPrepareRefresh() {
+  protected override _onPrepareResize() {
     // The first time, possibly calculate ideal sizes
     if (
       typeof this._idealWidth !== "undefined" &&
@@ -569,7 +638,7 @@ export class DisplayLeafChip<
     this.updateIdealSize();
   }
 
-  protected override _onRefresh(): void {
+  protected override _onResize(): void {
     if (!this.displayObject.parent)
       throw new Error("Cannot layout display object without a parent");
 
@@ -585,7 +654,7 @@ export class DisplayLeafChip<
       : 0;
 
     const innerBounds = this.calculateInnerBounds(
-      this.lastRefreshInfo.localBounds,
+      this.lastResizeInfo.localBounds,
     );
 
     if (innerBounds.isBoundedHorizontally()) {
@@ -701,7 +770,7 @@ export class DisplayLeafChip<
       );
     }
 
-    super._onRefresh();
+    super._onResize();
   }
 
   updateIdealSize() {
@@ -950,8 +1019,8 @@ export abstract class ContainerBase<
 
     this._childLayoutItems.push(child);
 
-    this._subscribe(child, "updated", this.requestRefresh);
-    this.requestRefresh();
+    this._subscribe(child, "updated", this.requestResize);
+    this.requestResize();
   }
 
   removeChildLayoutItem(child: LayoutItem): void {
@@ -962,33 +1031,33 @@ export abstract class ContainerBase<
     this._childLayoutItems.splice(index, 1);
     this._unsubscribe(child);
 
-    this.requestRefresh();
+    this.requestResize();
   }
 
-  override prepareRefresh(renderInfo: RenderInfo): void {
-    super.prepareRefresh(renderInfo);
+  override prepareResize(renderInfo: RenderInfo): void {
+    super.prepareResize(renderInfo);
 
     for (const child of this._childLayoutItems)
-      child.prepareRefresh(this._lastRenderInfo);
+      child.prepareResize(this._lastRenderInfo);
   }
 
-  override refresh(refreshInfo: RefreshInfo): void {
+  override resize(resizeInfo: ResizeInfo): void {
     // Position the container and adjust local bounds
     this.displayObject.position.set(
-      refreshInfo.localBounds.x,
-      refreshInfo.localBounds.y,
+      resizeInfo.localBounds.x,
+      resizeInfo.localBounds.y,
     );
 
     const childLocalBounds = new Bounds(
       0,
       0,
-      refreshInfo.localBounds.width,
-      refreshInfo.localBounds.height,
+      resizeInfo.localBounds.width,
+      resizeInfo.localBounds.height,
     );
 
-    super.refresh({
+    super.resize({
       localBounds: childLocalBounds,
-      absoluteBounds: refreshInfo.absoluteBounds,
+      absoluteBounds: resizeInfo.absoluteBounds,
     });
   }
 
@@ -1018,15 +1087,15 @@ export abstract class ContainerBase<
 }
 
 export class StackingContainerChip extends ContainerBase {
-  protected _onRefresh(): void {
-    // Refresh all children
-    const childRefreshInfo: RefreshInfo = {
+  protected _onResize(): void {
+    // Resize all children
+    const childResizeInfo: ResizeInfo = {
       absoluteBounds: this.calculateInnerBounds(
-        this.lastRefreshInfo.absoluteBounds,
+        this.lastResizeInfo.absoluteBounds,
       ),
-      localBounds: this.calculateInnerBounds(this.lastRefreshInfo.localBounds),
+      localBounds: this.calculateInnerBounds(this.lastResizeInfo.localBounds),
     };
-    for (const child of this._childLayoutItems) child.refresh(childRefreshInfo);
+    for (const child of this._childLayoutItems) child.resize(childResizeInfo);
   }
 
   get minWidth() {
@@ -1085,15 +1154,15 @@ export class DirectionalContainerChip extends ContainerBase<DirectionalContainer
     super(filledOptions);
   }
 
-  protected _onRefresh(): void {
+  protected _onResize(): void {
     if (this.parseLayoutProperty("direction") === "horizontal") {
-      if (this._lastRefreshInfo.localBounds.isBoundedHorizontally()) {
+      if (this._lastResizeInfo.localBounds.isBoundedHorizontally()) {
         this._handleBoundedLayout();
       } else {
         this._handleUnboundedLayout();
       }
     } else {
-      if (this._lastRefreshInfo.localBounds.isBoundedVertically()) {
+      if (this._lastResizeInfo.localBounds.isBoundedVertically()) {
         this._handleBoundedLayout();
       } else {
         this._handleUnboundedLayout();
@@ -1145,10 +1214,10 @@ export class DirectionalContainerChip extends ContainerBase<DirectionalContainer
     }
 
     const innerLocalBounds = this.calculateInnerBounds(
-      this.lastRefreshInfo.localBounds,
+      this.lastResizeInfo.localBounds,
     );
     const innerAbsoluteBounds = this.calculateInnerBounds(
-      this.lastRefreshInfo.absoluteBounds,
+      this.lastResizeInfo.absoluteBounds,
     );
 
     // Do a second pass to bring elements to their ideal lengths
@@ -1273,7 +1342,7 @@ export class DirectionalContainerChip extends ContainerBase<DirectionalContainer
       }
 
       // Update item
-      child.refresh({
+      child.resize({
         absoluteBounds: itemAbsoluteBounds,
         localBounds: itemLocalBounds,
       });
@@ -1307,10 +1376,10 @@ export class DirectionalContainerChip extends ContainerBase<DirectionalContainer
       this._options.layoutOptions.direction === "vertical" ? "height" : "width";
 
     const innerLocalBounds = this.calculateInnerBounds(
-      this.lastRefreshInfo.localBounds,
+      this.lastResizeInfo.localBounds,
     );
     const innerAbsoluteBounds = this.calculateInnerBounds(
-      this.lastRefreshInfo.absoluteBounds,
+      this.lastResizeInfo.absoluteBounds,
     );
 
     let axisOffset = 0;
@@ -1352,7 +1421,7 @@ export class DirectionalContainerChip extends ContainerBase<DirectionalContainer
       }
 
       // Update item
-      child.refresh({
+      child.resize({
         absoluteBounds: itemAbsoluteBounds,
         localBounds: itemLocalBounds,
       });

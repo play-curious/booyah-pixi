@@ -131,6 +131,12 @@ export class Scrollbox extends layout.ContainerBase<
       partialOptions,
       new ScrollboxOptions(),
     );
+    filledOptions.layoutOptions.idealWidth = filledOptions.boxWidth;
+    filledOptions.layoutOptions.idealHeight = filledOptions.boxHeight;
+    filledOptions.layoutOptions.minWidth = "idealWidth";
+    filledOptions.layoutOptions.minHeight = "idealHeight";
+    filledOptions.layoutOptions.maxWidth = "idealWidth";
+    filledOptions.layoutOptions.maxHeight = "idealHeight";
     super(filledOptions);
 
     // this._optionsResolver = new resolvable.Resolver(filledOptions);
@@ -176,15 +182,18 @@ export class Scrollbox extends layout.ContainerBase<
             width: this._options.boxWidth,
             height: this._options.boxHeight,
           },
+          addToParentLayoutItem: false,
         }),
         context: { container: this.displayObject },
       });
     }
 
-    this._activateChildChip({
-      chip: new layout.ContainerLeafChip({ displayObject: this._content }),
-      context: { container: this.displayObject },
-    });
+    this.displayObject.addChild(this._content);
+
+    // this._activateChildChip({
+    //   chip: new layout.ContainerLeafChip({ displayObject: this._content }),
+    //   context: { container: this.displayObject },
+    // });
 
     const mask = new PIXI.Sprite(PIXI.Texture.WHITE);
     this._content.mask = mask;
@@ -195,8 +204,9 @@ export class Scrollbox extends layout.ContainerBase<
           width: this._options.boxWidth,
           height: this._options.boxHeight,
         },
+        addToParentLayoutItem: false,
       }),
-      context: { container: this.container },
+      context: { container: this.displayObject },
     });
 
     if (this._options.wheelScroll) {
@@ -260,6 +270,7 @@ export class Scrollbox extends layout.ContainerBase<
       chip: new layout.ContainerLeafChip({
         displayObject: this._scrollbarAnchor,
         properties: anchorProperties,
+        addToParentLayoutItem: false,
       }),
       context: { container: this.displayObject },
     });
@@ -268,6 +279,7 @@ export class Scrollbox extends layout.ContainerBase<
       chip: new layout.NineSlicePlaneChip({
         displayObject: this._scrollbarBackground,
         properties: backroundProperties,
+        addToParentLayoutItem: false,
       }),
       context: { container: this._scrollbarAnchor },
     });
@@ -276,6 +288,7 @@ export class Scrollbox extends layout.ContainerBase<
       chip: new layout.NineSlicePlaneChip({
         displayObject: this._scrollbarHandle,
         properties: handleProperties,
+        addToParentLayoutItem: false,
       }),
       context: { container: this._scrollbarAnchor },
     });
@@ -304,6 +317,39 @@ export class Scrollbox extends layout.ContainerBase<
 
   protected _onTerminate(): void {
     delete this._pointerDown;
+  }
+
+  protected _onResize(): void {
+    // Provide unlimited bounds in the direction of scroll
+    const childAbsoluteBounds = new layout.Bounds(
+      this.lastResizeInfo.absoluteBounds.x,
+      this.lastResizeInfo.absoluteBounds.y,
+      this._options.direction === "horizontal"
+        ? undefined
+        : this.lastResizeInfo.absoluteBounds.width,
+      this._options.direction === "vertical"
+        ? undefined
+        : this.lastResizeInfo.absoluteBounds.height,
+    );
+    const childLocalBounds = new layout.Bounds(
+      this.lastResizeInfo.localBounds.x,
+      this.lastResizeInfo.localBounds.y,
+      this._options.direction === "horizontal"
+        ? undefined
+        : this.lastResizeInfo.localBounds.width,
+      this._options.direction === "vertical"
+        ? undefined
+        : this.lastResizeInfo.localBounds.height,
+    );
+
+    // Resize all children
+    const childResizeInfo: layout.ResizeInfo = {
+      absoluteBounds: this.calculateInnerBounds(childAbsoluteBounds),
+      localBounds: this.calculateInnerBounds(childLocalBounds),
+    };
+    for (const child of this._childLayoutItems) child.resize(childResizeInfo);
+
+    super._onResize();
   }
 
   /** Call when container contents have changed  */
@@ -525,11 +571,15 @@ export class Scrollbox extends layout.ContainerBase<
       : this._content.y;
   }
 
-  public get container() {
-    return this.displayObject;
-  }
-
   public get content() {
     return this._content;
+  }
+
+  /** Put child elements into the `content` container */
+  get contextModification(): chip.ChipContextResolvable {
+    const parentValue = super.contextModification;
+    return Object.assign({}, parentValue, {
+      container: this._content,
+    });
   }
 }

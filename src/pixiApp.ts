@@ -20,7 +20,7 @@ export class PixiAppChip extends chip.Composite {
 
   private _pixiApplication: PIXI.Application;
   private _stackingContainerChip?: layout.StackingContainerChip;
-  private _refreshNeeded: boolean;
+  private _resizeNeeded: boolean;
 
   constructor(options?: Partial<PixiAppChipOptions>) {
     super();
@@ -29,7 +29,7 @@ export class PixiAppChip extends chip.Composite {
   }
 
   protected _onActivate(): void {
-    this._refreshNeeded = false;
+    this._resizeNeeded = false;
 
     const appOptions = this._options?.appOptions || {};
     appOptions.autoStart = false;
@@ -67,9 +67,9 @@ export class PixiAppChip extends chip.Composite {
   }
 
   protected _onTick(): void {
-    if (this._refreshNeeded) {
+    if (this._resizeNeeded) {
       this._handleResize();
-      this._refreshNeeded = false;
+      this._resizeNeeded = false;
     }
 
     this._pixiApplication.render();
@@ -96,21 +96,21 @@ export class PixiAppChip extends chip.Composite {
   }
 
   private _onResize() {
-    this._refreshNeeded = true;
+    this._resizeNeeded = true;
   }
 
   private _handleResize() {
     this.emit("willResize");
 
     if (this._stackingContainerChip) {
-      this._stackingContainerChip.prepareRefresh({
+      this._stackingContainerChip.prepareResize({
         renderSize: this.renderSize,
       });
 
       const screenBounds = layout.Bounds.fromRectangle(
         this._pixiApplication.screen,
       );
-      this._stackingContainerChip.refresh({
+      this._stackingContainerChip.resize({
         absoluteBounds: screenBounds,
         localBounds: screenBounds,
       });
