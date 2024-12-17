@@ -69,6 +69,11 @@ function isTexture(object: any): object is PIXI.Texture {
 export type OverflowSettings = "auto" | "hidden" | "scroll";
 export type Direction = "vertical" | "horizontal";
 
+export class ScrollboxLayoutOptions extends layout.LayoutOptionsBase {
+  minWidth: layout.LayoutValue = "idealWidth";
+  minHeight: layout.LayoutValue = "idealHeight";
+}
+
 export class ScrollboxOptions extends layout.DisplayObjectChipOptions<
   PIXI.Container,
   layout.LayoutOptionsBase
@@ -78,7 +83,7 @@ export class ScrollboxOptions extends layout.DisplayObjectChipOptions<
   boxHeight: number = 100;
   overflow: OverflowSettings = "auto";
   direction: Direction = "horizontal";
-  scrollbarOffset: number = 10;
+  scrollbarOffset: number = 0;
   scrollbarWidth: number = 20;
   scrollbarBackground: PIXI.Texture | PIXI.ColorSource = 0xaaaaaa;
   scrollbarHandle: PIXI.Texture | PIXI.ColorSource = 0x555555;
@@ -131,12 +136,15 @@ export class Scrollbox extends layout.ContainerBase<
       partialOptions,
       new ScrollboxOptions(),
     );
+    filledOptions.layoutOptions = chip.fillInOptions(
+      filledOptions.layoutOptions,
+      new ScrollboxLayoutOptions(),
+    );
+
+    // Set the ideal size based on the given box sizes
     filledOptions.layoutOptions.idealWidth = filledOptions.boxWidth;
     filledOptions.layoutOptions.idealHeight = filledOptions.boxHeight;
-    filledOptions.layoutOptions.minWidth = "idealWidth";
-    filledOptions.layoutOptions.minHeight = "idealHeight";
-    filledOptions.layoutOptions.maxWidth = "idealWidth";
-    filledOptions.layoutOptions.maxHeight = "idealHeight";
+
     super(filledOptions);
 
     // this._optionsResolver = new resolvable.Resolver(filledOptions);
@@ -179,8 +187,8 @@ export class Scrollbox extends layout.ContainerBase<
         chip: new layout.SpriteChip({
           displayObject: dragBackground,
           properties: {
-            width: this._options.boxWidth,
-            height: this._options.boxHeight,
+            width: () => this.boxWidth,
+            height: () => this.boxHeight,
           },
           addToParentLayoutItem: false,
         }),
@@ -201,8 +209,8 @@ export class Scrollbox extends layout.ContainerBase<
       chip: new layout.SpriteChip({
         displayObject: mask,
         properties: {
-          width: this._options.boxWidth,
-          height: this._options.boxHeight,
+          width: () => this.boxWidth,
+          height: () => this.boxHeight,
         },
         addToParentLayoutItem: false,
       }),
@@ -249,7 +257,7 @@ export class Scrollbox extends layout.ContainerBase<
           height: this._options.scrollbarWidth,
           y: this._options.scrollbarOffset,
         };
-        anchorProperties = { y: this._options.boxHeight };
+        anchorProperties = { y: () => this.boxHeight };
         break;
       }
       case "vertical": {
@@ -261,7 +269,7 @@ export class Scrollbox extends layout.ContainerBase<
           x: this._options.scrollbarOffset,
           width: this._options.scrollbarWidth,
         };
-        anchorProperties = { x: this._options.boxWidth };
+        anchorProperties = { x: () => this.boxWidth };
         break;
       }
     }
@@ -324,22 +332,14 @@ export class Scrollbox extends layout.ContainerBase<
     const childAbsoluteBounds = new layout.Bounds(
       this.lastResizeInfo.absoluteBounds.x,
       this.lastResizeInfo.absoluteBounds.y,
-      this._options.direction === "horizontal"
-        ? undefined
-        : this.lastResizeInfo.absoluteBounds.width,
-      this._options.direction === "vertical"
-        ? undefined
-        : this.lastResizeInfo.absoluteBounds.height,
+      this._options.direction === "horizontal" ? undefined : this.boxWidth,
+      this._options.direction === "vertical" ? undefined : this.boxHeight,
     );
     const childLocalBounds = new layout.Bounds(
       this.lastResizeInfo.localBounds.x,
       this.lastResizeInfo.localBounds.y,
-      this._options.direction === "horizontal"
-        ? undefined
-        : this.lastResizeInfo.localBounds.width,
-      this._options.direction === "vertical"
-        ? undefined
-        : this.lastResizeInfo.localBounds.height,
+      this._options.direction === "horizontal" ? undefined : this.boxWidth,
+      this._options.direction === "vertical" ? undefined : this.boxHeight,
     );
 
     // Resize all children
@@ -365,12 +365,12 @@ export class Scrollbox extends layout.ContainerBase<
 
     switch (this._options.direction) {
       case "horizontal": {
-        boxSize = this._options.boxWidth;
+        boxSize = this.boxWidth;
         contentSize = this._content.width;
         break;
       }
       case "vertical": {
-        boxSize = this._options.boxHeight;
+        boxSize = this.boxHeight;
         contentSize = this._content.height;
         break;
       }
@@ -449,12 +449,12 @@ export class Scrollbox extends layout.ContainerBase<
 
     if (this._options.direction === "horizontal") {
       const deltaPosition = local.x - this._pointerDown.last.x;
-      const ratio = this._options.boxWidth / this._content.width;
+      const ratio = this.boxWidth / this._content.width;
       const fraction = deltaPosition / ratio;
       this.scrollBy({ x: -fraction, y: 0 });
     } else {
       const deltaPosition = local.y - this._pointerDown.last.y;
-      const ratio = this._options.boxHeight / this._content.height;
+      const ratio = this.boxHeight / this._content.height;
       const fraction = deltaPosition / ratio;
       this.scrollBy({ x: 0, y: -fraction });
     }
@@ -548,14 +548,10 @@ export class Scrollbox extends layout.ContainerBase<
   }
 
   public scrollTo(position: PIXI.IPointData, reason = "user") {
-    position.x = geom.clamp(
-      position.x,
-      this._options.boxWidth - this._content.width,
-      0,
-    );
+    position.x = geom.clamp(position.x, this.boxWidth - this._content.width, 0);
     position.y = geom.clamp(
       position.y,
-      this._options.boxHeight - this._content.height,
+      this.boxHeight - this._content.height,
       0,
     );
     this._content.position.copyFrom(position);
@@ -573,6 +569,26 @@ export class Scrollbox extends layout.ContainerBase<
 
   public get content() {
     return this._content;
+  }
+
+  get boxWidth(): number {
+    if (!this._lastResizeInfo) return this._options.boxWidth;
+
+    return (
+      this._lastResizeInfo.localBounds.width -
+      this._options.scrollbarWidth -
+      this._options.scrollbarOffset
+    );
+  }
+
+  get boxHeight(): number {
+    if (!this._lastResizeInfo) return this._options.boxWidth;
+
+    return (
+      this._lastResizeInfo?.localBounds.height -
+      this._options.scrollbarWidth -
+      this._options.scrollbarOffset
+    );
   }
 
   /** Put child elements into the `content` container */
