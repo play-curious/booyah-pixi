@@ -422,7 +422,7 @@ export type DisplayObjectTypeMap<DisplayObjectType extends PIXI.DisplayObject> =
   };
 
 export type ResolvablePixiDisplayObject<
-  DisplayObjectType extends PIXI.DisplayObject,
+  DisplayObjectType extends PIXI.Container,
   LayoutOptionsType,
 > = resolvable.ResolvableObject<
   DisplayObjectTypeMap<DisplayObjectType>,
@@ -430,7 +430,7 @@ export type ResolvablePixiDisplayObject<
 >;
 
 export class DisplayObjectChipOptions<
-  DisplayObjectType extends PIXI.DisplayObject,
+  DisplayObjectType extends PIXI.Container,
   LayoutOptionsType extends LayoutOptionsBase,
 > extends LayoutItemBaseOptions<LayoutOptionsType> {
   displayObject: DisplayObjectType;
@@ -443,27 +443,38 @@ export class DisplayObjectChipOptions<
 
   addToParentLayoutItem = true;
   addToContainer = true;
+
+  /**
+   * Create an intermediate container that can be manipulated
+   * relative to the position provided by the layout
+   * */
+  makeOffsetContainer = true;
 }
 
 export abstract class DisplayObjectChip<
-  DisplayObjectType extends PIXI.DisplayObject,
+  DisplayObjectType extends PIXI.Container,
   LayoutOptionsType extends LayoutOptionsBase = LayoutOptionsBase,
   OptionsType extends DisplayObjectChipOptions<
     DisplayObjectType,
     LayoutOptionsType
   > = DisplayObjectChipOptions<DisplayObjectType, LayoutOptionsType>,
 > extends LayoutItemBase<LayoutOptionsType, OptionsType> {
-  // private _propertiesToUpdateOnResize: Array<keyof DisplayObjectType>;
-
   protected _propertiesResolver: resolvable.Resolver<
     ResolvablePixiDisplayObject<DisplayObjectType, LayoutOptionsType>,
     LayoutValueResolvableContext<LayoutOptionsType>
   >;
 
+  protected _offsetContainer?: PIXI.Container;
+
   constructor(options: OptionsType) {
     super(options);
 
     this._propertiesResolver = new resolvable.Resolver(options.properties);
+
+    if (this._options.makeOffsetContainer) {
+      this._offsetContainer = new PIXI.Container();
+      this._offsetContainer.addChild(this.displayObject);
+    }
   }
 
   protected _onActivate() {
@@ -487,7 +498,10 @@ export abstract class DisplayObjectChip<
       !this._options.hasOwnProperty("addToContainer") ||
       this._options.addToContainer
     ) {
-      this._chipContext.container.addChild(this._options.displayObject);
+      const containerToAdd = this._options.makeOffsetContainer
+        ? this._offsetContainer
+        : this._options.displayObject;
+      this._chipContext.container.addChild(containerToAdd);
     }
 
     // Optionally participate in the layout
@@ -513,7 +527,9 @@ export abstract class DisplayObjectChip<
       !this._options.hasOwnProperty("addToContainer") ||
       this._options.addToContainer
     ) {
-      this._chipContext.container.removeChild(this._options.displayObject);
+      this._chipContext.container.removeChild(
+        this._offsetContainer || this._options.displayObject,
+      );
     }
 
     super._onTerminate();
@@ -574,6 +590,19 @@ export abstract class DisplayObjectChip<
       this.displayObject[property] = value as DisplayObjectType[Property];
     }
   }
+
+  get offsetContainer(): PIXI.Container | undefined {
+    return this._offsetContainer;
+  }
+
+  get contextModification() {
+    if (!this._options.makeOffsetContainer) return super.contextModification;
+
+    const parentValue = super.contextModification;
+    return Object.assign({}, parentValue, {
+      container: this._offsetContainer,
+    });
+  }
 }
 
 export class DisplayLeafLayoutOptions extends LayoutOptionsBase {
@@ -587,26 +616,23 @@ export class DisplayLeafLayoutOptions extends LayoutOptionsBase {
 }
 
 export class DisplayLeafChipOptions<
-  DisplayObjectType extends PIXI.DisplayObject,
+  DisplayObjectType extends PIXI.Container,
   LayoutOptionsType extends DisplayLeafLayoutOptions = DisplayLeafLayoutOptions,
 > extends DisplayObjectChipOptions<DisplayObjectType, LayoutOptionsType> {}
 
 export class DisplayLeafChip<
-  DisplayObjectType extends PIXI.DisplayObject,
+  DisplayObjectType extends PIXI.Container,
   LayoutOptionsType extends DisplayLeafLayoutOptions = DisplayLeafLayoutOptions,
   OptionsType extends DisplayLeafChipOptions<
     DisplayObjectType,
     LayoutOptionsType
   > = DisplayLeafChipOptions<DisplayObjectType, LayoutOptionsType>,
 > extends DisplayObjectChip<DisplayObjectType, LayoutOptionsType, OptionsType> {
-  // protected readonly _options: DisplayLeafChipOptions<DisplayObjectType>;
-
-  // Cache of the local bounds so as not to recalculate it
-  private _localBounds?: Bounds;
   private _idealWidth?: number;
   private _idealHeight?: number;
 
-  // private _propertiesToUpdateOnResize: Array<keyof DisplayObjectType>;
+  // Cache of the local bounds so as not to recalculate it
+  private _localBounds?: Bounds;
 
   constructor(
     options: Partial<
@@ -997,13 +1023,11 @@ export abstract class ContainerBase<
       options,
       new DisplayObjectChipOptions<PIXI.Container, LayoutOptionsType>(),
     ) as OptionsType;
-    super(filledOptions);
-
     if (!filledOptions.displayObject) {
       filledOptions.displayObject = new PIXI.Container();
     }
 
-    this._options = filledOptions;
+    super(filledOptions);
   }
 
   protected _onActivate(): void {
@@ -1700,45 +1724,6 @@ export class AnimatedSpriteChip extends DisplayLeafChip<
     if (this._options.behaviorOnStart === "play") {
       this._animatedSprite.play();
     }
-  }
-}
-
-export interface LoaderOptions {
-  initOptions?: PIXI.AssetInitOptions;
-  bundlesToLoad?: string[];
-  bundlesToBackgroundLoad?: string[];
-}
-
-export class Loader extends chip.Composite {
-  constructor(private readonly _options: LoaderOptions = {}) {
-    super();
-  }
-
-  protected _onActivate(): void {
-    this._startLoading();
-  }
-
-  private async _startLoading() {
-    if (this._options.initOptions) {
-      await PIXI.Assets.init(this._options.initOptions);
-    }
-
-    if (this._options.bundlesToLoad) {
-      await PIXI.Assets.loadBundle(
-        this._options.bundlesToLoad,
-        this._onProgress.bind(this),
-      );
-    }
-
-    if (this._options.bundlesToBackgroundLoad) {
-      PIXI.Assets.loadBundle(this._options.bundlesToLoad);
-    }
-
-    this._terminateSelf();
-  }
-
-  private _onProgress(progress: number) {
-    this.emit("progress", progress);
   }
 }
 
