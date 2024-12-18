@@ -1742,29 +1742,6 @@ export class Loader extends chip.Composite {
   }
 }
 
-function updateProperty<
-  DisplayObjectType extends PIXI.DisplayObject,
-  Property extends keyof DisplayObjectType,
->(
-  displayObject: DisplayObjectType,
-  property: Property,
-  value: DisplayObjectValueType<DisplayObjectType, Property>,
-) {
-  if (displayObject[property] instanceof PIXI.ObservablePoint) {
-    if (typeof value === "number") {
-      (displayObject[property] as PIXI.ObservablePoint).set(value as number);
-    } else {
-      // Assume it's a point
-      (displayObject[property] as PIXI.ObservablePoint).copyFrom(
-        value as PIXI.IPointData,
-      );
-    }
-  } else {
-    // @ts-ignore
-    displayObject[property] = value;
-  }
-}
-
 export class LayoutTest extends chip.Composite {
   protected _onActivate(): void {
     this._addHorizontalLayout();

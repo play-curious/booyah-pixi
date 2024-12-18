@@ -7,61 +7,6 @@ import * as layout from "./layout";
 import * as math from "./math";
 import * as resolvable from "./resolvable";
 
-// type ResolvableFunction<Type, Context> = (context: Context) => Type;
-// type Resolvable<Type, Context> = Type | ResolvableFunction<Type, Context>;
-
-// function isResolvableFunction<Type, Context>(
-//   resolvable: Resolvable<Type, Context>,
-// ): resolvable is ResolvableFunction<Type, Context> {
-//   return typeof resolvable === "function";
-// }
-
-// type ResolvableCollection<DataType, Context> = {
-//   [Property in keyof DataType]: Resolvable<DataType[Property], Context>;
-// };
-
-// class MyResolver<DataType, Context> {
-//   private _resolvableCollection: ResolvableCollection<DataType, Context>;
-//   private _resolvedCollection: DataType;
-
-//   constructor() {
-//     //@ts-ignore
-//     this._resolvedCollection = {};
-//   }
-
-//   public setResovableCollection(
-//     newCollection: ResolvableCollection<DataType, Context>,
-//   ) {
-//     this._resolvableCollection = newCollection;
-//   }
-
-//   public resolve(resolvingContext: Context) {
-//     for (const key in this._resolvableCollection) {
-//       this._resolvedCollection[key] = this._resolve(
-//         this._resolvableCollection[key],
-//         resolvingContext,
-//       ) as DataType[typeof key];
-//     }
-//   }
-
-//   public getResolvedCollection(): DataType {
-//     return this._resolvedCollection;
-//   }
-
-//   private _resolve<Type>(
-//     resolvable: Resolvable<Type, Context>,
-//     resolvingContext: Context,
-//   ): Type {
-//     if (isResolvableFunction(resolvable)) {
-//       return resolvable(resolvingContext);
-//     }
-
-//     return resolvable;
-//   }
-// }
-
-// type ResolvingContext = { renderSize: PIXI.IPointData };
-
 function isTexture(object: any): object is PIXI.Texture {
   return object.baseTexture;
 }
@@ -107,16 +52,6 @@ export class Scrollbox extends layout.ContainerBase<
   layout.LayoutOptionsBase,
   ScrollboxOptions
 > {
-  // public options: ScrollboxOptions;
-  // public readonly resolvableOptions: ResolvableCollection<
-  //   ScrollboxOptions,
-  //   ResolvingContext
-  // >;
-  // private _optionsResolver: resolvable.Resolver<
-  //   ScrollboxOptions,
-  //   ScrollboxResolvableContext
-  // >;
-
   private _pointerDown?: { type: "drag" | "scrollbar"; last: PIXI.IPointData };
   // private _container: PIXI.Container;
   private _content: PIXI.Container;
@@ -159,12 +94,6 @@ export class Scrollbox extends layout.ContainerBase<
     // });
     // this._options = this._optionsResolver.getResolvedCollection();
 
-    // Last pointerdown event
-    // this._pointerDown = null;
-
-    // this.displayObject = new PIXI.Container();
-    // this._activateChildChip(new layout.DisplayObjectChip(this.displayObject));
-
     this.displayObject.eventMode = "static";
     this._subscribe(this.displayObject, "globalpointermove", this._onMove);
     this._subscribe(this.displayObject, "pointerup", this._onUp);
@@ -197,11 +126,6 @@ export class Scrollbox extends layout.ContainerBase<
     }
 
     this.displayObject.addChild(this._content);
-
-    // this._activateChildChip({
-    //   chip: new layout.ContainerLeafChip({ displayObject: this._content }),
-    //   context: { container: this.displayObject },
-    // });
 
     const mask = new PIXI.Sprite(PIXI.Texture.WHITE);
     this._content.mask = mask;
