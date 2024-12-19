@@ -485,6 +485,29 @@ export class Scrollbox extends layout.ContainerBase<
     this.emit("moved", { reason });
   }
 
+  scrollAlongAxis(position: "start" | "end" | number, reason = "user") {
+    const position2 = new PIXI.Point();
+    if (this._options.direction === "horizontal") {
+      if (position === "start") {
+        position2.x = 0;
+      } else if (position === "end") {
+        position2.x = this.boxWidth - this._content.width;
+      } else {
+        position2.x = position;
+      }
+    } else {
+      if (position === "start") {
+        position2.y = 0;
+      } else if (position === "end") {
+        position2.y = this.boxHeight - this._content.height;
+      } else {
+        position2.y = position;
+      }
+    }
+
+    this.scrollTo(position2, reason);
+  }
+
   public get currentScroll() {
     return this._options.direction === "horizontal"
       ? this._content.x
