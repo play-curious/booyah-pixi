@@ -822,8 +822,21 @@ export class DisplayLeafChip<
   get idealWidth() {
     return this._idealWidth;
   }
+
+  // Can't use a regular setter because this is a read-only property in a superclass
+  setIdealWidth(value: number) {
+    this._idealWidth = value;
+    this.requestResize();
+  }
+
   get idealHeight() {
     return this._idealHeight;
+  }
+
+  // Can't use a regular setter because this is a read-only property in a superclass
+  setIdealHeight(value: number) {
+    this._idealHeight = value;
+    this.requestResize();
   }
 
   protected _setSize({
