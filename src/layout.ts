@@ -1031,6 +1031,8 @@ export abstract class ContainerBase<
 > extends DisplayObjectChip<PIXI.Container, LayoutOptionsType, OptionsType> {
   protected _childLayoutItems?: Array<LayoutItem>;
 
+  protected _aggregatedChildValues?: Partial<Record<LayoutProperty, number>>;
+
   constructor(
     options?: Partial<
       DisplayObjectChipOptions<PIXI.Container, LayoutOptionsType>
@@ -1049,6 +1051,7 @@ export abstract class ContainerBase<
 
   protected _onActivate(): void {
     this._childLayoutItems = [];
+    this._aggregatedChildValues = {};
 
     super._onActivate();
   }
@@ -1080,6 +1083,105 @@ export abstract class ContainerBase<
 
     for (const child of this._childLayoutItems!)
       child.prepareResize(renderInfo);
+
+    this._aggregatedChildValues = {};
+    for (const prop of layoutProperties) {
+      if (typeof super[prop] === "undefined") {
+        const methodName =
+          `_aggregate${booyah.uppercaseFirstLetter(prop)}` as keyof this;
+        this._aggregatedChildValues[prop] = (
+          this[methodName] as () => number | undefined
+        )();
+      }
+    }
+
+    // Adjust width values
+    if (typeof this._aggregatedChildValues["minWidth"]) {
+      // min <= ideal
+      if (
+        typeof this._aggregatedChildValues["idealWidth"] !== "undefined" &&
+        this._aggregatedChildValues["idealWidth"] <
+          this._aggregatedChildValues["minWidth"]
+      ) {
+        this._aggregatedChildValues["idealWidth"] =
+          this._aggregatedChildValues["minWidth"];
+      }
+
+      // min <= max
+      if (
+        typeof this._aggregatedChildValues["maxWidth"] !== "undefined" &&
+        this._aggregatedChildValues["maxWidth"] <
+          this._aggregatedChildValues["minWidth"]
+      ) {
+        this._aggregatedChildValues["maxWidth"] =
+          this._aggregatedChildValues["minWidth"];
+      }
+    }
+
+    // ideal <= max
+    if (
+      typeof this._aggregatedChildValues["idealWidth"] !== "undefined" &&
+      typeof this._aggregatedChildValues["maxWidth"] !== "undefined" &&
+      this._aggregatedChildValues["maxWidth"] <
+        this._aggregatedChildValues["idealWidth"]
+    ) {
+      this._aggregatedChildValues["idealWidth"] =
+        this._aggregatedChildValues["maxWidth"];
+    }
+
+    // Adjust height values
+    if (typeof this._aggregatedChildValues["minHeight"]) {
+      // min <= ideal
+      if (
+        typeof this._aggregatedChildValues["idealHeight"] !== "undefined" &&
+        this._aggregatedChildValues["idealHeight"] <
+          this._aggregatedChildValues["minHeight"]
+      ) {
+        this._aggregatedChildValues["idealHeight"] =
+          this._aggregatedChildValues["minHeight"];
+      }
+
+      // min <= max
+      if (
+        typeof this._aggregatedChildValues["maxHeight"] !== "undefined" &&
+        this._aggregatedChildValues["maxHeight"] <
+          this._aggregatedChildValues["minHeight"]
+      ) {
+        this._aggregatedChildValues["maxHeight"] =
+          this._aggregatedChildValues["minHeight"];
+      }
+    }
+
+    // ideal <= max
+    if (
+      typeof this._aggregatedChildValues["idealHeight"] !== "undefined" &&
+      typeof this._aggregatedChildValues["maxHeight"] !== "undefined" &&
+      this._aggregatedChildValues["maxHeight"] <
+        this._aggregatedChildValues["idealHeight"]
+    ) {
+      this._aggregatedChildValues["idealHeight"] =
+        this._aggregatedChildValues["maxHeight"];
+    }
+  }
+
+  /** Override teses method to set the child values for the container */
+  protected _aggregateMinWidth(): number | undefined {
+    return;
+  }
+  protected _aggregateMinHeight(): number | undefined {
+    return;
+  }
+  protected _aggregateIdealWidth(): number | undefined {
+    return;
+  }
+  protected _aggregateIdealHeight(): number | undefined {
+    return;
+  }
+  protected _aggregateMaxWidth(): number | undefined {
+    return;
+  }
+  protected _aggregateMaxHeight(): number | undefined {
+    return;
   }
 
   override resize(resizeInfo: ResizeInfo): void {
@@ -1135,6 +1237,27 @@ export abstract class ContainerBase<
     }
     return agg;
   }
+
+  get minWidth() {
+    return super.minWidth ?? this._aggregatedChildValues.minWidth;
+  }
+  get minHeight() {
+    return super.minHeight ?? this._aggregatedChildValues.minHeight;
+  }
+
+  get idealWidth() {
+    return super.idealWidth ?? this._aggregatedChildValues.idealWidth;
+  }
+  get idealHeight() {
+    return super.idealHeight ?? this._aggregatedChildValues.idealHeight;
+  }
+
+  get maxWidth() {
+    return super.maxWidth ?? this._aggregatedChildValues.maxWidth;
+  }
+  get maxHeight() {
+    return super.maxHeight ?? this._aggregatedChildValues.maxHeight;
+  }
 }
 
 export class StackingContainerChip extends ContainerBase {
@@ -1149,43 +1272,25 @@ export class StackingContainerChip extends ContainerBase {
     for (const child of this._childLayoutItems!) child.resize(childResizeInfo);
   }
 
-  get minWidth() {
-    return (
-      super.minWidth ??
-      this.aggregateChildValues("minWidth", "max", "treatAsZero")
-    );
+  protected override _aggregateMinWidth() {
+    return this.aggregateChildValues("minWidth", "max", "treatAsZero");
   }
-  get minHeight() {
-    return (
-      super.minHeight ??
-      this.aggregateChildValues("minHeight", "max", "treatAsZero")
-    );
+  protected override _aggregateMinHeight() {
+    return this.aggregateChildValues("minHeight", "max", "treatAsZero");
   }
 
-  get idealWidth() {
-    return (
-      super.idealWidth ??
-      this.aggregateChildValues("idealWidth", "max", "treatAsZero")
-    );
+  protected override _aggregateIdealWidth() {
+    return this.aggregateChildValues("idealWidth", "max", "treatAsZero");
   }
-  get idealHeight() {
-    return (
-      super.idealHeight ??
-      this.aggregateChildValues("idealHeight", "max", "treatAsZero")
-    );
+  protected override _aggregateIdealHeight() {
+    return this.aggregateChildValues("idealHeight", "max", "treatAsZero");
   }
 
-  get maxWidth() {
-    return (
-      super.maxWidth ??
-      this.aggregateChildValues("maxWidth", "max", "returnUndefined")
-    );
+  protected override _aggregateMaxWidth() {
+    return this.aggregateChildValues("maxWidth", "max", "returnUndefined");
   }
-  get maxHeight() {
-    return (
-      super.maxHeight ??
-      this.aggregateChildValues("maxHeight", "max", "returnUndefined")
-    );
+  protected override _aggregateMaxHeight() {
+    return this.aggregateChildValues("maxHeight", "max", "returnUndefined");
   }
 }
 
@@ -1500,9 +1605,7 @@ export class DirectionalContainerChip extends ContainerBase<DirectionalContainer
     }
   }
 
-  get minWidth() {
-    if (typeof super.minWidth !== "undefined") return super.minWidth;
-
+  protected override _aggregateMinWidth() {
     if (this._options.layoutOptions.direction === "horizontal") {
       const childrenSum = this.aggregateChildValues(
         "minWidth",
@@ -1516,9 +1619,7 @@ export class DirectionalContainerChip extends ContainerBase<DirectionalContainer
       return this.aggregateChildValues("minWidth", "max", "treatAsZero");
     }
   }
-  get minHeight() {
-    if (typeof super.minHeight !== "undefined") return super.minHeight;
-
+  protected override _aggregateMinHeight() {
     if (this._options.layoutOptions.direction === "vertical") {
       const childrenSum = this.aggregateChildValues(
         "minHeight",
@@ -1533,9 +1634,7 @@ export class DirectionalContainerChip extends ContainerBase<DirectionalContainer
     }
   }
 
-  get idealWidth() {
-    if (typeof super.idealWidth !== "undefined") return super.idealWidth;
-
+  protected override _aggregateIdealWidth() {
     if (this._options.layoutOptions.direction === "horizontal") {
       const childrenSum = this.aggregateChildValues(
         "idealWidth",
@@ -1549,9 +1648,7 @@ export class DirectionalContainerChip extends ContainerBase<DirectionalContainer
       return this.aggregateChildValues("idealWidth", "max", "treatAsZero");
     }
   }
-  get idealHeight() {
-    if (typeof super.idealHeight !== "undefined") return super.minWidth;
-
+  protected override _aggregateIdealHeight() {
     if (this._options.layoutOptions.direction === "vertical") {
       const childrenSum = this.aggregateChildValues(
         "idealHeight",
@@ -1566,9 +1663,7 @@ export class DirectionalContainerChip extends ContainerBase<DirectionalContainer
     }
   }
 
-  get maxWidth() {
-    if (typeof super.maxWidth !== "undefined") return super.maxWidth;
-
+  protected override _aggregateMaxWidth() {
     if (this._options.layoutOptions.direction === "horizontal") {
       const childrenSum = this.aggregateChildValues(
         "maxWidth",
@@ -1583,9 +1678,7 @@ export class DirectionalContainerChip extends ContainerBase<DirectionalContainer
     }
   }
 
-  get maxHeight() {
-    if (typeof super.maxHeight !== "undefined") return super.maxHeight;
-
+  protected override _aggregateMaxHeight() {
     if (this._options.layoutOptions.direction === "vertical") {
       const childrenSum = this.aggregateChildValues(
         "maxHeight",
