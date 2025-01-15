@@ -1,7 +1,6 @@
-import * as sound from "@pixi/sound";
 import * as PIXI from "pixi.js";
-
-import * as chip from "booyah/dist/chip";
+import * as sound from "@pixi/sound";
+import * as booyah from "booyah";
 
 export class DJOptions {
   musicChannelVolume = 0.25;
@@ -21,26 +20,26 @@ export class PlayingFxOptions {
 }
 
 class PlayingMusic extends PlayingMusicOptions {
-  name: string;
+  name!: string;
 }
 
 /** 
   A music player, that only plays one track at a time.
   By default the volume is lowered to not interfere with sound effects.
 */
-export class Dj extends chip.ChipBase {
+export class Dj extends booyah.ChipBase {
   private _options: DJOptions;
-  private _musicChannelVolume: number;
-  private _fxChannelVolume: number;
+  private _musicChannelVolume?: number;
+  private _fxChannelVolume?: number;
 
   private _playingMusic?: PlayingMusic;
-  private _playingFx: Record<string, PlayingFxOptions>;
+  private _playingFx?: Record<string, PlayingFxOptions>;
   private _lastRequestedMusicName?: string;
 
   constructor(options?: Partial<DJOptions>) {
     super();
 
-    this._options = chip.fillInOptions(options, new DJOptions());
+    this._options = booyah.fillInOptions(options, new DJOptions());
   }
 
   protected _onActivate(): void {
@@ -78,7 +77,7 @@ export class Dj extends chip.ChipBase {
   }
 
   get musicChannelVolume(): number {
-    return this._musicChannelVolume;
+    return this._musicChannelVolume!;
   }
 
   set musicChannelVolume(value: number) {
@@ -110,9 +109,9 @@ export class Dj extends chip.ChipBase {
 
     this.stopMusic();
 
-    const completeOptions = chip.fillInOptions(
+    const completeOptions = booyah.fillInOptions(
       options,
-      new PlayingMusicOptions()
+      new PlayingMusicOptions(),
     );
 
     resource.play({
@@ -120,7 +119,7 @@ export class Dj extends chip.ChipBase {
       singleInstance: true,
     });
     // For some reason the volume in play() seems to be ignored, so set it  here...
-    resource.volume = this._musicChannelVolume * completeOptions.volumeScale;
+    resource.volume = this._musicChannelVolume! * completeOptions.volumeScale;
 
     this._playingMusic = Object.assign({}, completeOptions, { name });
     console.log("playMusic() end", name, options, this._playingMusic);
@@ -147,7 +146,10 @@ export class Dj extends chip.ChipBase {
     const resource = this._getSoundResource(name);
     if (!resource) return;
 
-    const completeOptions = chip.fillInOptions(options, new PlayingFxOptions());
+    const completeOptions = booyah.fillInOptions(
+      options,
+      new PlayingFxOptions(),
+    );
 
     if (completeOptions.duckMusic) {
       this.pauseMusic();
@@ -156,7 +158,7 @@ export class Dj extends chip.ChipBase {
     resource.play({
       loop: completeOptions.loop,
       complete: () => {
-        delete this._playingFx[name];
+        delete this._playingFx![name];
 
         if (completeOptions.duckMusic) {
           this.resumeMusic();
@@ -167,14 +169,14 @@ export class Dj extends chip.ChipBase {
     });
 
     // For some reason the volume given to play() seems to be ignored, so let's set it here
-    resource.volume = this._fxChannelVolume * completeOptions.volumeScale;
+    resource.volume = this._fxChannelVolume! * completeOptions.volumeScale;
 
-    this._playingFx[name] = completeOptions;
+    this._playingFx![name] = completeOptions;
   }
 
   stopFx(name: string): void {
     this._getSoundResource(name)?.stop();
-    delete this._playingFx[name];
+    delete this._playingFx![name];
   }
 
   stopAllFx(): void {
@@ -204,7 +206,7 @@ export class Dj extends chip.ChipBase {
   }
 
   get fxChannelVolume(): number {
-    return this._fxChannelVolume;
+    return this._fxChannelVolume!;
   }
 
   set fxChannelVolume(value: number) {
@@ -237,16 +239,16 @@ export class Dj extends chip.ChipBase {
 /**
   A chip that requests the music be changed
 */
-export class PlayMusic extends chip.ChipBase {
+export class PlayMusic extends booyah.ChipBase {
   private _options: PlayingMusicOptions;
 
   constructor(
     private readonly _trackName: string,
-    options?: Partial<PlayingMusicOptions>
+    options?: Partial<PlayingMusicOptions>,
   ) {
     super();
 
-    this._options = chip.fillInOptions(options, new PlayingMusicOptions());
+    this._options = booyah.fillInOptions(options, new PlayingMusicOptions());
   }
 
   _onActivate() {
@@ -258,16 +260,16 @@ export class PlayMusic extends chip.ChipBase {
 /**
   A chip that plays a sounds efect
 */
-export class PlayFx extends chip.ChipBase {
+export class PlayFx extends booyah.ChipBase {
   private _options: PlayingFxOptions;
 
   constructor(
     private readonly _trackName: string,
-    options?: Partial<PlayingFxOptions>
+    options?: Partial<PlayingFxOptions>,
   ) {
     super();
 
-    this._options = chip.fillInOptions(options, new PlayingFxOptions());
+    this._options = booyah.fillInOptions(options, new PlayingFxOptions());
   }
 
   _onActivate() {

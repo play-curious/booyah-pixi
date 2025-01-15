@@ -1,6 +1,5 @@
-import * as chip from "booyah/dist/chip";
-import * as geom from "booyah/dist/geom";
 import * as PIXI from "pixi.js";
+import * as booyah from "booyah";
 import * as _ from "underscore";
 
 import * as layout from "./layout";
@@ -38,8 +37,8 @@ export class ScrollboxOptions extends layout.DisplayObjectChipOptions<
   wheelScroll: boolean = true;
 }
 
-type ScrollboxResolvableContext =
-  layout.LayoutValueResolvableContext<layout.LayoutOptionsBase>;
+// type ScrollboxResolvableContext =
+//   layout.LayoutValueResolvableContext<layout.LayoutOptionsBase>;
 
 /**
  * Based on David Fig's pixi-scrollbox https://github.com/davidfig/pixi-scrollbox/, but adapted to Booyah
@@ -54,24 +53,20 @@ export class Scrollbox extends layout.ContainerBase<
 > {
   private _pointerDown?: { type: "drag" | "scrollbar"; last: PIXI.IPointData };
   // private _container: PIXI.Container;
-  private _content: PIXI.Container;
-  private _scrollbarAnchor: PIXI.Container;
-  private _scrollbarBackground: PIXI.NineSlicePlane;
-  private _scrollbarHandle: PIXI.NineSlicePlane;
+  private _content?: PIXI.Container;
+  private _scrollbarAnchor?: PIXI.Container;
+  private _scrollbarBackground?: PIXI.NineSlicePlane;
+  private _scrollbarHandle?: PIXI.NineSlicePlane;
 
   /**
    * Can be provided with an existing container
    */
-  constructor(
-    partialOptions: Partial<
-      resolvable.ResolvableObject<ScrollboxOptions, ScrollboxResolvableContext>
-    >,
-  ) {
-    const filledOptions = chip.fillInOptions(
+  constructor(partialOptions: Partial<ScrollboxOptions>) {
+    const filledOptions = booyah.fillInOptions(
       partialOptions,
       new ScrollboxOptions(),
     );
-    filledOptions.layoutOptions = chip.fillInOptions(
+    filledOptions.layoutOptions = booyah.fillInOptions(
       filledOptions.layoutOptions,
       new ScrollboxLayoutOptions(),
     );
@@ -254,14 +249,14 @@ export class Scrollbox extends layout.ContainerBase<
   protected _onResize(): void {
     // Provide unlimited bounds in the direction of scroll
     const childAbsoluteBounds = new layout.Bounds(
-      this.lastResizeInfo.absoluteBounds.x,
-      this.lastResizeInfo.absoluteBounds.y,
+      this.lastResizeInfo!.absoluteBounds.x,
+      this.lastResizeInfo!.absoluteBounds.y,
       this._options.direction === "horizontal" ? undefined : this.boxWidth,
       this._options.direction === "vertical" ? undefined : this.boxHeight,
     );
     const childLocalBounds = new layout.Bounds(
-      this.lastResizeInfo.localBounds.x,
-      this.lastResizeInfo.localBounds.y,
+      this.lastResizeInfo!.localBounds.x,
+      this.lastResizeInfo!.localBounds.y,
       this._options.direction === "horizontal" ? undefined : this.boxWidth,
       this._options.direction === "vertical" ? undefined : this.boxHeight,
     );
@@ -271,14 +266,14 @@ export class Scrollbox extends layout.ContainerBase<
       absoluteBounds: this.calculateInnerBounds(childAbsoluteBounds),
       localBounds: this.calculateInnerBounds(childLocalBounds),
     };
-    for (const child of this._childLayoutItems) child.resize(childResizeInfo);
+    for (const child of this._childLayoutItems!) child.resize(childResizeInfo);
 
     super._onResize();
   }
 
   /** Call when container contents have changed  */
   public refreshContents() {
-    this.scrollTo(this.content.position);
+    this.scrollTo(this.content!.position);
     this._updateScrollbars();
     this.emit("refreshedContents");
   }
@@ -290,12 +285,12 @@ export class Scrollbox extends layout.ContainerBase<
     switch (this._options.direction) {
       case "horizontal": {
         boxSize = this.boxWidth;
-        contentSize = this._content.width;
+        contentSize = this._content!.width;
         break;
       }
       case "vertical": {
         boxSize = this.boxHeight;
-        contentSize = this._content.height;
+        contentSize = this._content!.height;
         break;
       }
     }
@@ -304,24 +299,24 @@ export class Scrollbox extends layout.ContainerBase<
       this._options.overflow === "hidden" ||
       (this._options.overflow === "auto" && boxSize > contentSize)
     ) {
-      this._scrollbarAnchor.visible = false;
+      this._scrollbarAnchor!.visible = false;
       return;
     }
 
-    this._scrollbarAnchor.visible = true;
-    const ratio = geom.clamp(boxSize / contentSize, 0, 1);
+    this._scrollbarAnchor!.visible = true;
+    const ratio = booyah.clamp(boxSize / contentSize, 0, 1);
 
     switch (this._options.direction) {
       case "horizontal": {
-        this._scrollbarBackground.width = boxSize;
-        this._scrollbarHandle.width = boxSize * ratio;
-        this._scrollbarHandle.x = -1 * this.currentScroll * ratio;
+        this._scrollbarBackground!.width = boxSize;
+        this._scrollbarHandle!.width = boxSize * ratio;
+        this._scrollbarHandle!.x = -1 * this.currentScroll * ratio;
         break;
       }
       case "vertical": {
-        this._scrollbarBackground.height = boxSize;
-        this._scrollbarHandle.height = boxSize * ratio;
-        this._scrollbarHandle.y = -this._content.y * ratio;
+        this._scrollbarBackground!.height = boxSize;
+        this._scrollbarHandle!.height = boxSize * ratio;
+        this._scrollbarHandle!.y = -this._content!.y * ratio;
         break;
       }
     }
@@ -372,18 +367,18 @@ export class Scrollbox extends layout.ContainerBase<
     const local = this.displayObject.toLocal(e.global);
 
     if (this._options.direction === "horizontal") {
-      const deltaPosition = local.x - this._pointerDown.last.x;
-      const ratio = this.boxWidth / this._content.width;
+      const deltaPosition = local.x - this._pointerDown!.last.x;
+      const ratio = this.boxWidth / this._content!.width;
       const fraction = deltaPosition / ratio;
       this.scrollBy({ x: -fraction, y: 0 });
     } else {
-      const deltaPosition = local.y - this._pointerDown.last.y;
-      const ratio = this.boxHeight / this._content.height;
+      const deltaPosition = local.y - this._pointerDown!.last.y;
+      const ratio = this.boxHeight / this._content!.height;
       const fraction = deltaPosition / ratio;
       this.scrollBy({ x: 0, y: -fraction });
     }
 
-    this._pointerDown.last = local;
+    this._pointerDown!.last = local;
 
     if (this._options.stopPropagation) {
       e.stopPropagation();
@@ -395,8 +390,8 @@ export class Scrollbox extends layout.ContainerBase<
    * @private
    */
   private _scrollbarUp() {
-    this._pointerDown = null;
-    this._content.interactiveChildren = true;
+    delete this._pointerDown;
+    this._content!.interactiveChildren = true;
   }
 
   /**
@@ -426,16 +421,16 @@ export class Scrollbox extends layout.ContainerBase<
     const deltaPosition: PIXI.IPointData = { x: 0, y: 0 };
 
     if (this._options.direction === "horizontal") {
-      deltaPosition.x = local.x - this._pointerDown.last.x;
+      deltaPosition.x = local.x - this._pointerDown!.last.x;
     } else {
-      deltaPosition.y = local.y - this._pointerDown.last.y;
+      deltaPosition.y = local.y - this._pointerDown!.last.y;
     }
 
     if (math.magnitude(deltaPosition) <= this._options.dragThreshold) return;
 
     this.scrollBy(deltaPosition);
-    this._pointerDown.last = local;
-    this._content.interactiveChildren = false;
+    this._pointerDown!.last = local;
+    this._content!.interactiveChildren = false;
 
     if (this._options.stopPropagation) {
       e.stopPropagation();
@@ -447,8 +442,8 @@ export class Scrollbox extends layout.ContainerBase<
    * @private
    */
   private _dragUp() {
-    this._pointerDown = null;
-    this._content.interactiveChildren = true;
+    delete this._pointerDown;
+    this._content!.interactiveChildren = true;
   }
 
   /**
@@ -468,17 +463,21 @@ export class Scrollbox extends layout.ContainerBase<
   }
 
   public scrollBy(amount: PIXI.IPointData, reason = "user") {
-    this.scrollTo(math.add(this._content.position, amount), reason);
+    this.scrollTo(math.add(this._content!.position, amount), reason);
   }
 
   public scrollTo(position: PIXI.IPointData, reason = "user") {
-    position.x = geom.clamp(position.x, this.boxWidth - this._content.width, 0);
-    position.y = geom.clamp(
-      position.y,
-      this.boxHeight - this._content.height,
+    position.x = booyah.clamp(
+      position.x,
+      this.boxWidth - this._content!.width,
       0,
     );
-    this._content.position.copyFrom(position);
+    position.y = booyah.clamp(
+      position.y,
+      this.boxHeight - this._content!.height,
+      0,
+    );
+    this._content!.position.copyFrom(position);
 
     this._updateScrollbars();
 
@@ -491,7 +490,7 @@ export class Scrollbox extends layout.ContainerBase<
       if (position === "start") {
         position2.x = 0;
       } else if (position === "end") {
-        position2.x = this.boxWidth - this._content.width;
+        position2.x = this.boxWidth - this._content!.width;
       } else {
         position2.x = position;
       }
@@ -499,7 +498,7 @@ export class Scrollbox extends layout.ContainerBase<
       if (position === "start") {
         position2.y = 0;
       } else if (position === "end") {
-        position2.y = this.boxHeight - this._content.height;
+        position2.y = this.boxHeight - this._content!.height;
       } else {
         position2.y = position;
       }
@@ -510,8 +509,8 @@ export class Scrollbox extends layout.ContainerBase<
 
   public get currentScroll() {
     return this._options.direction === "horizontal"
-      ? this._content.x
-      : this._content.y;
+      ? this._content!.x
+      : this._content!.y;
   }
 
   public get content() {
@@ -522,7 +521,7 @@ export class Scrollbox extends layout.ContainerBase<
     if (!this._lastResizeInfo) return this._options.boxWidth;
 
     return (
-      this._lastResizeInfo.localBounds.width -
+      this._lastResizeInfo.localBounds.width! -
       this._options.scrollbarWidth -
       this._options.scrollbarOffset
     );
@@ -532,14 +531,14 @@ export class Scrollbox extends layout.ContainerBase<
     if (!this._lastResizeInfo) return this._options.boxWidth;
 
     return (
-      this._lastResizeInfo?.localBounds.height -
+      this._lastResizeInfo?.localBounds.height! -
       this._options.scrollbarWidth -
       this._options.scrollbarOffset
     );
   }
 
   /** Put child elements into the `content` container */
-  get contextModification(): chip.ChipContextResolvable {
+  get contextModification(): booyah.ChipContextResolvable {
     const parentValue = super.contextModification;
     return Object.assign({}, parentValue, {
       container: this._content,

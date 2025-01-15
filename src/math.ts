@@ -1,5 +1,5 @@
-import * as util from "booyah/dist/util";
 import * as PIXI from "pixi.js";
+import * as booyah from "booyah";
 
 /** Returns the vector length of a a PIXI Point */
 export function magnitude(a: PIXI.IPointData): number {
@@ -126,7 +126,7 @@ export function moveTowards(
   speed: number,
 ): PIXI.Point {
   const d = distance(a, b);
-  return lerpPoint(a, b, util.clamp(speed / d, 0, 1));
+  return lerpPoint(a, b, booyah.clamp(speed / d, 0, 1));
 }
 
 export const moveTowardsPoint = moveTowards;
@@ -137,8 +137,8 @@ export function randomPointInRange(
   max: PIXI.IPointData,
 ): PIXI.Point {
   return new PIXI.Point(
-    util.randomInRange(min.x, max.x),
-    util.randomInRange(min.y, max.y),
+    booyah.randomInRange(min.x, max.x),
+    booyah.randomInRange(min.y, max.y),
   );
 }
 

@@ -12,19 +12,14 @@ export function isDynamicResolvable<Type, ResolvableContext>(
   return typeof resolvable === "function";
 }
 
-type GenericObject = Record<string, any>;
-
-export type ResolvableObject<
-  DataType extends GenericObject,
-  ResolvableContext,
-> = {
+export type ResolvableObject<DataType, ResolvableContext> = {
   [Property in keyof DataType]: Resolvable<
     DataType[Property],
     ResolvableContext
   >;
 };
 
-export class Resolver<DataType extends GenericObject, ResolvableContext> {
+export class Resolver<DataType, ResolvableContext> {
   private _resolvedObject: Partial<DataType> = {};
   private _dynamicProperties: Array<keyof DataType>;
 
@@ -35,8 +30,9 @@ export class Resolver<DataType extends GenericObject, ResolvableContext> {
   ) {
     // Figure out which properties are dynamic
     this._dynamicProperties = Object.keys(this._resolvableObject).filter(
-      (key) => isDynamicResolvable(this._resolvableObject[key]),
-    );
+      (key) =>
+        isDynamicResolvable(this._resolvableObject[key as keyof DataType]),
+    ) as Array<keyof DataType>;
   }
 
   /** Remove all dynamic values  */
@@ -51,7 +47,7 @@ export class Resolver<DataType extends GenericObject, ResolvableContext> {
       return this._resolvedObject[key];
     } else {
       const value = this._resolveValue(key, resolvableContext);
-      this._resolvedObject[key] = value;
+      this._resolvedObject[key] = value as DataType[typeof key];
       return value;
     }
   }

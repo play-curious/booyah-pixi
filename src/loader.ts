@@ -1,5 +1,5 @@
-import * as chip from "booyah/dist/chip";
 import * as PIXI from "pixi.js";
+import * as booyah from "booyah";
 import * as _ from "underscore";
 
 export interface LoaderOptions {
@@ -8,7 +8,7 @@ export interface LoaderOptions {
   bundlesToBackgroundLoad?: string[];
 }
 
-export class Loader extends chip.Composite {
+export class Loader extends booyah.Composite {
   constructor(private readonly _options: LoaderOptions = {}) {
     super();
   }
@@ -30,7 +30,7 @@ export class Loader extends chip.Composite {
     }
 
     if (this._options.bundlesToBackgroundLoad) {
-      PIXI.Assets.loadBundle(this._options.bundlesToLoad);
+      PIXI.Assets.loadBundle(this._options.bundlesToBackgroundLoad);
     }
 
     this._terminateSelf();
