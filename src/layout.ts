@@ -7,13 +7,21 @@ import * as _ from "underscore";
 import * as pixiApp from "./pixiApp";
 import * as resolvable from "./resolvable";
 
-export const layoutProperties = [
+export const widthLayoutProperties = [
   "minWidth",
-  "minHeight",
   "idealWidth",
-  "idealHeight",
   "maxWidth",
+] as const;
+
+export const heightLayoutProperties = [
+  "minHeight",
+  "idealHeight",
   "maxHeight",
+] as const;
+
+export const layoutProperties = [
+  ...widthLayoutProperties,
+  ...heightLayoutProperties,
 ] as const;
 
 export type LayoutProperty = (typeof layoutProperties)[number];
@@ -107,6 +115,7 @@ export interface LayoutItem extends booyah.NodeEventSource {
 }
 
 export class LayoutItemBaseOptions<LayoutOptionsType> {
+  name?: string;
   layoutOptions: Partial<
     resolvable.ResolvableObject<
       LayoutOptionsType,
@@ -488,6 +497,11 @@ export abstract class DisplayObjectChip<
       layoutItem: this,
       renderSize: this.pixiAppChip.renderSize,
     };
+
+    // Set name of DisplayObject, if provided
+    if (this._options.name) {
+      this.displayObject.name = this._options.name;
+    }
 
     for (const prop of this._propertiesResolver.properties) {
       this.updateProperty(
@@ -1085,13 +1099,21 @@ export abstract class ContainerBase<
       child.prepareResize(renderInfo);
 
     this._aggregatedChildValues = {};
-    for (const prop of layoutProperties) {
+
+    // Handle width values
+    for (const prop of widthLayoutProperties) {
       if (typeof super[prop] === "undefined") {
         const methodName =
           `_aggregate${booyah.uppercaseFirstLetter(prop)}` as keyof this;
-        this._aggregatedChildValues[prop] = (
-          this[methodName] as () => number | undefined
-        )();
+
+        let value = (this[methodName] as () => number | undefined)();
+
+        // Include padding
+        if (typeof value !== "undefined") {
+          value += this.paddingLeft + this.paddingRight;
+        }
+
+        this._aggregatedChildValues[prop] = value;
       }
     }
 
@@ -1127,6 +1149,23 @@ export abstract class ContainerBase<
     ) {
       this._aggregatedChildValues["idealWidth"] =
         this._aggregatedChildValues["maxWidth"];
+    }
+
+    // Handle height values
+    for (const prop of heightLayoutProperties) {
+      if (typeof super[prop] === "undefined") {
+        const methodName =
+          `_aggregate${booyah.uppercaseFirstLetter(prop)}` as keyof this;
+
+        let value = (this[methodName] as () => number | undefined)();
+
+        // Include padding
+        if (typeof value !== "undefined") {
+          value += this.paddingTop + this.paddingBottom;
+        }
+
+        this._aggregatedChildValues[prop] = value;
+      }
     }
 
     // Adjust height values
