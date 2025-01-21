@@ -589,6 +589,10 @@ export abstract class DisplayObjectChip<
     return this._options.displayObject;
   }
 
+  get name() {
+    return this._options.name;
+  }
+
   updateProperty<Property extends keyof DisplayObjectType>(
     property: Property,
     value: DisplayObjectValueType<DisplayObjectType, Property>,
