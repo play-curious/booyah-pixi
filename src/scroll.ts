@@ -25,6 +25,8 @@ export class ScrollboxOptions extends layout.DisplayObjectChipOptions<
   content?: PIXI.DisplayObject;
   boxWidth: number = 100;
   boxHeight: number = 100;
+  contentWidthPadding = 0;
+  contentHeightPadding = 0;
   overflow: OverflowSettings = "auto";
   direction: Direction = "horizontal";
   scrollbarOffset: number = 0;
@@ -278,19 +280,37 @@ export class Scrollbox extends layout.ContainerBase<
     this.emit("refreshedContents");
   }
 
+  get contentWidth() {
+    if (!this._content) return this._options.contentWidthPadding;
+
+    return (
+      this._content!.getLocalBounds().right + this._options.contentWidthPadding
+    );
+  }
+
+  get contentHeight() {
+    if (!this._content) return this._options.contentHeightPadding;
+
+    return (
+      this._content!.getLocalBounds().bottom +
+      this._options.contentHeightPadding
+    );
+  }
+
   private _updateScrollbars() {
     let boxSize: number;
     let contentSize: number;
 
+    const bounds = this._content!.getLocalBounds();
     switch (this._options.direction) {
       case "horizontal": {
         boxSize = this.boxWidth;
-        contentSize = this._content!.width;
+        contentSize = this.contentWidth;
         break;
       }
       case "vertical": {
         boxSize = this.boxHeight;
-        contentSize = this._content!.height;
+        contentSize = this.contentHeight;
         break;
       }
     }
@@ -368,12 +388,12 @@ export class Scrollbox extends layout.ContainerBase<
 
     if (this._options.direction === "horizontal") {
       const deltaPosition = local.x - this._pointerDown!.last.x;
-      const ratio = this.boxWidth / this._content!.width;
+      const ratio = this.boxWidth / this.contentWidth;
       const fraction = deltaPosition / ratio;
       this.scrollBy({ x: -fraction, y: 0 });
     } else {
       const deltaPosition = local.y - this._pointerDown!.last.y;
-      const ratio = this.boxHeight / this._content!.height;
+      const ratio = this.boxHeight / this.contentHeight;
       const fraction = deltaPosition / ratio;
       this.scrollBy({ x: 0, y: -fraction });
     }
@@ -467,14 +487,10 @@ export class Scrollbox extends layout.ContainerBase<
   }
 
   public scrollTo(position: PIXI.IPointData, reason = "user") {
-    position.x = booyah.clamp(
-      position.x,
-      this.boxWidth - this._content!.width,
-      0,
-    );
+    position.x = booyah.clamp(position.x, this.boxWidth - this.contentWidth, 0);
     position.y = booyah.clamp(
       position.y,
-      this.boxHeight - this._content!.height,
+      this.boxHeight - this.contentHeight,
       0,
     );
     this._content!.position.copyFrom(position);
@@ -490,7 +506,7 @@ export class Scrollbox extends layout.ContainerBase<
       if (position === "start") {
         position2.x = 0;
       } else if (position === "end") {
-        position2.x = this.boxWidth - this._content!.width;
+        position2.x = this.boxWidth - this.contentWidth;
       } else {
         position2.x = position;
       }
@@ -498,7 +514,7 @@ export class Scrollbox extends layout.ContainerBase<
       if (position === "start") {
         position2.y = 0;
       } else if (position === "end") {
-        position2.y = this.boxHeight - this._content!.height;
+        position2.y = this.boxHeight - this.contentHeight;
       } else {
         position2.y = position;
       }
