@@ -54,6 +54,7 @@ export class Scrollbox extends layout.ContainerBase<
   ScrollboxOptions
 > {
   private _pointerDown?: { type: "drag" | "scrollbar"; last: PIXI.IPointData };
+  private _isDragging?: boolean;
   // private _container: PIXI.Container;
   private _content?: PIXI.Container;
   private _scrollbarAnchor?: PIXI.Container;
@@ -84,6 +85,8 @@ export class Scrollbox extends layout.ContainerBase<
 
   protected _onActivate() {
     super._onActivate();
+
+    this._isDragging = false;
 
     // this._optionsResolver.setResovableCollection(this.resolvableOptions);
     // this._optionsResolver.resolve({
@@ -348,6 +351,10 @@ export class Scrollbox extends layout.ContainerBase<
     if (this._pointerDown.type === "scrollbar") this._scrollbarMove(e);
     else if (this._pointerDown.type === "drag") this._dragMove(e);
     else throw new Error("no such type");
+
+    if (this._options.stopPropagation) {
+      e.stopPropagation();
+    }
   }
 
   private _onUp(e: PIXI.FederatedPointerEvent) {
@@ -356,6 +363,13 @@ export class Scrollbox extends layout.ContainerBase<
     if (this._pointerDown.type === "scrollbar") this._scrollbarUp();
     else if (this._pointerDown.type === "drag") this._dragUp();
     else throw new Error("no such type");
+
+    if (this._options.stopPropagation && this._isDragging) {
+      e.stopPropagation();
+    }
+
+    delete this._pointerDown;
+    this._isDragging = false;
   }
 
   /**
@@ -375,7 +389,6 @@ export class Scrollbox extends layout.ContainerBase<
     if (this._options.stopPropagation) {
       e.stopPropagation();
     }
-    return;
   }
 
   /**
@@ -388,11 +401,23 @@ export class Scrollbox extends layout.ContainerBase<
 
     if (this._options.direction === "horizontal") {
       const deltaPosition = local.x - this._pointerDown!.last.x;
+      if (!this._isDragging) {
+        if (Math.abs(deltaPosition) <= this._options.dragThreshold) return;
+
+        this._isDragging = true;
+      }
+
       const ratio = this.boxWidth / this.contentWidth;
       const fraction = deltaPosition / ratio;
       this.scrollBy({ x: -fraction, y: 0 });
     } else {
       const deltaPosition = local.y - this._pointerDown!.last.y;
+      if (!this._isDragging) {
+        if (Math.abs(deltaPosition) <= this._options.dragThreshold) return;
+
+        this._isDragging = true;
+      }
+
       const ratio = this.boxHeight / this.contentHeight;
       const fraction = deltaPosition / ratio;
       this.scrollBy({ x: 0, y: -fraction });
@@ -446,7 +471,11 @@ export class Scrollbox extends layout.ContainerBase<
       deltaPosition.y = local.y - this._pointerDown!.last.y;
     }
 
-    if (math.magnitude(deltaPosition) <= this._options.dragThreshold) return;
+    if (!this._isDragging) {
+      if (math.magnitude(deltaPosition) <= this._options.dragThreshold) return;
+
+      this._isDragging = true;
+    }
 
     this.scrollBy(deltaPosition);
     this._pointerDown!.last = local;
