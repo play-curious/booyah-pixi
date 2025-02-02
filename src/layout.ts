@@ -1020,7 +1020,7 @@ export class TextChip extends DisplayLeafChip<PIXI.Text> {
  * Manages a container that will be layed out, but will not act as a parent for other layout children
  * */
 export class ContainerLeafChip extends DisplayLeafChip<PIXI.Container> {
-  constructor(options: Partial<DisplayLeafChipOptions<PIXI.Container>>) {
+  constructor(options?: Partial<DisplayLeafChipOptions<PIXI.Container>>) {
     const filledOptions = booyah.fillInOptions(
       options,
       new DisplayLeafChipOptions<PIXI.Container>(),
