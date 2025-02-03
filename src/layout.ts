@@ -61,6 +61,9 @@ export class LayoutOptionsBase {
   paddingRight: LayoutValue = 0;
   paddingTop: LayoutValue = 0;
   paddingBottom: LayoutValue = 0;
+
+  horizontalAlign: "left" | "right" | "center" = "left";
+  verticalAlign: "top" | "bottom" | "middle" = "top";
 }
 
 export type LayoutItemChildChipOptions = Array<
@@ -630,9 +633,6 @@ export abstract class DisplayObjectChip<
 export class DisplayLeafLayoutOptions extends LayoutOptionsBase {
   keepAspectRatio = false;
 
-  horizontalAlign: "left" | "right" | "center" = "left";
-  verticalAlign: "top" | "bottom" | "middle" = "top";
-
   /** When aligning, adjust for non-zero anchor points */
   alignBasedOnAnchor = true;
 }
@@ -892,15 +892,13 @@ export class DisplayLeafChip<
           position.y += extraSpace / 2;
         }
       }
-
-      this._setPosition(position);
-
-      this._updateDynamicProperties();
     } else if (this._options.layoutOptions.verticalAlign !== "top") {
       console.error(
         `DisplayLeafChip: Within unbounded layout, cannot vertically align as requested: ${this._options.layoutOptions.verticalAlign}`,
       );
     }
+
+    this._setPosition(position);
 
     super._onResize();
   }
@@ -1335,22 +1333,67 @@ export abstract class ContainerBase<
   }
 
   override resize(resizeInfo: ResizeInfo): void {
-    // Position the container and adjust local bounds
-    this.displayObject.position.set(
-      resizeInfo.localBounds.x,
-      resizeInfo.localBounds.y,
-    );
+    // TODO: make this logic common across all layout items
 
-    const childLocalBounds = new Bounds(
-      0,
-      0,
-      resizeInfo.localBounds.width,
-      resizeInfo.localBounds.height,
-    );
+    const innerBounds = this.calculateInnerBounds(resizeInfo.localBounds);
+
+    const position = new PIXI.Point(innerBounds.x, innerBounds.y);
+    let actualWidth = innerBounds.width!;
+    let actualHeight = innerBounds.height;
+
+    // Handle horizontal alignment
+    if (innerBounds.isBoundedHorizontally()) {
+      if (
+        this._options.layoutOptions.horizontalAlign !== "left" &&
+        innerBounds.width! > this.maxWidth
+      ) {
+        actualWidth = this.maxWidth;
+        const extraSpace = innerBounds.width! - this.maxWidth;
+        if (this._options.layoutOptions.horizontalAlign === "right") {
+          position.x += extraSpace;
+        } else if (this._options.layoutOptions.horizontalAlign === "center") {
+          position.x += extraSpace / 2;
+        }
+      }
+    } else if (this._options.layoutOptions.horizontalAlign !== "left") {
+      console.error(
+        `ContainerBase: Within unbounded layout, cannot horizontally align as requested: ${this._options.layoutOptions.horizontalAlign}`,
+      );
+    }
+
+    // Handle vertical alignment
+    if (innerBounds.isBoundedVertically()) {
+      if (
+        this._options.layoutOptions.verticalAlign !== "top" &&
+        innerBounds.height! > this.maxHeight
+      ) {
+        actualHeight = this.maxHeight;
+        const extraSpace = innerBounds.height! - this.maxHeight;
+        if (this._options.layoutOptions.verticalAlign === "bottom") {
+          position.y += extraSpace;
+        } else if (this._options.layoutOptions.verticalAlign === "middle") {
+          position.y += extraSpace / 2;
+        }
+      }
+    } else if (this._options.layoutOptions.verticalAlign !== "top") {
+      console.error(
+        `ContainerBase: Within unbounded layout, cannot vertically align as requested: ${this._options.layoutOptions.verticalAlign}`,
+      );
+    }
+
+    // Position the container and adjust local bounds
+    this.displayObject.position.set(position.x, position.y);
+
+    const childLocalBounds = new Bounds(0, 0, actualWidth, actualHeight);
 
     super.resize({
       localBounds: childLocalBounds,
-      absoluteBounds: resizeInfo.absoluteBounds,
+      absoluteBounds: new Bounds(
+        resizeInfo.absoluteBounds.x + position.x,
+        resizeInfo.absoluteBounds.y + position.y,
+        actualWidth,
+        actualHeight,
+      ),
     });
   }
 
@@ -1412,14 +1455,19 @@ export abstract class ContainerBase<
 
 export class StackingContainerChip extends ContainerBase {
   protected _onResize(): void {
+    // const childResizeInfo: ResizeInfo = {
+    //   absoluteBounds: this.calculateInnerBounds(
+    //     this.lastResizeInfo!.absoluteBounds,
+    //   ),
+    //   localBounds: this.calculateInnerBounds(this.lastResizeInfo!.localBounds),
+    // };
+
     // Resize all children
-    const childResizeInfo: ResizeInfo = {
-      absoluteBounds: this.calculateInnerBounds(
-        this.lastResizeInfo!.absoluteBounds,
-      ),
-      localBounds: this.calculateInnerBounds(this.lastResizeInfo!.localBounds),
-    };
-    for (const child of this._childLayoutItems!) child.resize(childResizeInfo);
+    for (const child of this._childLayoutItems!) {
+      child.resize(this._lastResizeInfo);
+    }
+
+    super._onResize();
   }
 
   protected override _aggregateMinWidth() {
@@ -1537,12 +1585,14 @@ export class DirectionalContainerChip extends ContainerBase<DirectionalContainer
       }
     }
 
-    const innerLocalBounds = this.calculateInnerBounds(
-      this.lastResizeInfo!.localBounds,
-    );
-    const innerAbsoluteBounds = this.calculateInnerBounds(
-      this.lastResizeInfo!.absoluteBounds,
-    );
+    // const innerLocalBounds = this.calculateInnerBounds(
+    //   this.lastResizeInfo!.localBounds,
+    // );
+    // const innerAbsoluteBounds = this.calculateInnerBounds(
+    //   this.lastResizeInfo!.absoluteBounds,
+    // );
+    const innerLocalBounds = this.lastResizeInfo!.localBounds;
+    const innerAbsoluteBounds = this.lastResizeInfo!.absoluteBounds;
 
     // Do a second pass to bring elements to their ideal lengths
     let availableExtraSpace = innerLocalBounds[lengthProp]! - minUsedSpace;
@@ -1683,6 +1733,8 @@ export class DirectionalContainerChip extends ContainerBase<DirectionalContainer
         axisOffset += availableExtraSpace / this._childLayoutItems!.length;
       }
     }
+
+    super._onResize();
   }
 
   private _handleUnboundedLayout(): void {
