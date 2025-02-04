@@ -38,6 +38,11 @@ export class PixiAppChip extends booyah.Composite {
     }
 
     this._pixiApplication = new PIXI.Application(appOptions);
+    if (process.env.NODE_ENV === "development") {
+      // @ts-ignore
+      globalThis.__PIXI_APP__ = this._pixiApplication;
+    }
+
     if (!this._options.canvas) {
       const parent = this._options?.parentElement || document.body;
       parent.appendChild(this._pixiApplication.view as unknown as Node);
