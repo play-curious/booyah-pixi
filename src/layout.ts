@@ -102,7 +102,7 @@ export interface ResizeInfo {
  *  - willResize(ResizeInfo)
  *  - didResize(ResizeInfo)
  */
-export interface LayoutItem extends booyah.NodeEventSource {
+export interface LayoutItem extends booyah.Chip {
   readonly minWidth?: number;
   readonly minHeight?: number;
   readonly idealWidth?: number;
