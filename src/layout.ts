@@ -7,30 +7,36 @@ import * as _ from "underscore";
 import * as pixiApp from "./pixiApp";
 import * as resolvable from "./resolvable";
 
-export const widthLayoutProperties = [
+export const widthNumericLayoutProperties = [
   "minWidth",
   "idealWidth",
   "maxWidth",
 ] as const;
 
-export const heightLayoutProperties = [
+export const heightNumericLayoutProperties = [
   "minHeight",
   "idealHeight",
   "maxHeight",
 ] as const;
 
-export const layoutProperties = [
-  ...widthLayoutProperties,
-  ...heightLayoutProperties,
+export const numericLayoutProperties = [
+  ...widthNumericLayoutProperties,
+  ...heightNumericLayoutProperties,
 ] as const;
 
-export type LayoutProperty = (typeof layoutProperties)[number];
+export type NumericLayoutProperty = (typeof numericLayoutProperties)[number];
 
-export function isLayoutProperty(value: string): value is LayoutProperty {
-  return layoutProperties.includes(value as LayoutProperty);
+export function isNumericLayoutProperty(
+  value: string,
+): value is NumericLayoutProperty {
+  return numericLayoutProperties.includes(value as NumericLayoutProperty);
 }
 
-export type LayoutValue = number | LayoutProperty;
+/**
+ * A value for a layout property should either be a number of pixels or the
+ * name of another layout property, that it will copy from
+ * */
+export type NumericLayoutValue = number | NumericLayoutProperty;
 
 export interface RenderInfo {
   renderSize: PIXI.IPointData;
@@ -47,29 +53,57 @@ export interface LayoutValueResolvableContext<LayoutOptionsType>
   layoutItem: LayoutItem;
 }
 
-export class LayoutOptionsBase {
-  minWidth?: LayoutValue;
-  minHeight?: LayoutValue;
+export class LayoutOptions {
+  /** The layout item should not be smaller than this */
+  minWidth?: NumericLayoutValue;
+  /** The layout item should not be smaller than this */
+  minHeight?: NumericLayoutValue;
 
-  idealWidth?: LayoutValue;
-  idealHeight?: LayoutValue;
+  /** The layout item should ideally be at this size */
+  idealWidth?: NumericLayoutValue;
+  /** The layout item should ideall be this */
+  idealHeight?: NumericLayoutValue;
 
-  maxWidth?: LayoutValue;
-  maxHeight?: LayoutValue;
+  /** The layout item should not be larger than this */
+  maxWidth?: NumericLayoutValue;
+  /** The layout item should not be larger than this */
+  maxHeight?: NumericLayoutValue;
 
-  paddingLeft: LayoutValue = 0;
-  paddingRight: LayoutValue = 0;
-  paddingTop: LayoutValue = 0;
-  paddingBottom: LayoutValue = 0;
+  /** Padding on the side of the provided bounds */
+  paddingLeft: NumericLayoutValue = 0;
+  /** Padding on the side of the provided bounds */
+  paddingRight: NumericLayoutValue = 0;
+  /** Padding on the side of the provided bounds */
+  paddingTop: NumericLayoutValue = 0;
+  /** Padding on the side of the provided bounds */
+  paddingBottom: NumericLayoutValue = 0;
 
+  /**
+   * Where the item should be aligned within the provided bounds.
+   * If the space is unbounded, only `"left"` is allowed.
+   */
   horizontalAlign: "left" | "right" | "center" = "left";
+  /**
+   * Where the item should be aligned within the provided bounds.
+   * If the space is unbounded, only `"top"` is allowed.
+   */
   verticalAlign: "top" | "bottom" | "middle" = "top";
+
+  /** Scale the horizontal and vertical axes the same */
+  keepAspectRatio = false;
+
+  /** When aligning, adjust for non-zero anchor points */
+  alignBasedOnAnchor = true;
 }
 
 export type LayoutItemChildChipOptions = Array<
   booyah.ActivateChildChipOptions | booyah.ChipResolvable
 >;
 
+/**
+ * Either a bounded rectangle, where width and height are defined,
+ * or an unbounded rectangle, with just a top-left position.
+ */
 export class Bounds {
   static fromRectangle(rect: PIXI.Rectangle) {
     return new Bounds(rect.x, rect.y, rect.width, rect.height);
@@ -91,29 +125,77 @@ export class Bounds {
   }
 }
 
+/**
+ * Info provided to `LayoutItem.resize()`.
+ */
 export interface ResizeInfo {
+  /** Bounds relative to the screen */
   readonly absoluteBounds: Bounds;
+
+  /** Bounds relative to the parent container */
   readonly localBounds: Bounds;
 }
 
 /**
+ * Interface for an element that can be laid out on the screen.
+ *
+ * Accessing layout properties (minWidth, minHeight, idealWidth, etc.) is only
+ * possible after calling `prepareResize()`
+ *
  * Emits:
  *  - updated() - something changed, requesting an update
  *  - willResize(ResizeInfo)
  *  - didResize(ResizeInfo)
  */
 export interface LayoutItem extends booyah.Chip {
+  /**
+   * The layout item should not be smaller than this.
+   * Must call prepareResize() first.
+   */
   readonly minWidth?: number;
+  /**
+   * The layout item should not be smaller than this.
+   * Must call prepareResize() first.
+   */
   readonly minHeight?: number;
+  /**
+   * The layout item should ideally by at least this size.
+   * Must call prepareResize() first.
+   */
   readonly idealWidth?: number;
+  /**
+   * The layout item should ideally by at least this size.
+   * Must call prepareResize() first.
+   */
   readonly idealHeight?: number;
+  /**
+   * The layout item should at most be this size.
+   * Must call prepareResize() first.
+   */
   readonly maxWidth?: number;
+  /**
+   * The layout item should at most be this size.
+   * Must call prepareResize() first.
+   */
   readonly maxHeight?: number;
 
+  /**
+   * Tells the LayoutItem that `resize()` will be called.
+   * The LayoutItem should set its properties (minWidth, ...) at this time.
+   * To do so, it has access to the size of the screen, but not the size of
+   * its bounds, which will be given later when calling resize().
+   */
   prepareResize(renderInfo: RenderInfo): void;
+
+  /**
+   * Tells the LayoutItem to place itself within the provided bounds.
+   */
   resize(resizeInfo: ResizeInfo): void;
 
+  /** Add a layout item as a child of this one*/
   addChildLayoutItem(child: LayoutItem): void;
+
+  /** Remove a layout item as a child of this one */
   removeChildLayoutItem(child: LayoutItem): void;
 }
 
@@ -129,14 +211,13 @@ export class LayoutItemBaseOptions<LayoutOptionsType> {
 }
 
 export abstract class LayoutItemBase<
-    LayoutOptionsType extends LayoutOptionsBase = LayoutOptionsBase,
+    LayoutOptionsType extends LayoutOptions = LayoutOptions,
     OptionsType extends
       LayoutItemBaseOptions<LayoutOptionsType> = LayoutItemBaseOptions<LayoutOptionsType>,
   >
   extends booyah.Parallel
   implements LayoutItem
 {
-  // protected abstract _layoutOptions: resolvable.ResolvableObject<LayoutOptions, LayoutValueResolvableContext>;
   protected _options: OptionsType;
 
   protected _layoutOptionsResolver: resolvable.Resolver<
@@ -360,9 +441,9 @@ export abstract class LayoutItemBase<
     };
     const value = this._layoutOptionsResolver.resolve(prop, resolvableContext);
 
-    if (typeof value === "string" && isLayoutProperty(value)) {
+    if (typeof value === "string" && isNumericLayoutProperty(value)) {
       // Find matching property and return it
-      const matchingProp = value as LayoutProperty;
+      const matchingProp = value as NumericLayoutProperty;
       const matchingValue = this[matchingProp];
 
       if (
@@ -445,7 +526,7 @@ export type ResolvablePixiDisplayObject<
 
 export class DisplayObjectChipOptions<
   DisplayObjectType extends PIXI.Container,
-  LayoutOptionsType extends LayoutOptionsBase,
+  LayoutOptionsType extends LayoutOptions,
 > extends LayoutItemBaseOptions<LayoutOptionsType> {
   displayObject!: DisplayObjectType;
   properties?: Partial<
@@ -467,7 +548,7 @@ export class DisplayObjectChipOptions<
 
 export abstract class DisplayObjectChip<
   DisplayObjectType extends PIXI.Container,
-  LayoutOptionsType extends LayoutOptionsBase = LayoutOptionsBase,
+  LayoutOptionsType extends LayoutOptions = LayoutOptions,
   OptionsType extends DisplayObjectChipOptions<
     DisplayObjectType,
     LayoutOptionsType
@@ -585,7 +666,7 @@ export abstract class DisplayObjectChip<
   }
 
   protected get _layoutOptions() {
-    return this._options.layoutOptions as LayoutOptionsBase;
+    return this._options.layoutOptions as LayoutOptions;
   }
 
   get displayObject() {
@@ -630,46 +711,52 @@ export abstract class DisplayObjectChip<
   }
 }
 
-export class DisplayLeafLayoutOptions extends LayoutOptionsBase {
+export class DisplayObjectLeafLayoutOptions extends LayoutOptions {
   keepAspectRatio = false;
 
   /** When aligning, adjust for non-zero anchor points */
   alignBasedOnAnchor = true;
 }
 
-export class DisplayLeafChipOptions<
+/**
+ * An object that is at the end of a PIXI scene graph, such as a Sprite.
+ * Any layout items placed beneath a leaf will not be laid out.
+ */
+export class DisplayObjectLeafChipOptions<
   DisplayObjectType extends PIXI.Container,
-  LayoutOptionsType extends DisplayLeafLayoutOptions = DisplayLeafLayoutOptions,
+  LayoutOptionsType extends
+    DisplayObjectLeafLayoutOptions = DisplayObjectLeafLayoutOptions,
 > extends DisplayObjectChipOptions<DisplayObjectType, LayoutOptionsType> {}
 
-export class DisplayLeafChip<
+export class DisplayObjectLeafChip<
   DisplayObjectType extends PIXI.Container,
-  LayoutOptionsType extends DisplayLeafLayoutOptions = DisplayLeafLayoutOptions,
-  OptionsType extends DisplayLeafChipOptions<
+  LayoutOptionsType extends
+    DisplayObjectLeafLayoutOptions = DisplayObjectLeafLayoutOptions,
+  OptionsType extends DisplayObjectLeafChipOptions<
     DisplayObjectType,
     LayoutOptionsType
-  > = DisplayLeafChipOptions<DisplayObjectType, LayoutOptionsType>,
+  > = DisplayObjectLeafChipOptions<DisplayObjectType, LayoutOptionsType>,
 > extends DisplayObjectChip<DisplayObjectType, LayoutOptionsType, OptionsType> {
   private _pixiIdealWidth?: number;
   private _pixiIdealHeight?: number;
 
-  protected _cachedLengths?: Partial<Record<LayoutProperty, number>>;
+  protected _cachedLengths?: Partial<Record<NumericLayoutProperty, number>>;
 
   // Cache of the local bounds so as not to recalculate it
   private _localBounds?: Bounds;
 
   constructor(
     options: Partial<
-      DisplayLeafChipOptions<DisplayObjectType, LayoutOptionsType>
+      DisplayObjectLeafChipOptions<DisplayObjectType, LayoutOptionsType>
     >,
   ) {
     const filledOptions = booyah.fillInOptions(
       options,
-      new DisplayLeafChipOptions<DisplayObjectType, LayoutOptionsType>(),
+      new DisplayObjectLeafChipOptions<DisplayObjectType, LayoutOptionsType>(),
     );
     filledOptions.layoutOptions = booyah.fillInOptions(
       filledOptions.layoutOptions,
-      new DisplayLeafLayoutOptions() as LayoutOptionsType,
+      new DisplayObjectLeafLayoutOptions() as LayoutOptionsType,
     );
     super(filledOptions as OptionsType);
   }
@@ -686,7 +773,7 @@ export class DisplayLeafChip<
     this._cachedLengths = {};
 
     // Handle width values
-    for (const prop of widthLayoutProperties) {
+    for (const prop of widthNumericLayoutProperties) {
       if (typeof super[prop] === "undefined") {
         let value = this.parseLayoutPropertyAsNumber(prop);
 
@@ -728,7 +815,7 @@ export class DisplayLeafChip<
     }
 
     // Handle height values
-    for (const prop of heightLayoutProperties) {
+    for (const prop of heightNumericLayoutProperties) {
       if (typeof super[prop] === "undefined") {
         let value = this.parseLayoutPropertyAsNumber(prop);
 
@@ -875,7 +962,7 @@ export class DisplayLeafChip<
       }
     } else if (this._options.layoutOptions.horizontalAlign !== "left") {
       console.error(
-        `DisplayLeafChip: Within unbounded layout, cannot horizontally align as requested: ${this._options.layoutOptions.horizontalAlign}`,
+        `DisplayObjectLeafChip: Within unbounded layout, cannot horizontally align as requested: ${this._options.layoutOptions.horizontalAlign}`,
       );
     }
 
@@ -894,7 +981,7 @@ export class DisplayLeafChip<
       }
     } else if (this._options.layoutOptions.verticalAlign !== "top") {
       console.error(
-        `DisplayLeafChip: Within unbounded layout, cannot vertically align as requested: ${this._options.layoutOptions.verticalAlign}`,
+        `DisplayObjectLeafChip: Within unbounded layout, cannot vertically align as requested: ${this._options.layoutOptions.verticalAlign}`,
       );
     }
 
@@ -980,18 +1067,20 @@ export class DisplayLeafChip<
   }
 }
 
-export class SpriteChipLayoutOptions extends DisplayLeafLayoutOptions {
+export class SpriteChipLayoutOptions extends DisplayObjectLeafLayoutOptions {
   keepAspectRatio = true;
 
-  maxWidth: LayoutValue = "idealWidth";
-  maxHeight: LayoutValue = "idealHeight";
+  maxWidth: NumericLayoutValue = "idealWidth";
+  maxHeight: NumericLayoutValue = "idealHeight";
 }
 
-export class SpriteChipOptions extends DisplayLeafChipOptions<PIXI.Sprite> {
+export class SpriteChipOptions extends DisplayObjectLeafChipOptions<PIXI.Sprite> {
+  /** Either the texture itself, or a name to search for in PIXI.Assets */
   texture?: PIXI.Texture | string;
 }
 
-export class SpriteChip extends DisplayLeafChip<PIXI.Sprite> {
+/** A chip to display a PIXI.Sprite */
+export class SpriteChip extends DisplayObjectLeafChip<PIXI.Sprite> {
   constructor(options: Partial<SpriteChipOptions>) {
     const filledOptions = booyah.fillInOptions(
       options,
@@ -1031,12 +1120,16 @@ export class NineSliceWidths {
   bottom = 0;
 }
 
-export class NineSlicePlaneChipOptions extends DisplayLeafChipOptions<PIXI.NineSlicePlane> {
+export class NineSlicePlaneChipOptions extends DisplayObjectLeafChipOptions<PIXI.NineSlicePlane> {
+  /** Either the texture itself, or a name to search for in PIXI.Assets */
   texture?: PIXI.Texture | string;
+
+  /** The nine-slice widths. Otherwise it will use those encoded in the spritesheet (e.g. using TexturePacker) */
   nineSliceWidths?: Partial<NineSliceWidths>;
 }
 
-export class NineSlicePlaneChip extends DisplayLeafChip<PIXI.NineSlicePlane> {
+/** A chip to display a PIXI.NineSlicePlane */
+export class NineSlicePlaneChip extends DisplayObjectLeafChip<PIXI.NineSlicePlane> {
   constructor(options: Partial<NineSlicePlaneChipOptions>) {
     const filledOptions = booyah.fillInOptions(
       options,
@@ -1088,21 +1181,22 @@ export class NineSlicePlaneChip extends DisplayLeafChip<PIXI.NineSlicePlane> {
   }
 }
 
-export class TextChipLayoutOptions extends DisplayLeafLayoutOptions {
+/** A chip to display a PIXI.Text */
+export class TextChipLayoutOptions extends DisplayObjectLeafLayoutOptions {
   keepAspectRatio = true;
 
-  minWidth: LayoutValue = "idealWidth";
-  minHeight: LayoutValue = "idealHeight";
-  maxWidth: LayoutValue = "idealWidth";
-  maxHeight: LayoutValue = "idealHeight";
+  minWidth: NumericLayoutValue = "idealWidth";
+  minHeight: NumericLayoutValue = "idealHeight";
+  maxWidth: NumericLayoutValue = "idealWidth";
+  maxHeight: NumericLayoutValue = "idealHeight";
 }
 
-export class TextChipOptions extends DisplayLeafChipOptions<PIXI.Text> {
-  message?: string;
+export class TextChipOptions extends DisplayObjectLeafChipOptions<PIXI.Text> {
+  text?: string;
   style?: Partial<PIXI.ITextStyle> | PIXI.TextStyle;
 }
 
-export class TextChip extends DisplayLeafChip<PIXI.Text> {
+export class TextChip extends DisplayObjectLeafChip<PIXI.Text> {
   constructor(options: Partial<TextChipOptions>) {
     const filledOptions = booyah.fillInOptions(options, new TextChipOptions());
     filledOptions.layoutOptions = booyah.fillInOptions(
@@ -1112,7 +1206,7 @@ export class TextChip extends DisplayLeafChip<PIXI.Text> {
 
     if (!filledOptions.displayObject) {
       filledOptions.displayObject = new PIXI.Text(
-        options.message || "",
+        options.text || "",
         options.style,
       );
     }
@@ -1124,11 +1218,11 @@ export class TextChip extends DisplayLeafChip<PIXI.Text> {
 /**
  * Manages a container that will be layed out, but will not act as a parent for other layout children
  * */
-export class ContainerLeafChip extends DisplayLeafChip<PIXI.Container> {
-  constructor(options?: Partial<DisplayLeafChipOptions<PIXI.Container>>) {
+export class ContainerLeafChip extends DisplayObjectLeafChip<PIXI.Container> {
+  constructor(options?: Partial<DisplayObjectLeafChipOptions<PIXI.Container>>) {
     const filledOptions = booyah.fillInOptions(
       options,
-      new DisplayLeafChipOptions<PIXI.Container>(),
+      new DisplayObjectLeafChipOptions<PIXI.Container>(),
     );
 
     if (!filledOptions.displayObject) {
@@ -1145,8 +1239,11 @@ export class ContainerLeafChip extends DisplayLeafChip<PIXI.Container> {
   }
 }
 
+/**
+ * Manages a PIXI.Container, either a layout or not
+ */
 export abstract class ContainerBase<
-  LayoutOptionsType extends LayoutOptionsBase = LayoutOptionsBase,
+  LayoutOptionsType extends LayoutOptions = LayoutOptions,
   OptionsType extends DisplayObjectChipOptions<
     PIXI.Container,
     LayoutOptionsType
@@ -1154,7 +1251,9 @@ export abstract class ContainerBase<
 > extends DisplayObjectChip<PIXI.Container, LayoutOptionsType, OptionsType> {
   protected _childLayoutItems?: Array<LayoutItem>;
 
-  protected _aggregatedChildValues?: Partial<Record<LayoutProperty, number>>;
+  protected _aggregatedChildValues?: Partial<
+    Record<NumericLayoutProperty, number>
+  >;
 
   constructor(
     options?: Partial<
@@ -1210,7 +1309,7 @@ export abstract class ContainerBase<
     this._aggregatedChildValues = {};
 
     // Handle width values
-    for (const prop of widthLayoutProperties) {
+    for (const prop of widthNumericLayoutProperties) {
       if (typeof super[prop] === "undefined") {
         const methodName =
           `_aggregate${booyah.uppercaseFirstLetter(prop)}` as keyof this;
@@ -1261,7 +1360,7 @@ export abstract class ContainerBase<
     }
 
     // Handle height values
-    for (const prop of heightLayoutProperties) {
+    for (const prop of heightNumericLayoutProperties) {
       if (typeof super[prop] === "undefined") {
         const methodName =
           `_aggregate${booyah.uppercaseFirstLetter(prop)}` as keyof this;
@@ -1405,7 +1504,7 @@ export abstract class ContainerBase<
   }
 
   aggregateChildValues(
-    prop: LayoutProperty,
+    prop: NumericLayoutProperty,
     operation: "sum" | "max",
     undefinedHandling: "treatAsZero" | "returnUndefined",
   ): number | undefined {
@@ -1453,6 +1552,9 @@ export abstract class ContainerBase<
   }
 }
 
+/**
+ * Puts of its children layouts one on top of the other
+ */
 export class StackingContainerChip extends ContainerBase {
   protected _onResize(): void {
     // const childResizeInfo: ResizeInfo = {
@@ -1492,9 +1594,18 @@ export class StackingContainerChip extends ContainerBase {
   }
 }
 
-export class DirectionalContainerLayoutOptions extends LayoutOptionsBase {
+export class DirectionalContainerLayoutOptions extends LayoutOptions {
+  /** Layout children along this axis */
   direction: "horizontal" | "vertical" = "horizontal";
 
+  /**
+   *  What to do with extra space:
+   *  - `atStart` - all at the start (left or top)
+   *  - `atEnd` - all at the end (right or bottom)
+   *  - `atStartAndEnd` - shared between the start and end
+   *  - `between` - between the items
+   *  - `around` - between the items, and also at the ends
+   */
   distributeSpace:
     | "atStart"
     | "atEnd"
@@ -1502,6 +1613,9 @@ export class DirectionalContainerLayoutOptions extends LayoutOptionsBase {
     | "between"
     | "around" = "atEnd";
 
+  /**
+   * Gap
+   */
   gap = 0;
 }
 
@@ -1510,6 +1624,9 @@ export class DirectionalContainerOptions extends DisplayObjectChipOptions<
   DirectionalContainerLayoutOptions
 > {}
 
+/**
+ * Lays out children along an axis, either vertical or horizontal
+ */
 export class DirectionalContainerChip extends ContainerBase<DirectionalContainerLayoutOptions> {
   constructor(options?: Partial<DirectionalContainerOptions>) {
     const filledOptions = booyah.fillInOptions(
@@ -1913,7 +2030,7 @@ export class DirectionalContainerChip extends ContainerBase<DirectionalContainer
   - loop - When animation loops
   - frameChange(currentFrame: number) - When frame changes 
 */
-export class AnimatedSpriteChipOptions extends DisplayLeafChipOptions<PIXI.AnimatedSprite> {
+export class AnimatedSpriteChipOptions extends DisplayObjectLeafChipOptions<PIXI.AnimatedSprite> {
   spritesheet!: PIXI.Spritesheet | string;
   behaviorOnComplete: "loop" | "remove" | "keepLastFrame" = "remove";
   behaviorOnStart: "play" | "stop" = "play";
@@ -1924,9 +2041,9 @@ export class AnimatedSpriteChipOptions extends DisplayLeafChipOptions<PIXI.Anima
   prepare?: boolean;
 }
 
-export class AnimatedSpriteChip extends DisplayLeafChip<
+export class AnimatedSpriteChip extends DisplayObjectLeafChip<
   PIXI.AnimatedSprite,
-  DisplayLeafLayoutOptions,
+  DisplayObjectLeafLayoutOptions,
   AnimatedSpriteChipOptions
 > {
   // private readonly _options: AnimatedSpriteChipOptions;
@@ -2161,7 +2278,7 @@ export class LayoutTest extends booyah.Composite {
       green.endFill();
 
       containerChip.addChildChip(
-        new DisplayLeafChip({
+        new DisplayObjectLeafChip({
           displayObject: green,
           layoutOptions: {
             maxWidth: 200,

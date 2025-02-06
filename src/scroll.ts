@@ -13,14 +13,14 @@ function isTexture(object: any): object is PIXI.Texture {
 export type OverflowSettings = "auto" | "hidden" | "scroll";
 export type Direction = "vertical" | "horizontal";
 
-export class ScrollboxLayoutOptions extends layout.LayoutOptionsBase {
-  minWidth: layout.LayoutValue = "idealWidth";
-  minHeight: layout.LayoutValue = "idealHeight";
+export class ScrollboxLayoutOptions extends layout.LayoutOptions {
+  minWidth: layout.NumericLayoutValue = "idealWidth";
+  minHeight: layout.NumericLayoutValue = "idealHeight";
 }
 
 export class ScrollboxOptions extends layout.DisplayObjectChipOptions<
   PIXI.Container,
-  layout.LayoutOptionsBase
+  layout.LayoutOptions
 > {
   content?: PIXI.DisplayObject;
   boxWidth: number = 100;
@@ -50,7 +50,7 @@ export class ScrollboxOptions extends layout.DisplayObjectChipOptions<
  *  refreshedContents
  **/
 export class Scrollbox extends layout.ContainerBase<
-  layout.LayoutOptionsBase,
+  layout.LayoutOptions,
   ScrollboxOptions
 > {
   private _pointerDown?: { type: "drag" | "scrollbar"; last: PIXI.IPointData };
