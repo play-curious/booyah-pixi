@@ -19,9 +19,17 @@ export const heightNumericLayoutProperties = [
   "maxHeight",
 ] as const;
 
+export const paddingLayoutProperties = [
+  "paddingLeft",
+  "paddingRight",
+  "paddingTop",
+  "paddingBottom",
+] as const;
+
 export const numericLayoutProperties = [
   ...widthNumericLayoutProperties,
   ...heightNumericLayoutProperties,
+  ...paddingLayoutProperties,
 ] as const;
 
 export type NumericLayoutProperty = (typeof numericLayoutProperties)[number];
@@ -227,6 +235,7 @@ export abstract class LayoutItemBase<
 
   protected _lastRenderInfo?: RenderInfo;
   protected _lastResizeInfo?: ResizeInfo;
+  protected _lengthsCache?: Partial<Record<NumericLayoutProperty, number>>;
 
   constructor(options?: Partial<OptionsType>) {
     const filledOptions = booyah.fillInOptions(
@@ -252,10 +261,106 @@ export abstract class LayoutItemBase<
   }
 
   prepareResize(renderInfo: RenderInfo): void {
+    this._layoutOptionsResolver.invalidate();
     this._lastRenderInfo = renderInfo;
+
+    this._cacheLengths();
+    this._fixLengths();
+
     this._onPrepareResize();
 
     // TODO: emit event?
+  }
+
+  protected _cacheLengths() {
+    this._lengthsCache = {};
+
+    // Handle padding values
+    for (const prop of paddingLayoutProperties) {
+      this._lengthsCache[prop] = this.safeParseLayoutPropertyAsNumber(prop);
+    }
+
+    // Handle width values
+    for (const prop of widthNumericLayoutProperties) {
+      let value = this.parseLayoutPropertyAsNumber(prop);
+
+      // Include padding
+      if (typeof value !== "undefined") {
+        value += this.horizontalPadding;
+      }
+
+      this._lengthsCache[prop] = value;
+    }
+
+    // Handle height values
+    for (const prop of heightNumericLayoutProperties) {
+      let value = this.parseLayoutPropertyAsNumber(prop);
+
+      // Include padding
+      if (typeof value !== "undefined") {
+        value += this.verticalPadding;
+      }
+
+      this._lengthsCache[prop] = value;
+    }
+  }
+
+  protected _fixLengths() {
+    // Adjust width values
+    if (typeof this._lengthsCache["minWidth"]) {
+      // min <= ideal
+      if (
+        typeof this._lengthsCache["idealWidth"] !== "undefined" &&
+        this._lengthsCache["idealWidth"] < this._lengthsCache["minWidth"]
+      ) {
+        this._lengthsCache["idealWidth"] = this._lengthsCache["minWidth"];
+      }
+
+      // min <= max
+      if (
+        typeof this._lengthsCache["maxWidth"] !== "undefined" &&
+        this._lengthsCache["maxWidth"] < this._lengthsCache["minWidth"]
+      ) {
+        this._lengthsCache["maxWidth"] = this._lengthsCache["minWidth"];
+      }
+    }
+
+    // ideal <= max
+    if (
+      typeof this._lengthsCache["idealWidth"] !== "undefined" &&
+      typeof this._lengthsCache["maxWidth"] !== "undefined" &&
+      this._lengthsCache["maxWidth"] < this._lengthsCache["idealWidth"]
+    ) {
+      this._lengthsCache["idealWidth"] = this._lengthsCache["maxWidth"];
+    }
+
+    // Adjust height values
+    if (typeof this._lengthsCache["minHeight"]) {
+      // min <= ideal
+      if (
+        typeof this._lengthsCache["idealHeight"] !== "undefined" &&
+        this._lengthsCache["idealHeight"] < this._lengthsCache["minHeight"]
+      ) {
+        this._lengthsCache["idealHeight"] = this._lengthsCache["minHeight"];
+      }
+
+      // min <= max
+      if (
+        typeof this._lengthsCache["maxHeight"] !== "undefined" &&
+        this._lengthsCache["maxHeight"] < this._lengthsCache["minHeight"]
+      ) {
+        this._lengthsCache["maxHeight"] = this._lengthsCache["minHeight"];
+      }
+    }
+
+    // ideal <= max
+    if (
+      typeof this._lengthsCache["idealHeight"] !== "undefined" &&
+      typeof this._lengthsCache["maxHeight"] !== "undefined" &&
+      this._lengthsCache["maxHeight"] < this._lengthsCache["idealHeight"]
+    ) {
+      this._lengthsCache["idealHeight"] = this._lengthsCache["maxHeight"];
+    }
   }
 
   protected _onPrepareResize() {
@@ -267,10 +372,17 @@ export abstract class LayoutItemBase<
   }
 
   resize(resizeInfo: ResizeInfo): void {
-    this._layoutOptionsResolver.invalidate();
     this._lastResizeInfo = resizeInfo;
     this.emit("willResize", resizeInfo);
 
+    this._validateBounds();
+
+    this._onResize();
+
+    this.emit("didResize", resizeInfo);
+  }
+
+  protected _validateBounds() {
     // Assert that widths make sense
     if (typeof this.minWidth !== "undefined") {
       if (
@@ -328,20 +440,20 @@ export abstract class LayoutItemBase<
       // Assert you have sufficient space
       if (
         typeof this.minWidth !== "undefined" &&
-        typeof resizeInfo.absoluteBounds.width !== "undefined" &&
-        resizeInfo.absoluteBounds.width < this.minWidth
+        typeof this._lastResizeInfo.absoluteBounds.width !== "undefined" &&
+        this._lastResizeInfo.absoluteBounds.width < this.minWidth
       )
         console.error(
-          `Insufficient width to layout item. Bounds.width = ${resizeInfo.absoluteBounds.width} and minWidth = ${this.minWidth}`,
+          `Insufficient width to layout item. Bounds.width = ${this._lastResizeInfo.absoluteBounds.width} and minWidth = ${this.minWidth}`,
           this,
         );
       if (
         typeof this.minHeight !== "undefined" &&
-        typeof resizeInfo.absoluteBounds.height !== "undefined" &&
-        resizeInfo.absoluteBounds.height < this.minHeight
+        typeof this._lastResizeInfo.absoluteBounds.height !== "undefined" &&
+        this._lastResizeInfo.absoluteBounds.height < this.minHeight
       )
         console.error(
-          `Insufficient height to layout item. Bounds.height = ${resizeInfo.absoluteBounds.height} and minHeight = ${this.minHeight}`,
+          `Insufficient height to layout item. Bounds.height = ${this._lastResizeInfo.absoluteBounds.height} and minHeight = ${this.minHeight}`,
           this,
         );
     }
@@ -355,10 +467,6 @@ export abstract class LayoutItemBase<
         `Bad heights on layout item. Ideal height ${this.idealHeight} > max height ${this.maxHeight}`,
       );
     }
-
-    this._onResize();
-
-    this.emit("didResize", resizeInfo);
   }
 
   calculateInnerBounds(bounds: Bounds) {
@@ -375,37 +483,44 @@ export abstract class LayoutItemBase<
   }
 
   get minWidth(): number | undefined {
-    return this.parseLayoutPropertyAsNumber("minWidth");
+    return this._lengthsCache.minWidth;
   }
   get minHeight(): number | undefined {
-    return this.parseLayoutPropertyAsNumber("minHeight");
+    return this._lengthsCache.minHeight;
   }
 
   get idealWidth(): number | undefined {
-    return this.parseLayoutPropertyAsNumber("idealWidth");
+    return this._lengthsCache.idealWidth;
   }
   get idealHeight(): number | undefined {
-    return this.parseLayoutPropertyAsNumber("idealHeight");
+    return this._lengthsCache.idealHeight;
   }
 
   get maxWidth(): number | undefined {
-    return this.parseLayoutPropertyAsNumber("maxWidth");
+    return this._lengthsCache.maxWidth;
   }
   get maxHeight(): number | undefined {
-    return this.parseLayoutPropertyAsNumber("maxHeight");
+    return this._lengthsCache.maxHeight;
   }
 
   get paddingLeft(): number {
-    return this.safeParseLayoutPropertyAsNumber("paddingLeft");
+    return this._lengthsCache.paddingLeft;
   }
   get paddingRight(): number {
-    return this.safeParseLayoutPropertyAsNumber("paddingRight");
+    return this._lengthsCache.paddingRight;
   }
   get paddingTop(): number {
-    return this.safeParseLayoutPropertyAsNumber("paddingTop");
+    return this._lengthsCache.paddingTop;
   }
   get paddingBottom(): number {
-    return this.safeParseLayoutPropertyAsNumber("paddingBottom");
+    return this._lengthsCache.paddingBottom;
+  }
+
+  get horizontalPadding(): number {
+    return this.paddingLeft + this.paddingRight;
+  }
+  get verticalPadding(): number {
+    return this.paddingTop + this.paddingBottom;
   }
 
   /** Request a new resize cycle */
@@ -740,7 +855,7 @@ export class DisplayObjectLeafChip<
   private _pixiIdealWidth?: number;
   private _pixiIdealHeight?: number;
 
-  protected _cachedLengths?: Partial<Record<NumericLayoutProperty, number>>;
+  protected _lengthsCache?: Partial<Record<NumericLayoutProperty, number>>;
 
   // Cache of the local bounds so as not to recalculate it
   private _localBounds?: Bounds;
@@ -770,7 +885,7 @@ export class DisplayObjectLeafChip<
       this.updateIdealSize();
     }
 
-    this._cachedLengths = {};
+    this._lengthsCache = {};
 
     // Handle width values
     for (const prop of widthNumericLayoutProperties) {
@@ -782,36 +897,36 @@ export class DisplayObjectLeafChip<
           value += this.paddingLeft + this.paddingRight;
         }
 
-        this._cachedLengths[prop] = value;
+        this._lengthsCache[prop] = value;
       }
     }
 
     // Adjust width values
-    if (typeof this._cachedLengths["minWidth"]) {
+    if (typeof this._lengthsCache["minWidth"]) {
       // min <= ideal
       if (
-        typeof this._cachedLengths["idealWidth"] !== "undefined" &&
-        this._cachedLengths["idealWidth"] < this._cachedLengths["minWidth"]
+        typeof this._lengthsCache["idealWidth"] !== "undefined" &&
+        this._lengthsCache["idealWidth"] < this._lengthsCache["minWidth"]
       ) {
-        this._cachedLengths["idealWidth"] = this._cachedLengths["minWidth"];
+        this._lengthsCache["idealWidth"] = this._lengthsCache["minWidth"];
       }
 
       // min <= max
       if (
-        typeof this._cachedLengths["maxWidth"] !== "undefined" &&
-        this._cachedLengths["maxWidth"] < this._cachedLengths["minWidth"]
+        typeof this._lengthsCache["maxWidth"] !== "undefined" &&
+        this._lengthsCache["maxWidth"] < this._lengthsCache["minWidth"]
       ) {
-        this._cachedLengths["maxWidth"] = this._cachedLengths["minWidth"];
+        this._lengthsCache["maxWidth"] = this._lengthsCache["minWidth"];
       }
     }
 
     // ideal <= max
     if (
-      typeof this._cachedLengths["idealWidth"] !== "undefined" &&
-      typeof this._cachedLengths["maxWidth"] !== "undefined" &&
-      this._cachedLengths["maxWidth"] < this._cachedLengths["idealWidth"]
+      typeof this._lengthsCache["idealWidth"] !== "undefined" &&
+      typeof this._lengthsCache["maxWidth"] !== "undefined" &&
+      this._lengthsCache["maxWidth"] < this._lengthsCache["idealWidth"]
     ) {
-      this._cachedLengths["idealWidth"] = this._cachedLengths["maxWidth"];
+      this._lengthsCache["idealWidth"] = this._lengthsCache["maxWidth"];
     }
 
     // Handle height values
@@ -824,36 +939,36 @@ export class DisplayObjectLeafChip<
           value += this.paddingTop + this.paddingBottom;
         }
 
-        this._cachedLengths[prop] = value;
+        this._lengthsCache[prop] = value;
       }
     }
 
     // Adjust height values
-    if (typeof this._cachedLengths["minHeight"]) {
+    if (typeof this._lengthsCache["minHeight"]) {
       // min <= ideal
       if (
-        typeof this._cachedLengths["idealHeight"] !== "undefined" &&
-        this._cachedLengths["idealHeight"] < this._cachedLengths["minHeight"]
+        typeof this._lengthsCache["idealHeight"] !== "undefined" &&
+        this._lengthsCache["idealHeight"] < this._lengthsCache["minHeight"]
       ) {
-        this._cachedLengths["idealHeight"] = this._cachedLengths["minHeight"];
+        this._lengthsCache["idealHeight"] = this._lengthsCache["minHeight"];
       }
 
       // min <= max
       if (
-        typeof this._cachedLengths["maxHeight"] !== "undefined" &&
-        this._cachedLengths["maxHeight"] < this._cachedLengths["minHeight"]
+        typeof this._lengthsCache["maxHeight"] !== "undefined" &&
+        this._lengthsCache["maxHeight"] < this._lengthsCache["minHeight"]
       ) {
-        this._cachedLengths["maxHeight"] = this._cachedLengths["minHeight"];
+        this._lengthsCache["maxHeight"] = this._lengthsCache["minHeight"];
       }
     }
 
     // ideal <= max
     if (
-      typeof this._cachedLengths["idealHeight"] !== "undefined" &&
-      typeof this._cachedLengths["maxHeight"] !== "undefined" &&
-      this._cachedLengths["maxHeight"] < this._cachedLengths["idealHeight"]
+      typeof this._lengthsCache["idealHeight"] !== "undefined" &&
+      typeof this._lengthsCache["maxHeight"] !== "undefined" &&
+      this._lengthsCache["maxHeight"] < this._lengthsCache["idealHeight"]
     ) {
-      this._cachedLengths["idealHeight"] = this._cachedLengths["maxHeight"];
+      this._lengthsCache["idealHeight"] = this._lengthsCache["maxHeight"];
     }
   }
 
@@ -1012,7 +1127,7 @@ export class DisplayObjectLeafChip<
 
   get idealWidth() {
     return (
-      super.idealWidth ?? this._pixiIdealWidth ?? this._cachedLengths.idealWidth
+      super.idealWidth ?? this._pixiIdealWidth ?? this._lengthsCache.idealWidth
     );
   }
 
@@ -1026,7 +1141,7 @@ export class DisplayObjectLeafChip<
     return (
       super.idealHeight ??
       this._pixiIdealHeight ??
-      this._cachedLengths.idealHeight
+      this._lengthsCache.idealHeight
     );
   }
 
@@ -1037,17 +1152,17 @@ export class DisplayObjectLeafChip<
   }
 
   get minWidth() {
-    return super.minWidth ?? this._cachedLengths.minWidth;
+    return super.minWidth ?? this._lengthsCache.minWidth;
   }
   get minHeight() {
-    return super.minHeight ?? this._cachedLengths.minHeight;
+    return super.minHeight ?? this._lengthsCache.minHeight;
   }
 
   get maxWidth() {
-    return super.maxWidth ?? this._cachedLengths.maxWidth;
+    return super.maxWidth ?? this._lengthsCache.maxWidth;
   }
   get maxHeight() {
-    return super.maxHeight ?? this._cachedLengths.maxHeight;
+    return super.maxHeight ?? this._lengthsCache.maxHeight;
   }
 
   protected _setSize({
