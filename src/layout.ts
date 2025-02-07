@@ -40,6 +40,14 @@ export function isNumericLayoutProperty(
   return numericLayoutProperties.includes(value as NumericLayoutProperty);
 }
 
+export const aggregatedLayoutProperties = [
+  ...widthNumericLayoutProperties,
+  ...heightNumericLayoutProperties,
+] as const;
+
+export type AggregatedLayoutProperty =
+  (typeof aggregatedLayoutProperties)[number];
+
 /**
  * A value for a layout property should either be a number of pixels or the
  * name of another layout property, that it will copy from
@@ -265,7 +273,7 @@ export abstract class LayoutItemBase<
     this._lastRenderInfo = renderInfo;
 
     this._cacheLengths();
-    this._fixLengths();
+    this._fixCachedLengths();
 
     this._onPrepareResize();
 
@@ -305,7 +313,9 @@ export abstract class LayoutItemBase<
     }
   }
 
-  protected _fixLengths() {
+  protected _fixCachedLengths() {
+    // TODO: fix padding values?
+
     // Adjust width values
     if (typeof this._lengthsCache["minWidth"]) {
       // min <= ideal
@@ -1619,7 +1629,7 @@ export abstract class ContainerBase<
   }
 
   aggregateChildValues(
-    prop: NumericLayoutProperty,
+    prop: AggregatedLayoutProperty,
     operation: "sum" | "max",
     undefinedHandling: "treatAsZero" | "returnUndefined",
   ): number | undefined {
