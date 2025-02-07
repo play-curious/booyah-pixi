@@ -7,13 +7,13 @@ import * as _ from "underscore";
 import * as pixiApp from "./pixiApp";
 import * as resolvable from "./resolvable";
 
-export const widthNumericLayoutProperties = [
+export const widthLayoutProperties = [
   "minWidth",
   "idealWidth",
   "maxWidth",
 ] as const;
 
-export const heightNumericLayoutProperties = [
+export const heightLayoutProperties = [
   "minHeight",
   "idealHeight",
   "maxHeight",
@@ -26,23 +26,32 @@ export const paddingLayoutProperties = [
   "paddingBottom",
 ] as const;
 
-export const numericLayoutProperties = [
-  ...widthNumericLayoutProperties,
-  ...heightNumericLayoutProperties,
-  ...paddingLayoutProperties,
+export const naturalLayoutProperties = [
+  "naturalWidth",
+  "naturalHeight",
 ] as const;
 
-export type NumericLayoutProperty = (typeof numericLayoutProperties)[number];
+export const referencableLayoutProperties = [
+  ...widthLayoutProperties,
+  ...heightLayoutProperties,
+  ...paddingLayoutProperties,
+  ...naturalLayoutProperties,
+] as const;
 
-export function isNumericLayoutProperty(
+export type ReferencableLayoutProperty =
+  (typeof referencableLayoutProperties)[number];
+
+export function isReferencableLayoutProperty(
   value: string,
-): value is NumericLayoutProperty {
-  return numericLayoutProperties.includes(value as NumericLayoutProperty);
+): value is ReferencableLayoutProperty {
+  return referencableLayoutProperties.includes(
+    value as ReferencableLayoutProperty,
+  );
 }
 
 export const aggregatedLayoutProperties = [
-  ...widthNumericLayoutProperties,
-  ...heightNumericLayoutProperties,
+  ...widthLayoutProperties,
+  ...heightLayoutProperties,
 ] as const;
 
 export type AggregatedLayoutProperty =
@@ -52,7 +61,7 @@ export type AggregatedLayoutProperty =
  * A value for a layout property should either be a number of pixels or the
  * name of another layout property, that it will copy from
  * */
-export type NumericLayoutValue = number | NumericLayoutProperty;
+export type NumericLayoutValue = number | ReferencableLayoutProperty;
 
 export interface RenderInfo {
   renderSize: PIXI.IPointData;
@@ -95,6 +104,17 @@ export class LayoutOptions {
   paddingBottom: NumericLayoutValue = 0;
 
   /**
+   * If true, when provided bounds are larger than ideal size,
+   * will try to expand until reaching max size
+   * */
+  canShrink = true;
+
+  /** If true, when provided bounds are smaller than ideal size,
+   * will try to shrink until reaching min size
+   * */
+  canGrow = true;
+
+  /**
    * Where the item should be aligned within the provided bounds.
    * If the space is unbounded, only `"left"` is allowed.
    */
@@ -105,7 +125,7 @@ export class LayoutOptions {
    */
   verticalAlign: "top" | "bottom" | "middle" = "top";
 
-  /** Scale the horizontal and vertical axes the same */
+  /** Scale the horizontal and vertical axes the same amount*/
   keepAspectRatio = false;
 
   /** When aligning, adjust for non-zero anchor points */
@@ -243,7 +263,7 @@ export abstract class LayoutItemBase<
 
   protected _lastRenderInfo?: RenderInfo;
   protected _lastResizeInfo?: ResizeInfo;
-  protected _lengthsCache?: Partial<Record<NumericLayoutProperty, number>>;
+  protected _lengthsCache?: Partial<Record<ReferencableLayoutProperty, number>>;
 
   constructor(options?: Partial<OptionsType>) {
     const filledOptions = booyah.fillInOptions(
@@ -272,7 +292,9 @@ export abstract class LayoutItemBase<
     this._layoutOptionsResolver.invalidate();
     this._lastRenderInfo = renderInfo;
 
+    this._prepareResizeChildren();
     this._cacheLengths();
+    this._cacheLengthsChildren();
     this._fixCachedLengths();
 
     this._onPrepareResize();
@@ -285,32 +307,17 @@ export abstract class LayoutItemBase<
 
     // Handle padding values
     for (const prop of paddingLayoutProperties) {
-      this._lengthsCache[prop] = this.safeParseLayoutPropertyAsNumber(prop);
+      this._lengthsCache[prop] = this.parseLayoutPropertyAsNumber(prop);
     }
 
-    // Handle width values
-    for (const prop of widthNumericLayoutProperties) {
-      let value = this.parseLayoutPropertyAsNumber(prop);
-
-      // Include padding
-      if (typeof value !== "undefined") {
-        value += this.horizontalPadding;
-      }
-
-      this._lengthsCache[prop] = value;
+    // Handle width & height values
+    for (const prop of aggregatedLayoutProperties) {
+      this._lengthsCache[prop] = this.parseLayoutPropertyAsOptionalNumber(prop);
     }
+  }
 
-    // Handle height values
-    for (const prop of heightNumericLayoutProperties) {
-      let value = this.parseLayoutPropertyAsNumber(prop);
-
-      // Include padding
-      if (typeof value !== "undefined") {
-        value += this.verticalPadding;
-      }
-
-      this._lengthsCache[prop] = value;
-    }
+  protected _cacheLengthsChildren() {
+    // no op
   }
 
   protected _fixCachedLengths() {
@@ -373,11 +380,11 @@ export abstract class LayoutItemBase<
     }
   }
 
-  protected _onPrepareResize() {
+  protected _prepareResizeChildren() {
     // no op
   }
 
-  protected _onResize(): void {
+  protected _onPrepareResize() {
     // no op
   }
 
@@ -386,6 +393,10 @@ export abstract class LayoutItemBase<
     this.emit("willResize", resizeInfo);
 
     this._validateBounds();
+    this._determineScaleAndPosition();
+    this._updateDynamicProperties();
+
+    this._resizeChildren();
 
     this._onResize();
 
@@ -479,6 +490,22 @@ export abstract class LayoutItemBase<
     }
   }
 
+  protected _determineScaleAndPosition() {
+    // no op
+  }
+
+  protected _updateDynamicProperties() {
+    // no op
+  }
+
+  protected _resizeChildren() {
+    // no op
+  }
+
+  protected _onResize(): void {
+    // no op
+  }
+
   calculateInnerBounds(bounds: Bounds) {
     return new Bounds(
       bounds.x + this.paddingLeft,
@@ -493,10 +520,14 @@ export abstract class LayoutItemBase<
   }
 
   get minWidth(): number | undefined {
-    return this._lengthsCache.minWidth;
+    return this._parseLayoutProperty("canShrink")
+      ? this._lengthsCache.minWidth
+      : this._lengthsCache.idealWidth;
   }
   get minHeight(): number | undefined {
-    return this._lengthsCache.minHeight;
+    return this._parseLayoutProperty("canShrink")
+      ? this._lengthsCache.minHeight
+      : this._lengthsCache.idealHeight;
   }
 
   get idealWidth(): number | undefined {
@@ -507,10 +538,14 @@ export abstract class LayoutItemBase<
   }
 
   get maxWidth(): number | undefined {
-    return this._lengthsCache.maxWidth;
+    return this._parseLayoutProperty("canGrow")
+      ? this._lengthsCache.maxWidth
+      : this._lengthsCache.idealWidth;
   }
   get maxHeight(): number | undefined {
-    return this._lengthsCache.maxHeight;
+    return this._parseLayoutProperty("canGrow")
+      ? this._lengthsCache.maxHeight
+      : this._lengthsCache.idealHeight;
   }
 
   get paddingLeft(): number {
@@ -554,9 +589,9 @@ export abstract class LayoutItemBase<
     return this._lastRenderInfo;
   }
 
-  parseLayoutProperty(
-    prop: keyof OptionsType["layoutOptions"],
-  ): number | string | undefined {
+  protected _parseLayoutProperty(
+    prop: keyof LayoutOptionsType,
+  ): number | boolean | string | undefined {
     const resolvableContext: LayoutValueResolvableContext<
       OptionsType["layoutOptions"]
     > = {
@@ -566,9 +601,9 @@ export abstract class LayoutItemBase<
     };
     const value = this._layoutOptionsResolver.resolve(prop, resolvableContext);
 
-    if (typeof value === "string" && isNumericLayoutProperty(value)) {
+    if (typeof value === "string" && isReferencableLayoutProperty(value)) {
       // Find matching property and return it
-      const matchingProp = value as NumericLayoutProperty;
+      // @ts-ignore
       const matchingValue = this[matchingProp];
 
       if (
@@ -576,7 +611,7 @@ export abstract class LayoutItemBase<
         typeof matchingValue !== undefined
       ) {
         throw new Error(
-          `LayoutItem referencing property ${matchingProp} which is not a number. Value: ${matchingValue}`,
+          `LayoutItem referencing property ${value} which is not a number. Value: ${matchingValue}`,
         );
       }
 
@@ -587,21 +622,22 @@ export abstract class LayoutItemBase<
     return value;
   }
 
-  parseLayoutPropertyAsNumber(
+  parseLayoutPropertyAsOptionalNumber(
     prop: keyof OptionsType["layoutOptions"],
   ): number | undefined {
-    const value = this.parseLayoutProperty(prop);
-    if (typeof value === "string")
+    const value = this._parseLayoutProperty(prop);
+    if (typeof value !== "number" && typeof value !== "undefined") {
       throw new Error(
-        `Cannot parseLayoutPropertyAsNumber the string "${value}"`,
+        `Cannot parseLayoutPropertyAsNumber the value "${value}"`,
       );
+    }
     return value;
   }
 
-  safeParseLayoutPropertyAsNumber(
+  parseLayoutPropertyAsNumber(
     prop: keyof OptionsType["layoutOptions"],
   ): number {
-    return this.parseLayoutPropertyAsNumber(prop) || 0;
+    return this.parseLayoutPropertyAsOptionalNumber(prop) || 0;
   }
 }
 
@@ -649,9 +685,12 @@ export type ResolvablePixiDisplayObject<
   LayoutValueResolvableContext<LayoutOptionsType>
 >;
 
+// TODO: Remove this?
+export class DisplayObjectLayoutOptions extends LayoutOptions {}
+
 export class DisplayObjectChipOptions<
   DisplayObjectType extends PIXI.Container,
-  LayoutOptionsType extends LayoutOptions,
+  LayoutOptionsType extends DisplayObjectLayoutOptions,
 > extends LayoutItemBaseOptions<LayoutOptionsType> {
   displayObject!: DisplayObjectType;
   properties?: Partial<
@@ -664,16 +703,36 @@ export class DisplayObjectChipOptions<
   addToParentLayoutItem = true;
   addToContainer = true;
 
+  /** When scaling, always scale by the same amount on both axes */
+  keepAspectRatio = false;
+
+  /** When aligning, adjust for non-zero anchor points */
+  alignBasedOnAnchor = true;
+
   /**
    * Create an intermediate container that can be manipulated
    * relative to the position provided by the layout
    * */
   makeOffsetContainer = true;
+
+  /**
+   * The height and width of the display object, when scaled to 1.
+   * If not provided, will be calculated by calling `getLocalBounds()`
+   * Does not include padding.
+   */
+  naturalSize?: PIXI.IPointData;
+
+  /**
+   * The anchor position of the display object
+   * If not provided, will be calculated by calling `getLocalBounds()`
+   */
+  anchorPosition?: PIXI.IPoint;
 }
 
 export abstract class DisplayObjectChip<
   DisplayObjectType extends PIXI.Container,
-  LayoutOptionsType extends LayoutOptions = LayoutOptions,
+  LayoutOptionsType extends
+    DisplayObjectLayoutOptions = DisplayObjectLayoutOptions,
   OptionsType extends DisplayObjectChipOptions<
     DisplayObjectType,
     LayoutOptionsType
@@ -685,6 +744,8 @@ export abstract class DisplayObjectChip<
   >;
 
   protected _offsetContainer?: PIXI.Container;
+  protected _naturalSize: PIXI.IPointData;
+  protected _anchorPosition: PIXI.IPoint;
 
   constructor(options: OptionsType) {
     super(options);
@@ -694,6 +755,18 @@ export abstract class DisplayObjectChip<
     if (this._options.makeOffsetContainer) {
       this._offsetContainer = new PIXI.Container();
       this._offsetContainer.addChild(this.displayObject);
+    }
+
+    if (typeof this._options.naturalSize === undefined) {
+      this.updateNaturalSize();
+    } else {
+      this._naturalSize = this._options.naturalSize;
+    }
+
+    if (typeof this._options.anchorPosition === undefined) {
+      this.updateAnchorPosition();
+    } else {
+      this._anchorPosition = this._options.anchorPosition;
     }
   }
 
@@ -761,8 +834,151 @@ export abstract class DisplayObjectChip<
     super._onTerminate();
   }
 
-  protected _onResize(): void {
-    this._updateDynamicProperties();
+  // protected _onResize(): void {
+  //   // this._determineScaleAndPosition();
+
+  //   // this._updateDynamicProperties();
+  // }
+
+  protected _determineScaleAndPosition() {
+    const innerBounds = this.calculateInnerBounds(
+      this.lastResizeInfo!.localBounds,
+    );
+
+    // let horizontalScale = 1;
+    // let verticalScale = 1;
+
+    // Reason in inner sizes, without padding
+    const idealInnerWidth = this.idealWidth
+      ? this.idealWidth - (this.paddingLeft + this.paddingRight)
+      : 0;
+    const idealInnerHeight = this.idealHeight
+      ? this.idealHeight - (this.paddingTop + this.paddingBottom)
+      : 0;
+
+    let finalInnerWidth = idealInnerWidth;
+    let finalInnerHeight = idealInnerHeight;
+
+    if (innerBounds.isBoundedHorizontally()) {
+      if (
+        this._parseLayoutProperty("canShrink") &&
+        innerBounds.width! < idealInnerWidth
+      ) {
+        // Shrink, but not beyond the min size
+        if (typeof this.minWidth !== "undefined") {
+          const minInnerWidth =
+            this.minWidth - (this.paddingLeft + this.paddingRight);
+          finalInnerWidth = Math.max(innerBounds.width!, minInnerWidth);
+        } else {
+          finalInnerWidth = innerBounds.width!;
+        }
+      } else if (
+        this._parseLayoutProperty("canGrow") &&
+        innerBounds.width! > idealInnerWidth
+      ) {
+        // Grow, but not beyond the max size
+        if (typeof this.maxWidth !== "undefined") {
+          const maxInnerWidth =
+            this.maxWidth - (this.paddingLeft + this.paddingRight);
+          finalInnerWidth = Math.min(maxInnerWidth, innerBounds.width!);
+        } else {
+          finalInnerWidth = innerBounds.width!;
+        }
+      }
+    }
+
+    if (innerBounds.isBoundedVertically()) {
+      if (
+        this._parseLayoutProperty("canShrink") &&
+        innerBounds.height! < idealInnerHeight
+      ) {
+        // Shrink, but not beyond the min size
+        if (typeof this.minHeight !== "undefined") {
+          const minInnerHeight =
+            this.minHeight - (this.paddingTop + this.paddingBottom);
+          finalInnerHeight = Math.max(innerBounds.height!, minInnerHeight);
+        } else {
+          finalInnerHeight = innerBounds.height!;
+        }
+      } else if (
+        this._parseLayoutProperty("canGrow") &&
+        innerBounds.height! > idealInnerHeight
+      ) {
+        // Grow, but not beyond the max size
+        if (typeof this.maxHeight !== "undefined") {
+          const maxInnerHeight =
+            this.maxHeight - (this.paddingTop + this.paddingBottom);
+          finalInnerHeight = Math.min(maxInnerHeight, innerBounds.height!);
+        } else {
+          finalInnerHeight = innerBounds.height!;
+        }
+      }
+    }
+
+    this._setInnerSize(finalInnerWidth, finalInnerHeight);
+
+    // if (this._options.layoutOptions.keepAspectRatio) {
+    //   const minScale = Math.min(horizontalScale, verticalScale);
+    //   horizontalScale = minScale;
+    //   verticalScale = minScale;
+    // }
+
+    // const scaledWidth = idealInnerWidth * horizontalScale;
+    // const scaledHeight = idealInnerHeight * verticalScale;
+    // this._setSize({
+    //   scaledWidth,
+    //   scaledHeight,
+    //   horizontalScale,
+    //   verticalScale,
+    // });
+
+    const position = new PIXI.Point(innerBounds.x, innerBounds.y);
+
+    // If the object has an non-zero anchor point, adjust the position
+    if (this._options.layoutOptions.alignBasedOnAnchor) {
+      position.x -= this._anchorPosition.x;
+      position.y -= this._anchorPosition.y;
+    }
+
+    // Handle horizontal alignment
+    if (innerBounds.isBoundedHorizontally()) {
+      if (
+        this._options.layoutOptions.horizontalAlign !== "left" &&
+        innerBounds.width! > finalInnerWidth
+      ) {
+        const extraSpace = innerBounds.width! - finalInnerWidth;
+        if (this._options.layoutOptions.horizontalAlign === "right") {
+          position.x += extraSpace;
+        } else if (this._options.layoutOptions.horizontalAlign === "center") {
+          position.x += extraSpace / 2;
+        }
+      }
+    } else if (this._options.layoutOptions.horizontalAlign !== "left") {
+      console.error(
+        `DisplayObjectLeafChip: Within unbounded layout, cannot horizontally align as requested: ${this._options.layoutOptions.horizontalAlign}`,
+      );
+    }
+
+    // Handle vertical alignment
+    if (innerBounds.isBoundedVertically()) {
+      if (
+        this._options.layoutOptions.verticalAlign !== "top" &&
+        innerBounds.height! > finalInnerHeight
+      ) {
+        const extraSpace = innerBounds.height! - finalInnerHeight;
+        if (this._options.layoutOptions.verticalAlign === "bottom") {
+          position.y += extraSpace;
+        } else if (this._options.layoutOptions.verticalAlign === "middle") {
+          position.y += extraSpace / 2;
+        }
+      }
+    } else if (this._options.layoutOptions.verticalAlign !== "top") {
+      console.error(
+        `DisplayObjectLeafChip: Within unbounded layout, cannot vertically align as requested: ${this._options.layoutOptions.verticalAlign}`,
+      );
+    }
+
+    this._setPosition(position, finalInnerWidth, finalInnerHeight);
   }
 
   protected _updateDynamicProperties() {
@@ -826,6 +1042,22 @@ export abstract class DisplayObjectChip<
     return this._offsetContainer;
   }
 
+  /** Recalculate the size of the display object based on `getLocalBounds()`  */
+  updateNaturalSize() {
+    const pixiLocalBounds = this._options.displayObject.getLocalBounds();
+
+    this._naturalSize = new PIXI.Point(
+      pixiLocalBounds.width,
+      pixiLocalBounds.height,
+    );
+  }
+
+  /** Recalculate the anchor position based on `getLocalBounds()`  */
+  updateAnchorPosition() {
+    const pixiLocalBounds = this._options.displayObject.getLocalBounds();
+    this._anchorPosition = new PIXI.Point(pixiLocalBounds.x, pixiLocalBounds.y);
+  }
+
   get contextModification() {
     if (!this._options.makeOffsetContainer) return super.contextModification;
 
@@ -834,14 +1066,31 @@ export abstract class DisplayObjectChip<
       container: this._offsetContainer,
     });
   }
+
+  protected _setInnerSize(innerWidth: number, innerHeight: number) {
+    let horizontalScale = innerWidth / this._naturalSize.x;
+    let verticalScale = innerHeight / this._naturalSize.y;
+
+    if (this._options.layoutOptions.keepAspectRatio) {
+      const minScale = Math.min(horizontalScale, verticalScale);
+      horizontalScale = minScale;
+      verticalScale = minScale;
+    }
+
+    this._options.displayObject.scale.set(horizontalScale, verticalScale);
+  }
+
+  protected _setPosition(
+    position: PIXI.IPointData,
+    finalInnerWidth: number,
+    finalInnerHeight: number,
+  ) {
+    this._options.displayObject.position.copyFrom(position);
+  }
 }
 
-export class DisplayObjectLeafLayoutOptions extends LayoutOptions {
-  keepAspectRatio = false;
-
-  /** When aligning, adjust for non-zero anchor points */
-  alignBasedOnAnchor = true;
-}
+// TODO: remove this?
+export class DisplayObjectLeafLayoutOptions extends LayoutOptions {}
 
 /**
  * An object that is at the end of a PIXI scene graph, such as a Sprite.
@@ -862,19 +1111,13 @@ export class DisplayObjectLeafChip<
     LayoutOptionsType
   > = DisplayObjectLeafChipOptions<DisplayObjectType, LayoutOptionsType>,
 > extends DisplayObjectChip<DisplayObjectType, LayoutOptionsType, OptionsType> {
-  private _pixiIdealWidth?: number;
-  private _pixiIdealHeight?: number;
-
-  protected _lengthsCache?: Partial<Record<NumericLayoutProperty, number>>;
-
-  // Cache of the local bounds so as not to recalculate it
-  private _localBounds?: Bounds;
-
   constructor(
     options: Partial<
       DisplayObjectLeafChipOptions<DisplayObjectType, LayoutOptionsType>
     >,
   ) {
+    // TODO: remove this ?
+
     const filledOptions = booyah.fillInOptions(
       options,
       new DisplayObjectLeafChipOptions<DisplayObjectType, LayoutOptionsType>(),
@@ -886,317 +1129,220 @@ export class DisplayObjectLeafChip<
     super(filledOptions as OptionsType);
   }
 
-  protected override _onPrepareResize() {
-    // The first time, possibly calculate ideal sizes
-    if (
-      typeof this._pixiIdealWidth === "undefined" ||
-      typeof this._pixiIdealHeight === "undefined"
-    ) {
-      this.updateIdealSize();
-    }
+  // protected override _onResize(): void {
+  //   if (!this.displayObject.parent)
+  //     throw new Error("Cannot layout display object without a parent");
 
-    this._lengthsCache = {};
+  //   let horizontalScale = 1;
+  //   let verticalScale = 1;
 
-    // Handle width values
-    for (const prop of widthNumericLayoutProperties) {
-      if (typeof super[prop] === "undefined") {
-        let value = this.parseLayoutPropertyAsNumber(prop);
+  //   // Reason in inner sizes, without padding
+  //   const idealInnerWidth = this.idealWidth
+  //     ? this.idealWidth - (this.paddingLeft + this.paddingRight)
+  //     : 0;
+  //   const idealInnerHeight = this.idealHeight
+  //     ? this.idealHeight - (this.paddingTop + this.paddingBottom)
+  //     : 0;
 
-        // Include padding
-        if (typeof value !== "undefined") {
-          value += this.paddingLeft + this.paddingRight;
-        }
+  //   const innerBounds = this.calculateInnerBounds(
+  //     this.lastResizeInfo!.localBounds,
+  //   );
 
-        this._lengthsCache[prop] = value;
-      }
-    }
+  //   if (innerBounds.isBoundedHorizontally()) {
+  //     if (innerBounds.width! < idealInnerWidth) {
+  //       // Shrink, but not beyond the min size
+  //       if (typeof this.minWidth !== "undefined") {
+  //         const minInnerWidth =
+  //           this.minWidth - (this.paddingLeft + this.paddingRight);
+  //         horizontalScale =
+  //           Math.max(innerBounds.width!, minInnerWidth) / idealInnerWidth;
+  //       } else {
+  //         horizontalScale = innerBounds.width! / idealInnerWidth;
+  //       }
+  //     } else if (innerBounds.width! > idealInnerWidth) {
+  //       // Grow, but not beyond the max size
+  //       if (typeof this.maxWidth !== "undefined") {
+  //         const maxInnerWidth =
+  //           this.maxWidth - (this.paddingLeft + this.paddingRight);
+  //         horizontalScale =
+  //           Math.min(maxInnerWidth, innerBounds.width!) / idealInnerWidth;
+  //       } else {
+  //         horizontalScale = innerBounds.width! / idealInnerWidth;
+  //       }
+  //     }
+  //   }
 
-    // Adjust width values
-    if (typeof this._lengthsCache["minWidth"]) {
-      // min <= ideal
-      if (
-        typeof this._lengthsCache["idealWidth"] !== "undefined" &&
-        this._lengthsCache["idealWidth"] < this._lengthsCache["minWidth"]
-      ) {
-        this._lengthsCache["idealWidth"] = this._lengthsCache["minWidth"];
-      }
+  //   if (innerBounds.isBoundedVertically()) {
+  //     if (innerBounds.height! < idealInnerHeight) {
+  //       // Shrink, but not beyond the min size
+  //       if (typeof this.minHeight !== "undefined") {
+  //         const minInnerHeight =
+  //           this.minHeight - (this.paddingTop + this.paddingBottom);
+  //         verticalScale =
+  //           Math.max(innerBounds.height!, minInnerHeight) / idealInnerHeight;
+  //       } else {
+  //         verticalScale = innerBounds.height! / idealInnerHeight;
+  //       }
+  //     } else if (innerBounds.height! > idealInnerHeight) {
+  //       // Grow, but not beyond the max size
+  //       if (typeof this.maxHeight !== "undefined") {
+  //         const maxInnerHeight =
+  //           this.maxHeight - (this.paddingTop + this.paddingBottom);
+  //         verticalScale =
+  //           Math.min(maxInnerHeight, innerBounds.height!) / idealInnerHeight;
+  //       } else {
+  //         verticalScale = innerBounds.height! / idealInnerHeight;
+  //       }
+  //     }
+  //   }
 
-      // min <= max
-      if (
-        typeof this._lengthsCache["maxWidth"] !== "undefined" &&
-        this._lengthsCache["maxWidth"] < this._lengthsCache["minWidth"]
-      ) {
-        this._lengthsCache["maxWidth"] = this._lengthsCache["minWidth"];
-      }
-    }
+  //   if (this._options.layoutOptions.keepAspectRatio) {
+  //     const minScale = Math.min(horizontalScale, verticalScale);
+  //     horizontalScale = minScale;
+  //     verticalScale = minScale;
+  //   }
 
-    // ideal <= max
-    if (
-      typeof this._lengthsCache["idealWidth"] !== "undefined" &&
-      typeof this._lengthsCache["maxWidth"] !== "undefined" &&
-      this._lengthsCache["maxWidth"] < this._lengthsCache["idealWidth"]
-    ) {
-      this._lengthsCache["idealWidth"] = this._lengthsCache["maxWidth"];
-    }
+  //   const scaledWidth = idealInnerWidth * horizontalScale;
+  //   const scaledHeight = idealInnerHeight * verticalScale;
+  //   this._setSize({
+  //     scaledWidth,
+  //     scaledHeight,
+  //     horizontalScale,
+  //     verticalScale,
+  //   });
 
-    // Handle height values
-    for (const prop of heightNumericLayoutProperties) {
-      if (typeof super[prop] === "undefined") {
-        let value = this.parseLayoutPropertyAsNumber(prop);
+  //   const position = new PIXI.Point(innerBounds.x, innerBounds.y);
 
-        // Include padding
-        if (typeof value !== "undefined") {
-          value += this.paddingTop + this.paddingBottom;
-        }
+  //   // If the object has an non-zero anchor point, adjust the position
+  //   if (this._options.layoutOptions.alignBasedOnAnchor) {
+  //     position.x -= this._localBounds!.x;
+  //     position.y -= this._localBounds!.y;
+  //   }
 
-        this._lengthsCache[prop] = value;
-      }
-    }
+  //   // Handle horizontal alignment
+  //   if (innerBounds.isBoundedHorizontally()) {
+  //     if (
+  //       this._options.layoutOptions.horizontalAlign !== "left" &&
+  //       innerBounds.width! > scaledWidth
+  //     ) {
+  //       const extraSpace = innerBounds.width! - scaledWidth;
+  //       if (this._options.layoutOptions.horizontalAlign === "right") {
+  //         position.x += extraSpace;
+  //       } else if (this._options.layoutOptions.horizontalAlign === "center") {
+  //         position.x += extraSpace / 2;
+  //       }
+  //     }
+  //   } else if (this._options.layoutOptions.horizontalAlign !== "left") {
+  //     console.error(
+  //       `DisplayObjectLeafChip: Within unbounded layout, cannot horizontally align as requested: ${this._options.layoutOptions.horizontalAlign}`,
+  //     );
+  //   }
 
-    // Adjust height values
-    if (typeof this._lengthsCache["minHeight"]) {
-      // min <= ideal
-      if (
-        typeof this._lengthsCache["idealHeight"] !== "undefined" &&
-        this._lengthsCache["idealHeight"] < this._lengthsCache["minHeight"]
-      ) {
-        this._lengthsCache["idealHeight"] = this._lengthsCache["minHeight"];
-      }
+  //   // Handle vertical alignment
+  //   if (innerBounds.isBoundedVertically()) {
+  //     if (
+  //       this._options.layoutOptions.verticalAlign !== "top" &&
+  //       innerBounds.height! > scaledHeight
+  //     ) {
+  //       const extraSpace = innerBounds.height! - scaledHeight;
+  //       if (this._options.layoutOptions.verticalAlign === "bottom") {
+  //         position.y += extraSpace;
+  //       } else if (this._options.layoutOptions.verticalAlign === "middle") {
+  //         position.y += extraSpace / 2;
+  //       }
+  //     }
+  //   } else if (this._options.layoutOptions.verticalAlign !== "top") {
+  //     console.error(
+  //       `DisplayObjectLeafChip: Within unbounded layout, cannot vertically align as requested: ${this._options.layoutOptions.verticalAlign}`,
+  //     );
+  //   }
 
-      // min <= max
-      if (
-        typeof this._lengthsCache["maxHeight"] !== "undefined" &&
-        this._lengthsCache["maxHeight"] < this._lengthsCache["minHeight"]
-      ) {
-        this._lengthsCache["maxHeight"] = this._lengthsCache["minHeight"];
-      }
-    }
+  //   this._setPosition(position);
 
-    // ideal <= max
-    if (
-      typeof this._lengthsCache["idealHeight"] !== "undefined" &&
-      typeof this._lengthsCache["maxHeight"] !== "undefined" &&
-      this._lengthsCache["maxHeight"] < this._lengthsCache["idealHeight"]
-    ) {
-      this._lengthsCache["idealHeight"] = this._lengthsCache["maxHeight"];
-    }
-  }
+  //   super._onResize();
+  // }
 
-  protected override _onResize(): void {
-    if (!this.displayObject.parent)
-      throw new Error("Cannot layout display object without a parent");
+  // protected _setSize({
+  //   horizontalScale,
+  //   verticalScale,
+  // }: {
+  //   scaledWidth: number;
+  //   scaledHeight: number;
+  //   horizontalScale: number;
+  //   verticalScale: number;
+  // }) {
+  //   this._options.displayObject.scale.set(horizontalScale, verticalScale);
+  // }
 
-    let horizontalScale = 1;
-    let verticalScale = 1;
+  // protected _setPosition(position: PIXI.IPointData) {
+  //   this._options.displayObject.position.copyFrom(position);
+  // }
 
-    // Reason in inner sizes, without padding
-    const idealInnerWidth = this.idealWidth
-      ? this.idealWidth - (this.paddingLeft + this.paddingRight)
-      : 0;
-    const idealInnerHeight = this.idealHeight
-      ? this.idealHeight - (this.paddingTop + this.paddingBottom)
-      : 0;
+  // updateNaturalSize() {
+  //   this._localBounds = Bounds.fromRectangle(
+  //     this._options.displayObject.getLocalBounds(),
+  //   );
 
-    const innerBounds = this.calculateInnerBounds(
-      this.lastResizeInfo!.localBounds,
-    );
+  //   if (typeof this._options.layoutOptions.idealWidth === "undefined") {
+  //     this._pixiIdealWidth =
+  //       this._localBounds.width! + this.paddingLeft + this.paddingRight;
+  //   } else {
+  //     this._pixiIdealWidth = this.parseLayoutPropertyAsNumber("idealWidth");
+  //   }
 
-    if (innerBounds.isBoundedHorizontally()) {
-      if (innerBounds.width! < idealInnerWidth) {
-        // Shrink, but not beyond the min size
-        if (typeof this.minWidth !== "undefined") {
-          const minInnerWidth =
-            this.minWidth - (this.paddingLeft + this.paddingRight);
-          horizontalScale =
-            Math.max(innerBounds.width!, minInnerWidth) / idealInnerWidth;
-        } else {
-          horizontalScale = innerBounds.width! / idealInnerWidth;
-        }
-      } else if (innerBounds.width! > idealInnerWidth) {
-        // Grow, but not beyond the max size
-        if (typeof this.maxWidth !== "undefined") {
-          const maxInnerWidth =
-            this.maxWidth - (this.paddingLeft + this.paddingRight);
-          horizontalScale =
-            Math.min(maxInnerWidth, innerBounds.width!) / idealInnerWidth;
-        } else {
-          horizontalScale = innerBounds.width! / idealInnerWidth;
-        }
-      }
-    }
+  //   if (typeof this._options.layoutOptions.idealHeight === "undefined") {
+  //     this._pixiIdealHeight =
+  //       this._localBounds.height! + this.paddingTop + this.paddingBottom;
+  //   } else {
+  //     this._pixiIdealHeight = this.parseLayoutPropertyAsNumber("idealHeight");
+  //   }
+  // }
 
-    if (innerBounds.isBoundedVertically()) {
-      if (innerBounds.height! < idealInnerHeight) {
-        // Shrink, but not beyond the min size
-        if (typeof this.minHeight !== "undefined") {
-          const minInnerHeight =
-            this.minHeight - (this.paddingTop + this.paddingBottom);
-          verticalScale =
-            Math.max(innerBounds.height!, minInnerHeight) / idealInnerHeight;
-        } else {
-          verticalScale = innerBounds.height! / idealInnerHeight;
-        }
-      } else if (innerBounds.height! > idealInnerHeight) {
-        // Grow, but not beyond the max size
-        if (typeof this.maxHeight !== "undefined") {
-          const maxInnerHeight =
-            this.maxHeight - (this.paddingTop + this.paddingBottom);
-          verticalScale =
-            Math.min(maxInnerHeight, innerBounds.height!) / idealInnerHeight;
-        } else {
-          verticalScale = innerBounds.height! / idealInnerHeight;
-        }
-      }
-    }
+  // get idealWidth() {
+  //   return (
+  //     super.idealWidth ?? this._pixiIdealWidth ?? this._lengthsCache.idealWidth
+  //   );
+  // }
 
-    if (this._options.layoutOptions.keepAspectRatio) {
-      const minScale = Math.min(horizontalScale, verticalScale);
-      horizontalScale = minScale;
-      verticalScale = minScale;
-    }
+  // // Can't use a regular setter because this is a read-only property in a superclass
+  // setIdealWidth(value: number) {
+  //   this._pixiIdealWidth = value;
+  //   this.requestResize();
+  // }
 
-    const scaledWidth = idealInnerWidth * horizontalScale;
-    const scaledHeight = idealInnerHeight * verticalScale;
-    this._setSize({
-      scaledWidth,
-      scaledHeight,
-      horizontalScale,
-      verticalScale,
-    });
+  // get idealHeight() {
+  //   return (
+  //     super.idealHeight ??
+  //     this._pixiIdealHeight ??
+  //     this._lengthsCache.idealHeight
+  //   );
+  // }
 
-    const position = new PIXI.Point(innerBounds.x, innerBounds.y);
+  // // Can't use a regular setter because this is a read-only property in a superclass
+  // setIdealHeight(value: number) {
+  //   this._pixiIdealHeight = value;
+  //   this.requestResize();
+  // }
 
-    // If the object has an non-zero anchor point, adjust the position
-    if (this._options.layoutOptions.alignBasedOnAnchor) {
-      position.x -= this._localBounds!.x;
-      position.y -= this._localBounds!.y;
-    }
+  // get minWidth() {
+  //   return super.minWidth ?? this._lengthsCache.minWidth;
+  // }
+  // get minHeight() {
+  //   return super.minHeight ?? this._lengthsCache.minHeight;
+  // }
 
-    // Handle horizontal alignment
-    if (innerBounds.isBoundedHorizontally()) {
-      if (
-        this._options.layoutOptions.horizontalAlign !== "left" &&
-        innerBounds.width! > scaledWidth
-      ) {
-        const extraSpace = innerBounds.width! - scaledWidth;
-        if (this._options.layoutOptions.horizontalAlign === "right") {
-          position.x += extraSpace;
-        } else if (this._options.layoutOptions.horizontalAlign === "center") {
-          position.x += extraSpace / 2;
-        }
-      }
-    } else if (this._options.layoutOptions.horizontalAlign !== "left") {
-      console.error(
-        `DisplayObjectLeafChip: Within unbounded layout, cannot horizontally align as requested: ${this._options.layoutOptions.horizontalAlign}`,
-      );
-    }
-
-    // Handle vertical alignment
-    if (innerBounds.isBoundedVertically()) {
-      if (
-        this._options.layoutOptions.verticalAlign !== "top" &&
-        innerBounds.height! > scaledHeight
-      ) {
-        const extraSpace = innerBounds.height! - scaledHeight;
-        if (this._options.layoutOptions.verticalAlign === "bottom") {
-          position.y += extraSpace;
-        } else if (this._options.layoutOptions.verticalAlign === "middle") {
-          position.y += extraSpace / 2;
-        }
-      }
-    } else if (this._options.layoutOptions.verticalAlign !== "top") {
-      console.error(
-        `DisplayObjectLeafChip: Within unbounded layout, cannot vertically align as requested: ${this._options.layoutOptions.verticalAlign}`,
-      );
-    }
-
-    this._setPosition(position);
-
-    super._onResize();
-  }
-
-  updateIdealSize() {
-    this._localBounds = Bounds.fromRectangle(
-      this._options.displayObject.getLocalBounds(),
-    );
-
-    if (typeof this._options.layoutOptions.idealWidth === "undefined") {
-      this._pixiIdealWidth =
-        this._localBounds.width! + this.paddingLeft + this.paddingRight;
-    } else {
-      this._pixiIdealWidth = this.parseLayoutPropertyAsNumber("idealWidth");
-    }
-
-    if (typeof this._options.layoutOptions.idealHeight === "undefined") {
-      this._pixiIdealHeight =
-        this._localBounds.height! + this.paddingTop + this.paddingBottom;
-    } else {
-      this._pixiIdealHeight = this.parseLayoutPropertyAsNumber("idealHeight");
-    }
-  }
-
-  get idealWidth() {
-    return (
-      super.idealWidth ?? this._pixiIdealWidth ?? this._lengthsCache.idealWidth
-    );
-  }
-
-  // Can't use a regular setter because this is a read-only property in a superclass
-  setIdealWidth(value: number) {
-    this._pixiIdealWidth = value;
-    this.requestResize();
-  }
-
-  get idealHeight() {
-    return (
-      super.idealHeight ??
-      this._pixiIdealHeight ??
-      this._lengthsCache.idealHeight
-    );
-  }
-
-  // Can't use a regular setter because this is a read-only property in a superclass
-  setIdealHeight(value: number) {
-    this._pixiIdealHeight = value;
-    this.requestResize();
-  }
-
-  get minWidth() {
-    return super.minWidth ?? this._lengthsCache.minWidth;
-  }
-  get minHeight() {
-    return super.minHeight ?? this._lengthsCache.minHeight;
-  }
-
-  get maxWidth() {
-    return super.maxWidth ?? this._lengthsCache.maxWidth;
-  }
-  get maxHeight() {
-    return super.maxHeight ?? this._lengthsCache.maxHeight;
-  }
-
-  protected _setSize({
-    horizontalScale,
-    verticalScale,
-  }: {
-    scaledWidth: number;
-    scaledHeight: number;
-    horizontalScale: number;
-    verticalScale: number;
-  }) {
-    this._options.displayObject.scale.set(horizontalScale, verticalScale);
-  }
-
-  protected _setPosition(position: PIXI.IPointData) {
-    this._options.displayObject.position.copyFrom(position);
-  }
+  // get maxWidth() {
+  //   return super.maxWidth ?? this._lengthsCache.maxWidth;
+  // }
+  // get maxHeight() {
+  //   return super.maxHeight ?? this._lengthsCache.maxHeight;
+  // }
 }
 
 export class SpriteChipLayoutOptions extends DisplayObjectLeafLayoutOptions {
   keepAspectRatio = true;
 
-  maxWidth: NumericLayoutValue = "idealWidth";
-  maxHeight: NumericLayoutValue = "idealHeight";
+  canGrow = false;
 }
 
 export class SpriteChipOptions extends DisplayObjectLeafChipOptions<PIXI.Sprite> {
@@ -1294,15 +1440,18 @@ export class NineSlicePlaneChip extends DisplayObjectLeafChip<PIXI.NineSlicePlan
     super(filledOptions);
   }
 
-  protected _setSize({
-    scaledWidth,
-    scaledHeight,
-  }: {
-    scaledWidth: number;
-    scaledHeight: number;
-  }) {
-    this._options.displayObject.width = scaledWidth;
-    this._options.displayObject.height = scaledHeight;
+  protected _setInnerSize(innerWidth: number, innerHeight: number) {
+    if (this._options.layoutOptions.keepAspectRatio) {
+      let horizontalScale = innerWidth / this._naturalSize.x;
+      let verticalScale = innerHeight / this._naturalSize.y;
+
+      const minScale = Math.min(horizontalScale, verticalScale);
+      innerWidth = minScale * this._naturalSize.x;
+      innerHeight = minScale * this._naturalSize.y;
+    }
+
+    this._options.displayObject.width = innerWidth;
+    this._options.displayObject.height = innerHeight;
   }
 }
 
@@ -1310,10 +1459,8 @@ export class NineSlicePlaneChip extends DisplayObjectLeafChip<PIXI.NineSlicePlan
 export class TextChipLayoutOptions extends DisplayObjectLeafLayoutOptions {
   keepAspectRatio = true;
 
-  minWidth: NumericLayoutValue = "idealWidth";
-  minHeight: NumericLayoutValue = "idealHeight";
-  maxWidth: NumericLayoutValue = "idealWidth";
-  maxHeight: NumericLayoutValue = "idealHeight";
+  canGrow = false;
+  canShrink = false;
 }
 
 export class TextChipOptions extends DisplayObjectLeafChipOptions<PIXI.Text> {
@@ -1341,7 +1488,7 @@ export class TextChip extends DisplayObjectLeafChip<PIXI.Text> {
 }
 
 /**
- * Manages a container that will be layed out, but will not act as a parent for other layout children
+ * Manages a PIXI.Container that will be layed out, but will not act as a parent for other layout children
  * */
 export class ContainerLeafChip extends DisplayObjectLeafChip<PIXI.Container> {
   constructor(options?: Partial<DisplayObjectLeafChipOptions<PIXI.Container>>) {
@@ -1365,7 +1512,7 @@ export class ContainerLeafChip extends DisplayObjectLeafChip<PIXI.Container> {
 }
 
 /**
- * Manages a PIXI.Container, either a layout or not
+ * Manages a PIXI.Container that participates in the layout
  */
 export abstract class ContainerBase<
   LayoutOptionsType extends LayoutOptions = LayoutOptions,
@@ -1375,10 +1522,11 @@ export abstract class ContainerBase<
   > = DisplayObjectChipOptions<PIXI.Container, LayoutOptionsType>,
 > extends DisplayObjectChip<PIXI.Container, LayoutOptionsType, OptionsType> {
   protected _childLayoutItems?: Array<LayoutItem>;
+  protected _childResizeInfo?: ResizeInfo;
 
-  protected _aggregatedChildValues?: Partial<
-    Record<NumericLayoutProperty, number>
-  >;
+  // protected _aggregatedChildValues?: Partial<
+  //   Record<ReferencableLayoutProperty, number>
+  // >;
 
   constructor(
     options?: Partial<
@@ -1398,7 +1546,7 @@ export abstract class ContainerBase<
 
   protected _onActivate(): void {
     this._childLayoutItems = [];
-    this._aggregatedChildValues = {};
+    // this._aggregatedChildValues = {};
 
     super._onActivate();
   }
@@ -1425,68 +1573,32 @@ export abstract class ContainerBase<
     this.requestResize();
   }
 
-  override prepareResize(renderInfo: RenderInfo): void {
-    super.prepareResize(renderInfo);
+  protected _prepareResizeChildren(): void {
+    for (const child of this._childLayoutItems!) {
+      child.prepareResize(this._lastRenderInfo);
+    }
+  }
 
-    for (const child of this._childLayoutItems!)
-      child.prepareResize(renderInfo);
-
-    this._aggregatedChildValues = {};
-
+  protected override _cacheLengthsChildren(): void {
     // Handle width values
-    for (const prop of widthNumericLayoutProperties) {
-      if (typeof super[prop] === "undefined") {
+    for (const prop of widthLayoutProperties) {
+      if (typeof this._lengthsCache[prop] === "undefined") {
         const methodName =
           `_aggregate${booyah.uppercaseFirstLetter(prop)}` as keyof this;
 
         let value = (this[methodName] as () => number | undefined)();
 
-        // Include padding
         if (typeof value !== "undefined") {
-          value += this.paddingLeft + this.paddingRight;
+          // Include padding
+          value += this.horizontalPadding;
+          this._lengthsCache[prop] = value;
         }
-
-        this._aggregatedChildValues[prop] = value;
       }
-    }
-
-    // Adjust width values
-    if (typeof this._aggregatedChildValues["minWidth"]) {
-      // min <= ideal
-      if (
-        typeof this._aggregatedChildValues["idealWidth"] !== "undefined" &&
-        this._aggregatedChildValues["idealWidth"] <
-          this._aggregatedChildValues["minWidth"]
-      ) {
-        this._aggregatedChildValues["idealWidth"] =
-          this._aggregatedChildValues["minWidth"];
-      }
-
-      // min <= max
-      if (
-        typeof this._aggregatedChildValues["maxWidth"] !== "undefined" &&
-        this._aggregatedChildValues["maxWidth"] <
-          this._aggregatedChildValues["minWidth"]
-      ) {
-        this._aggregatedChildValues["maxWidth"] =
-          this._aggregatedChildValues["minWidth"];
-      }
-    }
-
-    // ideal <= max
-    if (
-      typeof this._aggregatedChildValues["idealWidth"] !== "undefined" &&
-      typeof this._aggregatedChildValues["maxWidth"] !== "undefined" &&
-      this._aggregatedChildValues["maxWidth"] <
-        this._aggregatedChildValues["idealWidth"]
-    ) {
-      this._aggregatedChildValues["idealWidth"] =
-        this._aggregatedChildValues["maxWidth"];
     }
 
     // Handle height values
-    for (const prop of heightNumericLayoutProperties) {
-      if (typeof super[prop] === "undefined") {
+    for (const prop of heightLayoutProperties) {
+      if (typeof this._lengthsCache[prop] === "undefined") {
         const methodName =
           `_aggregate${booyah.uppercaseFirstLetter(prop)}` as keyof this;
 
@@ -1494,47 +1606,123 @@ export abstract class ContainerBase<
 
         // Include padding
         if (typeof value !== "undefined") {
-          value += this.paddingTop + this.paddingBottom;
+          value += this.verticalPadding;
+          this._lengthsCache[prop] = value;
         }
-
-        this._aggregatedChildValues[prop] = value;
       }
-    }
-
-    // Adjust height values
-    if (typeof this._aggregatedChildValues["minHeight"]) {
-      // min <= ideal
-      if (
-        typeof this._aggregatedChildValues["idealHeight"] !== "undefined" &&
-        this._aggregatedChildValues["idealHeight"] <
-          this._aggregatedChildValues["minHeight"]
-      ) {
-        this._aggregatedChildValues["idealHeight"] =
-          this._aggregatedChildValues["minHeight"];
-      }
-
-      // min <= max
-      if (
-        typeof this._aggregatedChildValues["maxHeight"] !== "undefined" &&
-        this._aggregatedChildValues["maxHeight"] <
-          this._aggregatedChildValues["minHeight"]
-      ) {
-        this._aggregatedChildValues["maxHeight"] =
-          this._aggregatedChildValues["minHeight"];
-      }
-    }
-
-    // ideal <= max
-    if (
-      typeof this._aggregatedChildValues["idealHeight"] !== "undefined" &&
-      typeof this._aggregatedChildValues["maxHeight"] !== "undefined" &&
-      this._aggregatedChildValues["maxHeight"] <
-        this._aggregatedChildValues["idealHeight"]
-    ) {
-      this._aggregatedChildValues["idealHeight"] =
-        this._aggregatedChildValues["maxHeight"];
     }
   }
+
+  // override prepareResize(renderInfo: RenderInfo): void {
+  //   super.prepareResize(renderInfo);
+
+  //   for (const child of this._childLayoutItems!)
+  //     child.prepareResize(renderInfo);
+
+  //   this._aggregatedChildValues = {};
+
+  //   // Handle width values
+  //   for (const prop of widthLayoutProperties) {
+  //     if (typeof super[prop] === "undefined") {
+  //       const methodName =
+  //         `_aggregate${booyah.uppercaseFirstLetter(prop)}` as keyof this;
+
+  //       let value = (this[methodName] as () => number | undefined)();
+
+  //       // Include padding
+  //       if (typeof value !== "undefined") {
+  //         value += this.paddingLeft + this.paddingRight;
+  //       }
+
+  //       this._aggregatedChildValues[prop] = value;
+  //     }
+  //   }
+
+  //   // Adjust width values
+  //   if (typeof this._aggregatedChildValues["minWidth"]) {
+  //     // min <= ideal
+  //     if (
+  //       typeof this._aggregatedChildValues["idealWidth"] !== "undefined" &&
+  //       this._aggregatedChildValues["idealWidth"] <
+  //         this._aggregatedChildValues["minWidth"]
+  //     ) {
+  //       this._aggregatedChildValues["idealWidth"] =
+  //         this._aggregatedChildValues["minWidth"];
+  //     }
+
+  //     // min <= max
+  //     if (
+  //       typeof this._aggregatedChildValues["maxWidth"] !== "undefined" &&
+  //       this._aggregatedChildValues["maxWidth"] <
+  //         this._aggregatedChildValues["minWidth"]
+  //     ) {
+  //       this._aggregatedChildValues["maxWidth"] =
+  //         this._aggregatedChildValues["minWidth"];
+  //     }
+  //   }
+
+  //   // ideal <= max
+  //   if (
+  //     typeof this._aggregatedChildValues["idealWidth"] !== "undefined" &&
+  //     typeof this._aggregatedChildValues["maxWidth"] !== "undefined" &&
+  //     this._aggregatedChildValues["maxWidth"] <
+  //       this._aggregatedChildValues["idealWidth"]
+  //   ) {
+  //     this._aggregatedChildValues["idealWidth"] =
+  //       this._aggregatedChildValues["maxWidth"];
+  //   }
+
+  //   // Handle height values
+  //   for (const prop of heightLayoutProperties) {
+  //     if (typeof super[prop] === "undefined") {
+  //       const methodName =
+  //         `_aggregate${booyah.uppercaseFirstLetter(prop)}` as keyof this;
+
+  //       let value = (this[methodName] as () => number | undefined)();
+
+  //       // Include padding
+  //       if (typeof value !== "undefined") {
+  //         value += this.paddingTop + this.paddingBottom;
+  //       }
+
+  //       this._aggregatedChildValues[prop] = value;
+  //     }
+  //   }
+
+  //   // Adjust height values
+  //   if (typeof this._aggregatedChildValues["minHeight"]) {
+  //     // min <= ideal
+  //     if (
+  //       typeof this._aggregatedChildValues["idealHeight"] !== "undefined" &&
+  //       this._aggregatedChildValues["idealHeight"] <
+  //         this._aggregatedChildValues["minHeight"]
+  //     ) {
+  //       this._aggregatedChildValues["idealHeight"] =
+  //         this._aggregatedChildValues["minHeight"];
+  //     }
+
+  //     // min <= max
+  //     if (
+  //       typeof this._aggregatedChildValues["maxHeight"] !== "undefined" &&
+  //       this._aggregatedChildValues["maxHeight"] <
+  //         this._aggregatedChildValues["minHeight"]
+  //     ) {
+  //       this._aggregatedChildValues["maxHeight"] =
+  //         this._aggregatedChildValues["minHeight"];
+  //     }
+  //   }
+
+  //   // ideal <= max
+  //   if (
+  //     typeof this._aggregatedChildValues["idealHeight"] !== "undefined" &&
+  //     typeof this._aggregatedChildValues["maxHeight"] !== "undefined" &&
+  //     this._aggregatedChildValues["maxHeight"] <
+  //       this._aggregatedChildValues["idealHeight"]
+  //   ) {
+  //     this._aggregatedChildValues["idealHeight"] =
+  //       this._aggregatedChildValues["maxHeight"];
+  //   }
+  // }
 
   /** Override teses method to set the child values for the container */
   protected _aggregateMinWidth(): number | undefined {
@@ -1556,69 +1744,95 @@ export abstract class ContainerBase<
     return;
   }
 
-  override resize(resizeInfo: ResizeInfo): void {
-    // TODO: make this logic common across all layout items
+  // override resize(resizeInfo: ResizeInfo): void {
+  //   // TODO: make this logic common across all layout items
 
-    const innerBounds = this.calculateInnerBounds(resizeInfo.localBounds);
+  //   const innerBounds = this.calculateInnerBounds(resizeInfo.localBounds);
 
-    const position = new PIXI.Point(innerBounds.x, innerBounds.y);
-    let actualWidth = innerBounds.width!;
-    let actualHeight = innerBounds.height;
+  //   const position = new PIXI.Point(innerBounds.x, innerBounds.y);
+  //   let actualWidth = innerBounds.width!;
+  //   let actualHeight = innerBounds.height;
 
-    // Handle horizontal alignment
-    if (innerBounds.isBoundedHorizontally()) {
-      if (
-        this._options.layoutOptions.horizontalAlign !== "left" &&
-        innerBounds.width! > this.maxWidth
-      ) {
-        actualWidth = this.maxWidth;
-        const extraSpace = innerBounds.width! - this.maxWidth;
-        if (this._options.layoutOptions.horizontalAlign === "right") {
-          position.x += extraSpace;
-        } else if (this._options.layoutOptions.horizontalAlign === "center") {
-          position.x += extraSpace / 2;
-        }
-      }
-    } else if (this._options.layoutOptions.horizontalAlign !== "left") {
-      console.error(
-        `ContainerBase: Within unbounded layout, cannot horizontally align as requested: ${this._options.layoutOptions.horizontalAlign}`,
-      );
-    }
+  //   // Handle horizontal alignment
+  //   if (innerBounds.isBoundedHorizontally()) {
+  //     if (
+  //       this._options.layoutOptions.horizontalAlign !== "left" &&
+  //       innerBounds.width! > this.maxWidth
+  //     ) {
+  //       actualWidth = this.maxWidth;
+  //       const extraSpace = innerBounds.width! - this.maxWidth;
+  //       if (this._options.layoutOptions.horizontalAlign === "right") {
+  //         position.x += extraSpace;
+  //       } else if (this._options.layoutOptions.horizontalAlign === "center") {
+  //         position.x += extraSpace / 2;
+  //       }
+  //     }
+  //   } else if (this._options.layoutOptions.horizontalAlign !== "left") {
+  //     console.error(
+  //       `ContainerBase: Within unbounded layout, cannot horizontally align as requested: ${this._options.layoutOptions.horizontalAlign}`,
+  //     );
+  //   }
 
-    // Handle vertical alignment
-    if (innerBounds.isBoundedVertically()) {
-      if (
-        this._options.layoutOptions.verticalAlign !== "top" &&
-        innerBounds.height! > this.maxHeight
-      ) {
-        actualHeight = this.maxHeight;
-        const extraSpace = innerBounds.height! - this.maxHeight;
-        if (this._options.layoutOptions.verticalAlign === "bottom") {
-          position.y += extraSpace;
-        } else if (this._options.layoutOptions.verticalAlign === "middle") {
-          position.y += extraSpace / 2;
-        }
-      }
-    } else if (this._options.layoutOptions.verticalAlign !== "top") {
-      console.error(
-        `ContainerBase: Within unbounded layout, cannot vertically align as requested: ${this._options.layoutOptions.verticalAlign}`,
-      );
-    }
+  //   // Handle vertical alignment
+  //   if (innerBounds.isBoundedVertically()) {
+  //     if (
+  //       this._options.layoutOptions.verticalAlign !== "top" &&
+  //       innerBounds.height! > this.maxHeight
+  //     ) {
+  //       actualHeight = this.maxHeight;
+  //       const extraSpace = innerBounds.height! - this.maxHeight;
+  //       if (this._options.layoutOptions.verticalAlign === "bottom") {
+  //         position.y += extraSpace;
+  //       } else if (this._options.layoutOptions.verticalAlign === "middle") {
+  //         position.y += extraSpace / 2;
+  //       }
+  //     }
+  //   } else if (this._options.layoutOptions.verticalAlign !== "top") {
+  //     console.error(
+  //       `ContainerBase: Within unbounded layout, cannot vertically align as requested: ${this._options.layoutOptions.verticalAlign}`,
+  //     );
+  //   }
 
+  //   // Position the container and adjust local bounds
+  //   this.displayObject.position.set(position.x, position.y);
+
+  //   const childLocalBounds = new Bounds(0, 0, actualWidth, actualHeight);
+
+  //   super.resize({
+  //     localBounds: childLocalBounds,
+  //     absoluteBounds: new Bounds(
+  //       resizeInfo.absoluteBounds.x + position.x,
+  //       resizeInfo.absoluteBounds.y + position.y,
+  //       actualWidth,
+  //       actualHeight,
+  //     ),
+  //   });
+  // }
+
+  protected override _setPosition(
+    position: PIXI.IPointData,
+    finalInnerWidth: number,
+    finalInnerHeight: number,
+  ) {
     // Position the container and adjust local bounds
-    this.displayObject.position.set(position.x, position.y);
+    this.displayObject.position.copyFrom(position);
 
-    const childLocalBounds = new Bounds(0, 0, actualWidth, actualHeight);
+    const childLocalBounds = new Bounds(
+      0,
+      0,
+      finalInnerWidth,
+      finalInnerHeight,
+    );
 
-    super.resize({
+    this._childResizeInfo = {
       localBounds: childLocalBounds,
       absoluteBounds: new Bounds(
-        resizeInfo.absoluteBounds.x + position.x,
-        resizeInfo.absoluteBounds.y + position.y,
-        actualWidth,
-        actualHeight,
+        this._lastResizeInfo.absoluteBounds.x + position.x,
+        this._lastResizeInfo.absoluteBounds.y + position.y,
+        finalInnerWidth,
+        finalInnerHeight,
       ),
-    });
+    };
   }
 
   get contextModification(): booyah.ChipContextResolvable {
@@ -1655,26 +1869,26 @@ export abstract class ContainerBase<
     return agg;
   }
 
-  get minWidth() {
-    return super.minWidth ?? this._aggregatedChildValues.minWidth;
-  }
-  get minHeight() {
-    return super.minHeight ?? this._aggregatedChildValues.minHeight;
-  }
+  // get minWidth() {
+  //   return super.minWidth ?? this._aggregatedChildValues.minWidth;
+  // }
+  // get minHeight() {
+  //   return super.minHeight ?? this._aggregatedChildValues.minHeight;
+  // }
 
-  get idealWidth() {
-    return super.idealWidth ?? this._aggregatedChildValues.idealWidth;
-  }
-  get idealHeight() {
-    return super.idealHeight ?? this._aggregatedChildValues.idealHeight;
-  }
+  // get idealWidth() {
+  //   return super.idealWidth ?? this._aggregatedChildValues.idealWidth;
+  // }
+  // get idealHeight() {
+  //   return super.idealHeight ?? this._aggregatedChildValues.idealHeight;
+  // }
 
-  get maxWidth() {
-    return super.maxWidth ?? this._aggregatedChildValues.maxWidth;
-  }
-  get maxHeight() {
-    return super.maxHeight ?? this._aggregatedChildValues.maxHeight;
-  }
+  // get maxWidth() {
+  //   return super.maxWidth ?? this._aggregatedChildValues.maxWidth;
+  // }
+  // get maxHeight() {
+  //   return super.maxHeight ?? this._aggregatedChildValues.maxHeight;
+  // }
 }
 
 /**
@@ -1768,23 +1982,23 @@ export class DirectionalContainerChip extends ContainerBase<DirectionalContainer
     super(filledOptions);
   }
 
-  protected _onResize(): void {
-    if (this.parseLayoutProperty("direction") === "horizontal") {
+  protected _resizeChildren(): void {
+    if (this._parseLayoutProperty("direction") === "horizontal") {
       if (this._lastResizeInfo!.localBounds.isBoundedHorizontally()) {
-        this._handleBoundedLayout();
+        this._resizeChildrenInBoundedLayout();
       } else {
-        this._handleUnboundedLayout();
+        this._resizeChildrenInUnboundedLayout();
       }
     } else {
       if (this._lastResizeInfo!.localBounds.isBoundedVertically()) {
-        this._handleBoundedLayout();
+        this._resizeChildrenInBoundedLayout();
       } else {
-        this._handleUnboundedLayout();
+        this._resizeChildrenInUnboundedLayout();
       }
     }
   }
 
-  private _handleBoundedLayout(): void {
+  private _resizeChildrenInBoundedLayout(): void {
     // Determine which properties will be used depending on the direction
     const minLengthProp =
       this._options.layoutOptions.direction === "vertical"
@@ -1800,7 +2014,7 @@ export class DirectionalContainerChip extends ContainerBase<DirectionalContainer
         : "maxWidth";
     const lengthProp =
       this._options.layoutOptions.direction === "vertical" ? "height" : "width";
-    const gap = this.safeParseLayoutPropertyAsNumber("gap");
+    const gap = this.parseLayoutPropertyAsNumber("gap");
 
     // Do a first pass to gather minimum space and element types
     const lengths: Array<number> = [];
@@ -1833,8 +2047,8 @@ export class DirectionalContainerChip extends ContainerBase<DirectionalContainer
     // const innerAbsoluteBounds = this.calculateInnerBounds(
     //   this.lastResizeInfo!.absoluteBounds,
     // );
-    const innerLocalBounds = this.lastResizeInfo!.localBounds;
-    const innerAbsoluteBounds = this.lastResizeInfo!.absoluteBounds;
+    const innerLocalBounds = this._childResizeInfo!.localBounds;
+    const innerAbsoluteBounds = this._childResizeInfo!.absoluteBounds;
 
     // Do a second pass to bring elements to their ideal lengths
     let availableExtraSpace = innerLocalBounds[lengthProp]! - minUsedSpace;
@@ -1976,10 +2190,10 @@ export class DirectionalContainerChip extends ContainerBase<DirectionalContainer
       }
     }
 
-    super._onResize();
+    // super._onResize();
   }
 
-  private _handleUnboundedLayout(): void {
+  private _resizeChildrenInUnboundedLayout(): void {
     if (this._options.layoutOptions.distributeSpace !== "atEnd") {
       console.error(
         `DirectionalContainer: Within unbounded layout, cannot distribute space as requested: ${this._options.layoutOptions.distributeSpace}`,
@@ -1994,16 +2208,16 @@ export class DirectionalContainerChip extends ContainerBase<DirectionalContainer
       this._options.layoutOptions.direction === "vertical" ? "height" : "width";
 
     const innerLocalBounds = this.calculateInnerBounds(
-      this.lastResizeInfo!.localBounds,
+      this._childResizeInfo!.localBounds,
     );
     const innerAbsoluteBounds = this.calculateInnerBounds(
-      this.lastResizeInfo!.absoluteBounds,
+      this._childResizeInfo!.absoluteBounds,
     );
 
     let axisOffset = 0;
     for (let i = 0; i < this._childLayoutItems!.length; i++) {
       // Handle gap
-      if (i > 0) axisOffset += this.safeParseLayoutPropertyAsNumber("gap");
+      if (i > 0) axisOffset += this.parseLayoutPropertyAsNumber("gap");
 
       const child = this._childLayoutItems![i];
       const childIdealLength = child[idealLengthProp] || 0;
@@ -2140,7 +2354,7 @@ export class DirectionalContainerChip extends ContainerBase<DirectionalContainer
   private _calcuateGapSum() {
     return this._childLayoutItems!.length > 1
       ? (this._childLayoutItems!.length - 1) *
-          this.safeParseLayoutPropertyAsNumber("gap")
+          this.parseLayoutPropertyAsNumber("gap")
       : 0;
   }
 }
