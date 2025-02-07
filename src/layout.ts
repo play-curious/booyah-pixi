@@ -49,13 +49,12 @@ export function isReferencableLayoutProperty(
   );
 }
 
-export const aggregatedLayoutProperties = [
+export const basicLayoutProperties = [
   ...widthLayoutProperties,
   ...heightLayoutProperties,
 ] as const;
 
-export type AggregatedLayoutProperty =
-  (typeof aggregatedLayoutProperties)[number];
+export type BasicLayoutProperty = (typeof basicLayoutProperties)[number];
 
 /**
  * A value for a layout property should either be a number of pixels or the
@@ -311,7 +310,7 @@ export abstract class LayoutItemBase<
     }
 
     // Handle width & height values
-    for (const prop of aggregatedLayoutProperties) {
+    for (const prop of basicLayoutProperties) {
       this._lengthsCache[prop] = this.parseLayoutPropertyAsOptionalNumber(prop);
     }
   }
@@ -603,15 +602,15 @@ export abstract class LayoutItemBase<
 
     if (typeof value === "string" && isReferencableLayoutProperty(value)) {
       // Find matching property and return it
-      // @ts-ignore
+      const matchingProp = value as keyof this;
       const matchingValue = this[matchingProp];
 
       if (
         typeof matchingValue !== "number" &&
-        typeof matchingValue !== undefined
+        typeof matchingValue !== "undefined"
       ) {
         throw new Error(
-          `LayoutItem referencing property ${value} which is not a number. Value: ${matchingValue}`,
+          `LayoutItem referencing property ${new String(matchingProp)} which is not a number. Value: ${matchingValue}`,
         );
       }
 
@@ -757,13 +756,13 @@ export abstract class DisplayObjectChip<
       this._offsetContainer.addChild(this.displayObject);
     }
 
-    if (typeof this._options.naturalSize === undefined) {
+    if (typeof this._options.naturalSize === "undefined") {
       this.updateNaturalSize();
     } else {
       this._naturalSize = this._options.naturalSize;
     }
 
-    if (typeof this._options.anchorPosition === undefined) {
+    if (typeof this._options.anchorPosition === "undefined") {
       this.updateAnchorPosition();
     } else {
       this._anchorPosition = this._options.anchorPosition;
@@ -1090,7 +1089,10 @@ export abstract class DisplayObjectChip<
 }
 
 // TODO: remove this?
-export class DisplayObjectLeafLayoutOptions extends LayoutOptions {}
+export class DisplayObjectLeafLayoutOptions extends LayoutOptions {
+  idealWidth: NumericLayoutValue = "naturalWidth";
+  idealHeight: NumericLayoutValue = "naturalHeight";
+}
 
 /**
  * An object that is at the end of a PIXI scene graph, such as a Sprite.
@@ -1843,7 +1845,7 @@ export abstract class ContainerBase<
   }
 
   aggregateChildValues(
-    prop: AggregatedLayoutProperty,
+    prop: BasicLayoutProperty,
     operation: "sum" | "max",
     undefinedHandling: "treatAsZero" | "returnUndefined",
   ): number | undefined {
@@ -1895,20 +1897,26 @@ export abstract class ContainerBase<
  * Puts of its children layouts one on top of the other
  */
 export class StackingContainerChip extends ContainerBase {
-  protected _onResize(): void {
-    // const childResizeInfo: ResizeInfo = {
-    //   absoluteBounds: this.calculateInnerBounds(
-    //     this.lastResizeInfo!.absoluteBounds,
-    //   ),
-    //   localBounds: this.calculateInnerBounds(this.lastResizeInfo!.localBounds),
-    // };
+  // protected _onResize(): void {
+  //   const childResizeInfo: ResizeInfo = {
+  //     absoluteBounds: this.calculateInnerBounds(
+  //       this.lastResizeInfo!.absoluteBounds,
+  //     ),
+  //     localBounds: this.calculateInnerBounds(this.lastResizeInfo!.localBounds),
+  //   };
 
-    // Resize all children
+  //   // Resize all children
+  //   for (const child of this._childLayoutItems!) {
+  //     child.resize(this._lastResizeInfo);
+  //   }
+
+  //   super._onResize();
+  // }
+
+  protected _resizeChildren(): void {
     for (const child of this._childLayoutItems!) {
-      child.resize(this._lastResizeInfo);
+      child.resize(this._childResizeInfo);
     }
-
-    super._onResize();
   }
 
   protected override _aggregateMinWidth() {
