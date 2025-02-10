@@ -27,8 +27,10 @@ export const paddingLayoutProperties = [
 ] as const;
 
 export const naturalLayoutProperties = [
-  "naturalWidth",
-  "naturalHeight",
+  "naturalInnerWidth",
+  "naturalInnerHeight",
+  "naturalOuterWidth",
+  "naturalOuterHeight",
 ] as const;
 
 export const referencableLayoutProperties = [
@@ -49,12 +51,12 @@ export function isReferencableLayoutProperty(
   );
 }
 
-export const basicLayoutProperties = [
+export const boundingLayoutProperties = [
   ...widthLayoutProperties,
   ...heightLayoutProperties,
 ] as const;
 
-export type BasicLayoutProperty = (typeof basicLayoutProperties)[number];
+export type BoundingLayoutProperty = (typeof boundingLayoutProperties)[number];
 
 /**
  * A value for a layout property should either be a number of pixels or the
@@ -234,14 +236,14 @@ export interface LayoutItem extends booyah.Chip {
   removeChildLayoutItem(child: LayoutItem): void;
 }
 
-export class LayoutItemBaseOptions<LayoutOptionsType> {
+export class LayoutItemBaseOptions<LayoutOptionsType extends LayoutOptions> {
   name?: string;
   layoutOptions: Partial<
     resolvable.ResolvableObject<
       LayoutOptionsType,
       LayoutValueResolvableContext<LayoutOptionsType>
     >
-  > = {};
+  > = new LayoutOptions() as LayoutOptionsType;
   children: LayoutItemChildChipOptions = [];
 }
 
@@ -310,8 +312,31 @@ export abstract class LayoutItemBase<
     }
 
     // Handle width & height values
-    for (const prop of basicLayoutProperties) {
-      this._lengthsCache[prop] = this.parseLayoutPropertyAsOptionalNumber(prop);
+    this._lengthsCache.idealWidth =
+      this.parseLayoutPropertyAsOptionalNumber("idealWidth");
+    this._lengthsCache.idealHeight =
+      this.parseLayoutPropertyAsOptionalNumber("idealHeight");
+
+    // canShrink = false is the same as setting min length to ideal length
+    if (this._parseLayoutProperty("canShrink")) {
+      this._lengthsCache.minWidth =
+        this.parseLayoutPropertyAsOptionalNumber("minWidth");
+      this._lengthsCache.minHeight =
+        this.parseLayoutPropertyAsOptionalNumber("minHeight");
+    } else {
+      this._lengthsCache.minWidth = this._lengthsCache.idealWidth;
+      this._lengthsCache.minHeight = this._lengthsCache.idealHeight;
+    }
+
+    // canGrow = false is the same as setting max length to ideal length
+    if (this._parseLayoutProperty("canGrow")) {
+      this._lengthsCache.maxWidth =
+        this.parseLayoutPropertyAsOptionalNumber("maxWidth");
+      this._lengthsCache.maxHeight =
+        this.parseLayoutPropertyAsOptionalNumber("maxHeight");
+    } else {
+      this._lengthsCache.maxWidth = this._lengthsCache.idealWidth;
+      this._lengthsCache.maxHeight = this._lengthsCache.idealHeight;
     }
   }
 
@@ -519,14 +544,10 @@ export abstract class LayoutItemBase<
   }
 
   get minWidth(): number | undefined {
-    return this._parseLayoutProperty("canShrink")
-      ? this._lengthsCache.minWidth
-      : this._lengthsCache.idealWidth;
+    return this._lengthsCache.minWidth;
   }
   get minHeight(): number | undefined {
-    return this._parseLayoutProperty("canShrink")
-      ? this._lengthsCache.minHeight
-      : this._lengthsCache.idealHeight;
+    return this._lengthsCache.minHeight;
   }
 
   get idealWidth(): number | undefined {
@@ -537,14 +558,10 @@ export abstract class LayoutItemBase<
   }
 
   get maxWidth(): number | undefined {
-    return this._parseLayoutProperty("canGrow")
-      ? this._lengthsCache.maxWidth
-      : this._lengthsCache.idealWidth;
+    return this._lengthsCache.maxWidth;
   }
   get maxHeight(): number | undefined {
-    return this._parseLayoutProperty("canGrow")
-      ? this._lengthsCache.maxHeight
-      : this._lengthsCache.idealHeight;
+    return this._lengthsCache.maxHeight;
   }
 
   get paddingLeft(): number {
@@ -719,7 +736,7 @@ export class DisplayObjectChipOptions<
    * If not provided, will be calculated by calling `getLocalBounds()`
    * Does not include padding.
    */
-  naturalSize?: PIXI.IPointData;
+  naturalInnerSize?: PIXI.IPointData;
 
   /**
    * The anchor position of the display object
@@ -743,7 +760,7 @@ export abstract class DisplayObjectChip<
   >;
 
   protected _offsetContainer?: PIXI.Container;
-  protected _naturalSize: PIXI.IPointData;
+  protected _naturalInnerSize: PIXI.IPointData;
   protected _anchorPosition: PIXI.IPoint;
 
   constructor(options: OptionsType) {
@@ -756,10 +773,10 @@ export abstract class DisplayObjectChip<
       this._offsetContainer.addChild(this.displayObject);
     }
 
-    if (typeof this._options.naturalSize === "undefined") {
-      this.updateNaturalSize();
+    if (typeof this._options.naturalInnerSize === "undefined") {
+      this.updateNaturalInnerSize();
     } else {
-      this._naturalSize = this._options.naturalSize;
+      this._naturalInnerSize = this._options.naturalInnerSize;
     }
 
     if (typeof this._options.anchorPosition === "undefined") {
@@ -1042,10 +1059,10 @@ export abstract class DisplayObjectChip<
   }
 
   /** Recalculate the size of the display object based on `getLocalBounds()`  */
-  updateNaturalSize() {
+  updateNaturalInnerSize() {
     const pixiLocalBounds = this._options.displayObject.getLocalBounds();
 
-    this._naturalSize = new PIXI.Point(
+    this._naturalInnerSize = new PIXI.Point(
       pixiLocalBounds.width,
       pixiLocalBounds.height,
     );
@@ -1067,8 +1084,8 @@ export abstract class DisplayObjectChip<
   }
 
   protected _setInnerSize(innerWidth: number, innerHeight: number) {
-    let horizontalScale = innerWidth / this._naturalSize.x;
-    let verticalScale = innerHeight / this._naturalSize.y;
+    let horizontalScale = innerWidth / this._naturalInnerSize.x;
+    let verticalScale = innerHeight / this._naturalInnerSize.y;
 
     if (this._options.layoutOptions.keepAspectRatio) {
       const minScale = Math.min(horizontalScale, verticalScale);
@@ -1086,12 +1103,25 @@ export abstract class DisplayObjectChip<
   ) {
     this._options.displayObject.position.copyFrom(position);
   }
+
+  get naturalInnerWidth() {
+    return this._naturalInnerSize.x;
+  }
+  get naturalInnerHeight() {
+    return this._naturalInnerSize.y;
+  }
+
+  get naturalOuterWidth() {
+    return this._naturalInnerSize.x + this.horizontalPadding;
+  }
+  get naturalOuterHeight() {
+    return this._naturalInnerSize.y + this.verticalPadding;
+  }
 }
 
-// TODO: remove this?
 export class DisplayObjectLeafLayoutOptions extends LayoutOptions {
-  idealWidth: NumericLayoutValue = "naturalWidth";
-  idealHeight: NumericLayoutValue = "naturalHeight";
+  idealWidth: NumericLayoutValue = "naturalOuterWidth";
+  idealHeight: NumericLayoutValue = "naturalOuterHeight";
 }
 
 /**
@@ -1444,12 +1474,12 @@ export class NineSlicePlaneChip extends DisplayObjectLeafChip<PIXI.NineSlicePlan
 
   protected _setInnerSize(innerWidth: number, innerHeight: number) {
     if (this._options.layoutOptions.keepAspectRatio) {
-      let horizontalScale = innerWidth / this._naturalSize.x;
-      let verticalScale = innerHeight / this._naturalSize.y;
+      let horizontalScale = innerWidth / this._naturalInnerSize.x;
+      let verticalScale = innerHeight / this._naturalInnerSize.y;
 
       const minScale = Math.min(horizontalScale, verticalScale);
-      innerWidth = minScale * this._naturalSize.x;
-      innerHeight = minScale * this._naturalSize.y;
+      innerWidth = minScale * this._naturalInnerSize.x;
+      innerHeight = minScale * this._naturalInnerSize.y;
     }
 
     this._options.displayObject.width = innerWidth;
@@ -1845,7 +1875,7 @@ export abstract class ContainerBase<
   }
 
   aggregateChildValues(
-    prop: BasicLayoutProperty,
+    prop: BoundingLayoutProperty,
     operation: "sum" | "max",
     undefinedHandling: "treatAsZero" | "returnUndefined",
   ): number | undefined {
