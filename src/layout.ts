@@ -780,7 +780,7 @@ export abstract class DisplayObjectChip<
 
   protected _offsetContainer?: PIXI.Container;
   protected _naturalInnerSize: PIXI.IPointData;
-  protected _anchorPosition: PIXI.IPoint;
+  protected _anchorPosition: PIXI.IPointData;
 
   constructor(options: OptionsType) {
     super(options);
@@ -1079,16 +1079,34 @@ export abstract class DisplayObjectChip<
   updateNaturalInnerSize() {
     const pixiLocalBounds = this._options.displayObject.getLocalBounds();
 
-    this._naturalInnerSize = new PIXI.Point(
+    this.naturalInnerSize = new PIXI.Point(
       pixiLocalBounds.width,
       pixiLocalBounds.height,
     );
   }
 
+  get naturalInnerSize() {
+    return this._naturalInnerSize;
+  }
+
+  set naturalInnerSize(value: PIXI.IPointData) {
+    this._naturalInnerSize = value;
+    this.requestResize();
+  }
+
   /** Recalculate the anchor position based on `getLocalBounds()`  */
   updateAnchorPosition() {
     const pixiLocalBounds = this._options.displayObject.getLocalBounds();
-    this._anchorPosition = new PIXI.Point(pixiLocalBounds.x, pixiLocalBounds.y);
+    this.anchorPosition = new PIXI.Point(pixiLocalBounds.x, pixiLocalBounds.y);
+  }
+
+  get anchorPosition() {
+    return this._anchorPosition;
+  }
+
+  set anchorPosition(value: PIXI.IPointData) {
+    this._anchorPosition = value;
+    this.requestResize();
   }
 
   get contextModification() {
