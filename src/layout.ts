@@ -33,24 +33,6 @@ export const naturalLayoutProperties = [
   "naturalOuterHeight",
 ] as const;
 
-export const referencableLayoutProperties = [
-  ...widthLayoutProperties,
-  ...heightLayoutProperties,
-  ...paddingLayoutProperties,
-  ...naturalLayoutProperties,
-] as const;
-
-export type ReferencableLayoutProperty =
-  (typeof referencableLayoutProperties)[number];
-
-export function isReferencableLayoutProperty(
-  value: string,
-): value is ReferencableLayoutProperty {
-  return referencableLayoutProperties.includes(
-    value as ReferencableLayoutProperty,
-  );
-}
-
 export const boundingLayoutProperties = [
   ...widthLayoutProperties,
   ...heightLayoutProperties,
@@ -62,8 +44,6 @@ export type BoundingLayoutProperty = (typeof boundingLayoutProperties)[number];
  * A value for a layout property should either be a number of pixels or the
  * name of another layout property, that it will copy from
  * */
-export type NumericLayoutValue = number | ReferencableLayoutProperty;
-
 export interface RenderInfo {
   renderSize: PIXI.IPointData;
 }
@@ -81,28 +61,28 @@ export interface LayoutValueResolvableContext<LayoutOptionsType>
 
 export class LayoutOptions {
   /** The layout item should not be smaller than this */
-  minWidth?: NumericLayoutValue;
+  minWidth?: number;
   /** The layout item should not be smaller than this */
-  minHeight?: NumericLayoutValue;
+  minHeight?: number;
 
   /** The layout item should ideally be at this size */
-  idealWidth?: NumericLayoutValue;
+  idealWidth?: number;
   /** The layout item should ideall be this */
-  idealHeight?: NumericLayoutValue;
+  idealHeight?: number;
 
   /** The layout item should not be larger than this */
-  maxWidth?: NumericLayoutValue;
+  maxWidth?: number;
   /** The layout item should not be larger than this */
-  maxHeight?: NumericLayoutValue;
+  maxHeight?: number;
 
   /** Padding on the side of the provided bounds */
-  paddingLeft: NumericLayoutValue = 0;
+  paddingLeft: number = 0;
   /** Padding on the side of the provided bounds */
-  paddingRight: NumericLayoutValue = 0;
+  paddingRight: number = 0;
   /** Padding on the side of the provided bounds */
-  paddingTop: NumericLayoutValue = 0;
+  paddingTop: number = 0;
   /** Padding on the side of the provided bounds */
-  paddingBottom: NumericLayoutValue = 0;
+  paddingBottom: number = 0;
 
   /**
    * If true, when provided bounds are larger than ideal size,
@@ -114,6 +94,13 @@ export class LayoutOptions {
    * will try to shrink until reaching min size
    * */
   canGrow = true;
+
+  /**
+   * If true, will try to scale the layout item to grow or shrink,
+   * provided that `canGrow` or `canShrink` are true.
+   * If false, item might be aligned within the bounds, but not scaled.
+   */
+  canScale = false;
 
   /**
    * Where the item should be aligned within the provided bounds.
@@ -130,7 +117,7 @@ export class LayoutOptions {
   keepAspectRatio = false;
 
   /** When aligning, adjust for non-zero anchor points */
-  alignBasedOnAnchor = true;
+  alignBasedOnAnchor = false;
 }
 
 export type LayoutItemChildChipOptions = Array<
@@ -264,12 +251,16 @@ export abstract class LayoutItemBase<
 
   protected _lastRenderInfo?: RenderInfo;
   protected _lastResizeInfo?: ResizeInfo;
-  protected _lengthsCache?: Partial<Record<ReferencableLayoutProperty, number>>;
+  protected _lengthsCache?: Partial<Record<string, number>>;
 
   constructor(options?: Partial<OptionsType>) {
     const filledOptions = booyah.fillInOptions(
       options,
       new LayoutItemBaseOptions(),
+    );
+    filledOptions.layoutOptions = booyah.fillInOptions(
+      filledOptions.layoutOptions,
+      new LayoutOptions() as LayoutOptionsType,
     );
     super(filledOptions.children, { terminateOnCompletion: false });
 
@@ -306,34 +297,46 @@ export abstract class LayoutItemBase<
   protected _cacheLengths() {
     this._lengthsCache = {};
 
+    this._cachePaddingLengths();
+    this._cacheIdealLengths();
+    this._cacheMinLengths();
+    this._cacheMaxLengths();
+  }
+
+  protected _cachePaddingLengths() {
     // Handle padding values
     for (const prop of paddingLayoutProperties) {
-      this._lengthsCache[prop] = this.parseLayoutPropertyAsNumber(prop);
+      this._lengthsCache[prop] = this._parseLayoutPropertyAsNumber(prop);
     }
+  }
 
-    // Handle width & height values
+  protected _cacheIdealLengths() {
     this._lengthsCache.idealWidth =
-      this.parseLayoutPropertyAsOptionalNumber("idealWidth");
+      this._parseLayoutPropertyAsOptionalNumber("idealWidth");
     this._lengthsCache.idealHeight =
-      this.parseLayoutPropertyAsOptionalNumber("idealHeight");
+      this._parseLayoutPropertyAsOptionalNumber("idealHeight");
+  }
 
+  protected _cacheMinLengths() {
     // canShrink = false is the same as setting min length to ideal length
     if (this._parseLayoutProperty("canShrink")) {
       this._lengthsCache.minWidth =
-        this.parseLayoutPropertyAsOptionalNumber("minWidth");
+        this._parseLayoutPropertyAsOptionalNumber("minWidth");
       this._lengthsCache.minHeight =
-        this.parseLayoutPropertyAsOptionalNumber("minHeight");
+        this._parseLayoutPropertyAsOptionalNumber("minHeight");
     } else {
       this._lengthsCache.minWidth = this._lengthsCache.idealWidth;
       this._lengthsCache.minHeight = this._lengthsCache.idealHeight;
     }
+  }
 
+  protected _cacheMaxLengths() {
     // canGrow = false is the same as setting max length to ideal length
     if (this._parseLayoutProperty("canGrow")) {
       this._lengthsCache.maxWidth =
-        this.parseLayoutPropertyAsOptionalNumber("maxWidth");
+        this._parseLayoutPropertyAsOptionalNumber("maxWidth");
       this._lengthsCache.maxHeight =
-        this.parseLayoutPropertyAsOptionalNumber("maxHeight");
+        this._parseLayoutPropertyAsOptionalNumber("maxHeight");
     } else {
       this._lengthsCache.maxWidth = this._lengthsCache.idealWidth;
       this._lengthsCache.maxHeight = this._lengthsCache.idealHeight;
@@ -617,28 +620,28 @@ export abstract class LayoutItemBase<
     };
     const value = this._layoutOptionsResolver.resolve(prop, resolvableContext);
 
-    if (typeof value === "string" && isReferencableLayoutProperty(value)) {
-      // Find matching property and return it
-      const matchingProp = value as keyof this;
-      const matchingValue = this[matchingProp];
+    // if (typeof value === "string" && isReferencableLayoutProperty(value)) {
+    //   // Find matching property and return it
+    //   const matchingProp = value as keyof this;
+    //   const matchingValue = this[matchingProp];
 
-      if (
-        typeof matchingValue !== "number" &&
-        typeof matchingValue !== "undefined"
-      ) {
-        throw new Error(
-          `LayoutItem referencing property ${new String(matchingProp)} which is not a number. Value: ${matchingValue}`,
-        );
-      }
+    //   if (
+    //     typeof matchingValue !== "number" &&
+    //     typeof matchingValue !== "undefined"
+    //   ) {
+    //     throw new Error(
+    //       `LayoutItem referencing property ${new String(matchingProp)} which is not a number. Value: ${matchingValue}`,
+    //     );
+    //   }
 
-      return matchingValue;
-    }
+    //   return matchingValue;
+    // }
 
     // @ts-ignore
     return value;
   }
 
-  parseLayoutPropertyAsOptionalNumber(
+  protected _parseLayoutPropertyAsOptionalNumber(
     prop: keyof OptionsType["layoutOptions"],
   ): number | undefined {
     const value = this._parseLayoutProperty(prop);
@@ -650,10 +653,10 @@ export abstract class LayoutItemBase<
     return value;
   }
 
-  parseLayoutPropertyAsNumber(
+  protected _parseLayoutPropertyAsNumber(
     prop: keyof OptionsType["layoutOptions"],
   ): number {
-    return this.parseLayoutPropertyAsOptionalNumber(prop) || 0;
+    return this._parseLayoutPropertyAsOptionalNumber(prop) || 0;
   }
 }
 
@@ -701,12 +704,9 @@ export type ResolvablePixiDisplayObject<
   LayoutValueResolvableContext<LayoutOptionsType>
 >;
 
-// TODO: Remove this?
-export class DisplayObjectLayoutOptions extends LayoutOptions {}
-
 export class DisplayObjectChipOptions<
   DisplayObjectType extends PIXI.Container,
-  LayoutOptionsType extends DisplayObjectLayoutOptions,
+  LayoutOptionsType extends LayoutOptions,
 > extends LayoutItemBaseOptions<LayoutOptionsType> {
   displayObject!: DisplayObjectType;
   properties?: Partial<
@@ -719,11 +719,11 @@ export class DisplayObjectChipOptions<
   addToParentLayoutItem = true;
   addToContainer = true;
 
-  /** When scaling, always scale by the same amount on both axes */
-  keepAspectRatio = false;
+  // /** When scaling, always scale by the same amount on both axes */
+  // keepAspectRatio = false;
 
-  /** When aligning, adjust for non-zero anchor points */
-  alignBasedOnAnchor = true;
+  // /** When aligning, adjust for non-zero anchor points */
+  // alignBasedOnAnchor = true;
 
   /**
    * Create an intermediate container that can be manipulated
@@ -747,8 +747,7 @@ export class DisplayObjectChipOptions<
 
 export abstract class DisplayObjectChip<
   DisplayObjectType extends PIXI.Container,
-  LayoutOptionsType extends
-    DisplayObjectLayoutOptions = DisplayObjectLayoutOptions,
+  LayoutOptionsType extends LayoutOptions = LayoutOptions,
   OptionsType extends DisplayObjectChipOptions<
     DisplayObjectType,
     LayoutOptionsType
@@ -931,7 +930,9 @@ export abstract class DisplayObjectChip<
       }
     }
 
-    this._setInnerSize(finalInnerWidth, finalInnerHeight);
+    if (this._parseLayoutProperty("canScale")) {
+      this._setInnerSize(finalInnerWidth, finalInnerHeight);
+    }
 
     // if (this._options.layoutOptions.keepAspectRatio) {
     //   const minScale = Math.min(horizontalScale, verticalScale);
@@ -1020,10 +1021,6 @@ export abstract class DisplayObjectChip<
 
   get pixiAppChip() {
     return this._chipContext.pixiAppChip as pixiApp.PixiAppChip;
-  }
-
-  protected get _layoutOptions() {
-    return this._options.layoutOptions as LayoutOptions;
   }
 
   get displayObject() {
@@ -1119,9 +1116,9 @@ export abstract class DisplayObjectChip<
   }
 }
 
-export class DisplayObjectLeafLayoutOptions extends LayoutOptions {
-  idealWidth: NumericLayoutValue = "naturalOuterWidth";
-  idealHeight: NumericLayoutValue = "naturalOuterHeight";
+export class DisplayObjectLeafChipLayoutOptions extends LayoutOptions {
+  canScale = true;
+  alignBasedOnAnchor = true;
 }
 
 /**
@@ -1131,34 +1128,41 @@ export class DisplayObjectLeafLayoutOptions extends LayoutOptions {
 export class DisplayObjectLeafChipOptions<
   DisplayObjectType extends PIXI.Container,
   LayoutOptionsType extends
-    DisplayObjectLeafLayoutOptions = DisplayObjectLeafLayoutOptions,
+    DisplayObjectLeafChipLayoutOptions = DisplayObjectLeafChipLayoutOptions,
 > extends DisplayObjectChipOptions<DisplayObjectType, LayoutOptionsType> {}
 
 export class DisplayObjectLeafChip<
   DisplayObjectType extends PIXI.Container,
-  LayoutOptionsType extends
-    DisplayObjectLeafLayoutOptions = DisplayObjectLeafLayoutOptions,
+  LayoutOptionsType extends LayoutOptions = LayoutOptions,
   OptionsType extends DisplayObjectLeafChipOptions<
     DisplayObjectType,
     LayoutOptionsType
   > = DisplayObjectLeafChipOptions<DisplayObjectType, LayoutOptionsType>,
 > extends DisplayObjectChip<DisplayObjectType, LayoutOptionsType, OptionsType> {
   constructor(
-    options: Partial<
+    options?: Partial<
       DisplayObjectLeafChipOptions<DisplayObjectType, LayoutOptionsType>
     >,
   ) {
-    // TODO: remove this ?
-
     const filledOptions = booyah.fillInOptions(
       options,
       new DisplayObjectLeafChipOptions<DisplayObjectType, LayoutOptionsType>(),
     );
     filledOptions.layoutOptions = booyah.fillInOptions(
-      filledOptions.layoutOptions,
-      new DisplayObjectLeafLayoutOptions() as LayoutOptionsType,
+      options.layoutOptions,
+      new DisplayObjectLeafChipLayoutOptions() as LayoutOptionsType,
     );
+
     super(filledOptions as OptionsType);
+  }
+
+  protected _cacheIdealLengths(): void {
+    this._lengthsCache.idealWidth =
+      this._parseLayoutPropertyAsOptionalNumber("idealWidth") ??
+      this.naturalOuterWidth;
+    this._lengthsCache.idealHeight =
+      this._parseLayoutPropertyAsOptionalNumber("idealHeight") ??
+      this.naturalOuterHeight;
   }
 
   // protected override _onResize(): void {
@@ -1371,7 +1375,7 @@ export class DisplayObjectLeafChip<
   // }
 }
 
-export class SpriteChipLayoutOptions extends DisplayObjectLeafLayoutOptions {
+export class SpriteChipLayoutOptions extends DisplayObjectLeafChipLayoutOptions {
   keepAspectRatio = true;
 
   canGrow = false;
@@ -1488,7 +1492,7 @@ export class NineSlicePlaneChip extends DisplayObjectLeafChip<PIXI.NineSlicePlan
 }
 
 /** A chip to display a PIXI.Text */
-export class TextChipLayoutOptions extends DisplayObjectLeafLayoutOptions {
+export class TextChipLayoutOptions extends DisplayObjectLeafChipLayoutOptions {
   keepAspectRatio = true;
 
   canGrow = false;
@@ -2052,7 +2056,7 @@ export class DirectionalContainerChip extends ContainerBase<DirectionalContainer
         : "maxWidth";
     const lengthProp =
       this._options.layoutOptions.direction === "vertical" ? "height" : "width";
-    const gap = this.parseLayoutPropertyAsNumber("gap");
+    const gap = this._parseLayoutPropertyAsNumber("gap");
 
     // Do a first pass to gather minimum space and element types
     const lengths: Array<number> = [];
@@ -2255,7 +2259,7 @@ export class DirectionalContainerChip extends ContainerBase<DirectionalContainer
     let axisOffset = 0;
     for (let i = 0; i < this._childLayoutItems!.length; i++) {
       // Handle gap
-      if (i > 0) axisOffset += this.parseLayoutPropertyAsNumber("gap");
+      if (i > 0) axisOffset += this._parseLayoutPropertyAsNumber("gap");
 
       const child = this._childLayoutItems![i];
       const childIdealLength = child[idealLengthProp] || 0;
@@ -2392,7 +2396,7 @@ export class DirectionalContainerChip extends ContainerBase<DirectionalContainer
   private _calcuateGapSum() {
     return this._childLayoutItems!.length > 1
       ? (this._childLayoutItems!.length - 1) *
-          this.parseLayoutPropertyAsNumber("gap")
+          this._parseLayoutPropertyAsNumber("gap")
       : 0;
   }
 }
@@ -2420,7 +2424,7 @@ export class AnimatedSpriteChipOptions extends DisplayObjectLeafChipOptions<PIXI
 
 export class AnimatedSpriteChip extends DisplayObjectLeafChip<
   PIXI.AnimatedSprite,
-  DisplayObjectLeafLayoutOptions,
+  LayoutOptions,
   AnimatedSpriteChipOptions
 > {
   // private readonly _options: AnimatedSpriteChipOptions;
@@ -2634,8 +2638,8 @@ export class LayoutTest extends booyah.Composite {
           },
           layoutOptions: {
             // maxWidth: 100,
-            minWidth: "idealWidth",
-            maxWidth: "idealWidth",
+            // minWidth: "idealWidth",
+            // maxWidth: "idealWidth",
             verticalAlign: "top",
             paddingTop: 10,
             paddingRight: 15,
@@ -2660,7 +2664,7 @@ export class LayoutTest extends booyah.Composite {
           layoutOptions: {
             maxWidth: 200,
             keepAspectRatio: true,
-            idealWidth: "maxWidth",
+            // idealWidth: "maxWidth",
           },
         }),
       );

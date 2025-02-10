@@ -14,8 +14,7 @@ export type OverflowSettings = "auto" | "hidden" | "scroll";
 export type Direction = "vertical" | "horizontal";
 
 export class ScrollboxLayoutOptions extends layout.LayoutOptions {
-  minWidth: layout.NumericLayoutValue = "idealWidth";
-  minHeight: layout.NumericLayoutValue = "idealHeight";
+  canShrink: boolean = false;
 }
 
 export class ScrollboxOptions extends layout.DisplayObjectChipOptions<
