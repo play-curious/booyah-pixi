@@ -59,6 +59,10 @@ export interface LayoutValueResolvableContext<LayoutOptionsType>
   layoutItem: LayoutItem;
 }
 
+export type Directions = "none" | "horizontally" | "vertically" | "both";
+
+export type KeepAspectRatioValue = "none" | "min" | "max";
+
 export class LayoutOptions {
   /** The layout item should not be smaller than this */
   minWidth?: number;
@@ -88,12 +92,12 @@ export class LayoutOptions {
    * If true, when provided bounds are larger than ideal size,
    * will try to expand until reaching max size
    * */
-  canShrink = true;
+  canShrink: Directions = "both";
 
   /** If true, when provided bounds are smaller than ideal size,
    * will try to shrink until reaching min size
    * */
-  canGrow = true;
+  canGrow: Directions = "both";
 
   /**
    * If true, will try to scale the layout item to grow or shrink,
@@ -113,8 +117,14 @@ export class LayoutOptions {
    */
   verticalAlign: "top" | "bottom" | "middle" = "top";
 
-  /** Scale the horizontal and vertical axes the same amount*/
-  keepAspectRatio = false;
+  /**
+   * Scale the horizontal and vertical axes by the same amount?
+   *
+   * - `no` - the axes scale seperately
+   * - `min` - the min value is used, the item is fully within the box, with blank areas
+   * - `max - the max vale is used, the item may overflow the box
+   * */
+  keepAspectRatio: KeepAspectRatioValue = "none";
 
   /** When aligning, adjust for non-zero anchor points */
   alignBasedOnAnchor = false;
@@ -225,12 +235,12 @@ export interface LayoutItem extends booyah.Chip {
 
 export class LayoutItemBaseOptions<LayoutOptionsType extends LayoutOptions> {
   name?: string;
-  layoutOptions: Partial<
+  layoutOptions?: Partial<
     resolvable.ResolvableObject<
       LayoutOptionsType,
       LayoutValueResolvableContext<LayoutOptionsType>
     >
-  > = new LayoutOptions() as LayoutOptionsType;
+  >;
   children: LayoutItemChildChipOptions = [];
 }
 
@@ -318,27 +328,37 @@ export abstract class LayoutItemBase<
   }
 
   protected _cacheMinLengths() {
-    // canShrink = false is the same as setting min length to ideal length
-    if (this._parseLayoutProperty("canShrink")) {
+    const canShrink = this._parseLayoutProperty("canShrink") as Directions;
+
+    if (canShrink === "horizontally" || canShrink === "both") {
       this._lengthsCache.minWidth =
         this._parseLayoutPropertyAsOptionalNumber("minWidth");
+    } else {
+      this._lengthsCache.minWidth = this._lengthsCache.idealWidth;
+    }
+
+    if (canShrink === "vertically" || canShrink === "both") {
       this._lengthsCache.minHeight =
         this._parseLayoutPropertyAsOptionalNumber("minHeight");
     } else {
-      this._lengthsCache.minWidth = this._lengthsCache.idealWidth;
       this._lengthsCache.minHeight = this._lengthsCache.idealHeight;
     }
   }
 
   protected _cacheMaxLengths() {
-    // canGrow = false is the same as setting max length to ideal length
-    if (this._parseLayoutProperty("canGrow")) {
+    const canGrow = this._parseLayoutProperty("canGrow") as Directions;
+
+    if (canGrow === "horizontally" || canGrow === "both") {
       this._lengthsCache.maxWidth =
         this._parseLayoutPropertyAsOptionalNumber("maxWidth");
+    } else {
+      this._lengthsCache.maxWidth = this._lengthsCache.idealWidth;
+    }
+
+    if (canGrow === "vertically" || canGrow === "both") {
       this._lengthsCache.maxHeight =
         this._parseLayoutPropertyAsOptionalNumber("maxHeight");
     } else {
-      this._lengthsCache.maxWidth = this._lengthsCache.idealWidth;
       this._lengthsCache.maxHeight = this._lengthsCache.idealHeight;
     }
   }
@@ -1084,10 +1104,14 @@ export abstract class DisplayObjectChip<
     let horizontalScale = innerWidth / this._naturalInnerSize.x;
     let verticalScale = innerHeight / this._naturalInnerSize.y;
 
-    if (this._options.layoutOptions.keepAspectRatio) {
+    if (this._options.layoutOptions.keepAspectRatio === "min") {
       const minScale = Math.min(horizontalScale, verticalScale);
       horizontalScale = minScale;
       verticalScale = minScale;
+    } else if (this._options.layoutOptions.keepAspectRatio === "max") {
+      const maxScale = Math.max(horizontalScale, verticalScale);
+      horizontalScale = maxScale;
+      verticalScale = maxScale;
     }
 
     this._options.displayObject.scale.set(horizontalScale, verticalScale);
@@ -1376,9 +1400,9 @@ export class DisplayObjectLeafChip<
 }
 
 export class SpriteChipLayoutOptions extends DisplayObjectLeafChipLayoutOptions {
-  keepAspectRatio = true;
+  keepAspectRatio: KeepAspectRatioValue = "min";
 
-  canGrow = false;
+  canGrow: Directions = "none";
 }
 
 export class SpriteChipOptions extends DisplayObjectLeafChipOptions<PIXI.Sprite> {
@@ -1388,7 +1412,7 @@ export class SpriteChipOptions extends DisplayObjectLeafChipOptions<PIXI.Sprite>
 
 /** A chip to display a PIXI.Sprite */
 export class SpriteChip extends DisplayObjectLeafChip<PIXI.Sprite> {
-  constructor(options: Partial<SpriteChipOptions>) {
+  constructor(options?: Partial<SpriteChipOptions>) {
     const filledOptions = booyah.fillInOptions(
       options,
       new SpriteChipOptions(),
@@ -1477,13 +1501,16 @@ export class NineSlicePlaneChip extends DisplayObjectLeafChip<PIXI.NineSlicePlan
   }
 
   protected _setInnerSize(innerWidth: number, innerHeight: number) {
-    if (this._options.layoutOptions.keepAspectRatio) {
+    if (this._options.layoutOptions.keepAspectRatio !== "none") {
       let horizontalScale = innerWidth / this._naturalInnerSize.x;
       let verticalScale = innerHeight / this._naturalInnerSize.y;
 
-      const minScale = Math.min(horizontalScale, verticalScale);
-      innerWidth = minScale * this._naturalInnerSize.x;
-      innerHeight = minScale * this._naturalInnerSize.y;
+      const scale =
+        this._options.layoutOptions.keepAspectRatio === "min"
+          ? Math.min(horizontalScale, verticalScale)
+          : Math.max(horizontalScale, verticalScale);
+      innerWidth = scale * this._naturalInnerSize.x;
+      innerHeight = scale * this._naturalInnerSize.y;
     }
 
     this._options.displayObject.width = innerWidth;
@@ -1493,10 +1520,10 @@ export class NineSlicePlaneChip extends DisplayObjectLeafChip<PIXI.NineSlicePlan
 
 /** A chip to display a PIXI.Text */
 export class TextChipLayoutOptions extends DisplayObjectLeafChipLayoutOptions {
-  keepAspectRatio = true;
+  keepAspectRatio: KeepAspectRatioValue = "min";
 
-  canGrow = false;
-  canShrink = false;
+  canGrow: Directions = "none";
+  canShrink: Directions = "none";
 }
 
 export class TextChipOptions extends DisplayObjectLeafChipOptions<PIXI.Text> {
@@ -2663,7 +2690,7 @@ export class LayoutTest extends booyah.Composite {
           displayObject: green,
           layoutOptions: {
             maxWidth: 200,
-            keepAspectRatio: true,
+            keepAspectRatio: "min",
             // idealWidth: "maxWidth",
           },
         }),
