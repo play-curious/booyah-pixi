@@ -14,7 +14,7 @@ export type OverflowSettings = "auto" | "hidden" | "scroll";
 export type Direction = "vertical" | "horizontal";
 
 export class ScrollboxLayoutOptions extends layout.LayoutOptions {
-  canShrink: layout.Directions = "none";
+  canGrow: layout.Directions = "both";
 }
 
 export class ScrollboxOptions extends layout.DisplayObjectChipOptions<

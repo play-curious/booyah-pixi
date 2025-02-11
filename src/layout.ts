@@ -89,15 +89,16 @@ export class LayoutOptions {
   paddingBottom: number = 0;
 
   /**
-   * If true, when provided bounds are larger than ideal size,
-   * will try to expand until reaching max size
+   * When provided bounds are larger than ideal size,
+   * the item will try to expand until reaching max size in these directions
    * */
-  canShrink: Directions = "both";
+  canShrink: Directions = "none";
 
-  /** If true, when provided bounds are smaller than ideal size,
-   * will try to shrink until reaching min size
+  /**
+   * When provided bounds are smaller than ideal size,
+   * will try to shrink until reaching min size in these directions
    * */
-  canGrow: Directions = "both";
+  canGrow: Directions = "none";
 
   /**
    * If true, will try to scale the layout item to grow or shrink,
@@ -680,8 +681,29 @@ export abstract class LayoutItemBase<
   }
 }
 
+export class SpacerLayoutOptions extends LayoutOptions {
+  canShrink: Directions = "both";
+  canGrow: Directions = "both";
+}
+
 /** Just takes up space */
-export class SpacerChip extends LayoutItemBase {
+export class SpacerChip<
+  LayoutOptionsType extends SpacerLayoutOptions = SpacerLayoutOptions,
+  OptionsType extends
+    LayoutItemBaseOptions<LayoutOptionsType> = LayoutItemBaseOptions<LayoutOptionsType>,
+> extends LayoutItemBase<LayoutOptionsType, OptionsType> {
+  constructor(options?: Partial<LayoutItemBaseOptions<LayoutOptionsType>>) {
+    const filledOptions = booyah.fillInOptions(
+      options,
+      new LayoutItemBaseOptions<LayoutOptionsType>(),
+    );
+    filledOptions.layoutOptions = booyah.fillInOptions(
+      filledOptions.layoutOptions,
+      new SpacerLayoutOptions() as LayoutOptionsType,
+    );
+    super(filledOptions as OptionsType);
+  }
+
   protected _onActivate(): void {
     this.parentLayoutItem?.addChildLayoutItem(this);
   }
@@ -1420,7 +1442,8 @@ export class DisplayObjectLeafChip<
 export class SpriteChipLayoutOptions extends DisplayObjectLeafChipLayoutOptions {
   keepAspectRatio: KeepAspectRatioValue = "min";
 
-  canGrow: Directions = "none";
+  // canGrow: Directions = "none";
+  canShrink: Directions = "both";
 }
 
 export class SpriteChipOptions extends DisplayObjectLeafChipOptions<PIXI.Sprite> {
@@ -1469,6 +1492,11 @@ export class NineSliceWidths {
   bottom = 0;
 }
 
+export class NineSlicePlaneChipLayoutOptions extends DisplayObjectLeafChipLayoutOptions {
+  canShrink: Directions = "both";
+  canGrow: Directions = "both";
+}
+
 export class NineSlicePlaneChipOptions extends DisplayObjectLeafChipOptions<PIXI.NineSlicePlane> {
   /** Either the texture itself, or a name to search for in PIXI.Assets */
   texture?: PIXI.Texture | string;
@@ -1483,6 +1511,10 @@ export class NineSlicePlaneChip extends DisplayObjectLeafChip<PIXI.NineSlicePlan
     const filledOptions = booyah.fillInOptions(
       options,
       new NineSlicePlaneChipOptions(),
+    );
+    filledOptions.layoutOptions = booyah.fillInOptions(
+      filledOptions.layoutOptions,
+      new NineSlicePlaneChipLayoutOptions(),
     );
 
     if (!filledOptions.displayObject) {
@@ -1540,8 +1572,8 @@ export class NineSlicePlaneChip extends DisplayObjectLeafChip<PIXI.NineSlicePlan
 export class TextChipLayoutOptions extends DisplayObjectLeafChipLayoutOptions {
   keepAspectRatio: KeepAspectRatioValue = "min";
 
-  canGrow: Directions = "none";
-  canShrink: Directions = "none";
+  // canGrow: Directions = "none";
+  // canShrink: Directions = "none";
 }
 
 export class TextChipOptions extends DisplayObjectLeafChipOptions<PIXI.Text> {
@@ -1661,37 +1693,159 @@ export abstract class ContainerBase<
   }
 
   protected override _cacheLengthsChildren(): void {
-    // Handle width values
-    for (const prop of widthLayoutProperties) {
-      if (typeof this._lengthsCache[prop] === "undefined") {
-        const methodName =
-          `_aggregate${booyah.uppercaseFirstLetter(prop)}` as keyof this;
+    // Start with ideal lengths
+    if (typeof this._lengthsCache.idealWidth === "undefined") {
+      let value = this._aggregateIdealWidth();
+      if (typeof value !== "undefined") {
+        this._lengthsCache.idealWidth = value + this.horizontalPadding;
+      }
+    }
+    if (typeof this._lengthsCache.idealHeight === "undefined") {
+      let value = this._aggregateIdealHeight();
+      if (typeof value !== "undefined") {
+        this._lengthsCache.idealHeight = value + this.verticalPadding;
+      }
+    }
 
-        let value = (this[methodName] as () => number | undefined)();
-
+    // Tackle min lengths
+    {
+      // If we can't shrink in a direction, but no min length is given, use min length of children
+      const canShrink = this._parseLayoutProperty("canShrink") as Directions;
+      if (
+        canShrink !== "horizontally" &&
+        canShrink !== "both" &&
+        typeof this._lengthsCache.minWidth === "undefined"
+      ) {
+        let value = this._aggregateMinWidth();
         if (typeof value !== "undefined") {
-          // Include padding
-          value += this.horizontalPadding;
-          this._lengthsCache[prop] = value;
+          this._lengthsCache.minWidth = value + this.horizontalPadding;
+        }
+      }
+
+      if (
+        canShrink !== "vertically" &&
+        canShrink !== "both" &&
+        typeof this._lengthsCache.minHeight === "undefined"
+      ) {
+        let value = this._aggregateMinHeight();
+        if (typeof value !== "undefined") {
+          this._lengthsCache.minHeight = value + this.verticalPadding;
         }
       }
     }
 
-    // Handle height values
-    for (const prop of heightLayoutProperties) {
-      if (typeof this._lengthsCache[prop] === "undefined") {
-        const methodName =
-          `_aggregate${booyah.uppercaseFirstLetter(prop)}` as keyof this;
+    // Tackle max lengths
+    {
+      const canGrow = this._parseLayoutProperty("canGrow") as Directions;
 
-        let value = (this[methodName] as () => number | undefined)();
-
-        // Include padding
+      if (
+        canGrow !== "horizontally" &&
+        canGrow !== "both" &&
+        typeof this._lengthsCache.maxWidth === "undefined"
+      ) {
+        let value = this._aggregateMaxWidth();
         if (typeof value !== "undefined") {
-          value += this.verticalPadding;
-          this._lengthsCache[prop] = value;
+          this._lengthsCache.maxWidth = value + this.horizontalPadding;
+        }
+      }
+
+      if (
+        canGrow !== "vertically" &&
+        canGrow !== "both" &&
+        typeof this._lengthsCache.maxHeight === "undefined"
+      ) {
+        let value = this._aggregateMaxHeight();
+        if (typeof value !== "undefined") {
+          this._lengthsCache.maxHeight = value + this.verticalPadding;
         }
       }
     }
+
+    // // Tackle min lengths
+    // {
+    //   const canShrink = this._parseLayoutProperty("canShrink") as Directions;
+
+    //   if (typeof this._lengthsCache.minWidth === "undefined") {
+    //     if (canShrink === "horizontally" || canShrink === "both") {
+    //       let value = this._aggregateMinWidth();
+    //       if (typeof value !== "undefined") {
+    //         this._lengthsCache.minWidth = value + this.horizontalPadding;
+    //       }
+    //     } else {
+    //       this._lengthsCache.minWidth = this._lengthsCache.idealWidth;
+    //     }
+    //   }
+
+    //   if (typeof this._lengthsCache.minHeight === "undefined") {
+    //     if (canShrink === "vertically" || canShrink === "both") {
+    //       let value = this._aggregateMinHeight();
+    //       if (typeof value !== "undefined") {
+    //         this._lengthsCache.minHeight = value + this.verticalPadding;
+    //       }
+    //     } else {
+    //       this._lengthsCache.minHeight = this._lengthsCache.idealHeight;
+    //     }
+    //   }
+    // }
+
+    // // Tackle max lengths
+    // {
+    //   const canGrow = this._parseLayoutProperty("canGrow") as Directions;
+
+    //   if (typeof this._lengthsCache.maxWidth === "undefined") {
+    //     if (canGrow === "horizontally" || canGrow === "both") {
+    //       let value = this._aggregateMaxWidth();
+    //       if (typeof value !== "undefined") {
+    //         this._lengthsCache.maxWidth = value + this.horizontalPadding;
+    //       }
+    //     } else {
+    //       this._lengthsCache.maxWidth = this._lengthsCache.idealWidth;
+    //     }
+    //   }
+
+    //   if (typeof this._lengthsCache.maxHeight === "undefined") {
+    //     if (canGrow === "vertically" || canGrow === "both") {
+    //       let value = this._aggregateMaxHeight();
+    //       if (typeof value !== "undefined") {
+    //         this._lengthsCache.maxHeight = value + this.verticalPadding;
+    //       }
+    //     } else {
+    //       this._lengthsCache.maxHeight = this._lengthsCache.idealHeight;
+    //     }
+    //   }
+    // }
+
+    // // Handle width values
+    // for (const prop of widthLayoutProperties) {
+    //   if (typeof this._lengthsCache[prop] === "undefined") {
+    //     const methodName =
+    //       `_aggregate${booyah.uppercaseFirstLetter(prop)}` as keyof this;
+
+    //     let value = (this[methodName] as () => number | undefined)();
+
+    //     if (typeof value !== "undefined") {
+    //       // Include padding
+    //       value += this.horizontalPadding;
+    //       this._lengthsCache[prop] = value;
+    //     }
+    //   }
+    // }
+
+    // // Handle height values
+    // for (const prop of heightLayoutProperties) {
+    //   if (typeof this._lengthsCache[prop] === "undefined") {
+    //     const methodName =
+    //       `_aggregate${booyah.uppercaseFirstLetter(prop)}` as keyof this;
+
+    //     let value = (this[methodName] as () => number | undefined)();
+
+    //     // Include padding
+    //     if (typeof value !== "undefined") {
+    //       value += this.verticalPadding;
+    //       this._lengthsCache[prop] = value;
+    //     }
+    //   }
+    // }
   }
 
   // override prepareResize(renderInfo: RenderInfo): void {
