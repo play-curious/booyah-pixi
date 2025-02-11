@@ -1141,6 +1141,13 @@ export abstract class DisplayObjectChip<
   }
 
   protected _setInnerSize(innerWidth: number, innerHeight: number) {
+    if (this.naturalInnerSize.x === 0 || this.naturalInnerSize.y === 0) {
+      console.error(
+        "DisplayObjectChip: Cannot scale when natural inner size is 0",
+        this.naturalInnerSize,
+      );
+    }
+
     let horizontalScale = innerWidth / this._naturalInnerSize.x;
     let verticalScale = innerHeight / this._naturalInnerSize.y;
 
@@ -1552,6 +1559,13 @@ export class NineSlicePlaneChip extends DisplayObjectLeafChip<PIXI.NineSlicePlan
 
   protected _setInnerSize(innerWidth: number, innerHeight: number) {
     if (this._options.layoutOptions.keepAspectRatio !== "none") {
+      if (this.naturalInnerSize.x === 0 || this.naturalInnerSize.y === 0) {
+        console.error(
+          "NineSlicePlaneChip: Cannot scale when natural inner size is 0",
+          this.naturalInnerSize,
+        );
+      }
+
       let horizontalScale = innerWidth / this._naturalInnerSize.x;
       let verticalScale = innerHeight / this._naturalInnerSize.y;
 
@@ -1600,6 +1614,10 @@ export class TextChip extends DisplayObjectLeafChip<PIXI.Text> {
   }
 }
 
+export class ContainerLeafChipLayoutOptions extends DisplayObjectLeafChipLayoutOptions {
+  canScale: boolean = false;
+}
+
 /**
  * Manages a PIXI.Container that will be layed out, but will not act as a parent for other layout children
  * */
@@ -1609,7 +1627,10 @@ export class ContainerLeafChip extends DisplayObjectLeafChip<PIXI.Container> {
       options,
       new DisplayObjectLeafChipOptions<PIXI.Container>(),
     );
-
+    filledOptions.layoutOptions = booyah.fillInOptions(
+      filledOptions.layoutOptions,
+      new ContainerLeafChipLayoutOptions(),
+    );
     if (!filledOptions.displayObject) {
       filledOptions.displayObject = new PIXI.Container();
     }
