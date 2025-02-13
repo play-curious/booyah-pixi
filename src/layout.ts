@@ -627,9 +627,7 @@ export abstract class LayoutItemBase<
     return this._lastRenderInfo;
   }
 
-  protected _parseLayoutProperty(
-    prop: keyof LayoutOptionsType,
-  ): number | boolean | string | undefined {
+  protected _parseLayoutProperty(prop: keyof LayoutOptionsType) {
     const resolvableContext: LayoutValueResolvableContext<
       OptionsType["layoutOptions"]
     > = {
@@ -639,7 +637,7 @@ export abstract class LayoutItemBase<
     };
     const value = this._layoutOptionsResolver.resolve(prop, resolvableContext);
 
-    return value as number | boolean | string | undefined;
+    return value as LayoutOptionsType[typeof prop];
   }
 
   protected _parseLayoutPropertyAsOptionalNumber(
@@ -889,7 +887,8 @@ export abstract class DisplayObjectChip<
 
     if (innerBounds.isBoundedHorizontally()) {
       if (
-        this._parseLayoutProperty("canShrink") &&
+        (this._parseLayoutProperty("canShrink") === "horizontally" ||
+          this._parseLayoutProperty("canShrink") === "both") &&
         innerBounds.width! < idealInnerWidth
       ) {
         // Shrink, but not beyond the min size
@@ -901,7 +900,8 @@ export abstract class DisplayObjectChip<
           finalInnerWidth = innerBounds.width!;
         }
       } else if (
-        this._parseLayoutProperty("canGrow") &&
+        (this._parseLayoutProperty("canGrow") === "horizontally" ||
+          this._parseLayoutProperty("canGrow") === "both") &&
         innerBounds.width! > idealInnerWidth
       ) {
         // Grow, but not beyond the max size
@@ -917,7 +917,8 @@ export abstract class DisplayObjectChip<
 
     if (innerBounds.isBoundedVertically()) {
       if (
-        this._parseLayoutProperty("canShrink") &&
+        (this._parseLayoutProperty("canShrink") === "vertically" ||
+          this._parseLayoutProperty("canShrink") === "both") &&
         innerBounds.height! < idealInnerHeight
       ) {
         // Shrink, but not beyond the min size
@@ -929,7 +930,8 @@ export abstract class DisplayObjectChip<
           finalInnerHeight = innerBounds.height!;
         }
       } else if (
-        this._parseLayoutProperty("canGrow") &&
+        (this._parseLayoutProperty("canGrow") === "vertically" ||
+          this._parseLayoutProperty("canGrow") === "both") &&
         innerBounds.height! > idealInnerHeight
       ) {
         // Grow, but not beyond the max size
@@ -1550,6 +1552,24 @@ export abstract class ContainerBase<
     finalInnerWidth: number,
     finalInnerHeight: number,
   ) {
+    // Validate that the child local bounds makes sense
+    if (
+      this._lastResizeInfo.localBounds.isBoundedHorizontally() &&
+      finalInnerWidth > this._lastResizeInfo.localBounds.width
+    ) {
+      console.error(
+        `ContainerBase: Bad widths for child bounds. Child width ${finalInnerWidth} > parent width ${this._lastResizeInfo.localBounds.width}`,
+      );
+    }
+    if (
+      this._lastResizeInfo.localBounds.isBoundedVertically() &&
+      finalInnerHeight > this._lastResizeInfo.localBounds.height
+    ) {
+      console.error(
+        `ContainerBase: Bad heights for child bounds. Child height ${finalInnerHeight} > parent height ${this._lastResizeInfo.localBounds.height}`,
+      );
+    }
+
     // Position the container and adjust local bounds
     this.displayObject.position.copyFrom(position);
 

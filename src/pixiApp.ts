@@ -49,7 +49,14 @@ export class PixiAppChip extends booyah.Composite {
     }
 
     if (this._options.addContainerChip) {
-      this._activateChildChip(new layout.StackingContainerChip(), {
+      const stackingContainerChip = new layout.StackingContainerChip({
+        name: "pixiAppRoot",
+        layoutOptions: {
+          canShrink: "both",
+          canGrow: "both",
+        },
+      });
+      this._activateChildChip(stackingContainerChip, {
         context: {
           pixiAppChip: this,
           pixiApplication: this._pixiApplication,
