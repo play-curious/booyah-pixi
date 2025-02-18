@@ -247,6 +247,8 @@ export class Scrollbox extends layout.ContainerBase<
   }
 
   protected _onTerminate(): void {
+    super._onTerminate();
+
     delete this._pointerDown;
   }
 
@@ -259,8 +261,8 @@ export class Scrollbox extends layout.ContainerBase<
       this._options.direction === "vertical" ? undefined : this.boxHeight,
     );
     const childLocalBounds = new layout.Bounds(
-      this.lastResizeInfo!.localBounds.x,
-      this.lastResizeInfo!.localBounds.y,
+      0,
+      0,
       this._options.direction === "horizontal" ? undefined : this.boxWidth,
       this._options.direction === "vertical" ? undefined : this.boxHeight,
     );
