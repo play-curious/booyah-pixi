@@ -17,29 +17,41 @@ export class ScrollboxLayoutOptions extends layout.LayoutOptions {
   canGrow: layout.Directions = "both";
 }
 
+export type ScrollboxDynamicOptionsResolvableContext = layout.RenderInfo;
+
+type DymamicScrollboxOption<T> = resolvable.Resolvable<
+  T,
+  ScrollboxDynamicOptionsResolvableContext
+>;
+
 export class ScrollboxOptions extends layout.DisplayObjectChipOptions<
   PIXI.Container,
   layout.LayoutOptions
 > {
+  // The following options are static:
   content?: PIXI.DisplayObject;
-  boxWidth: number = 100;
-  boxHeight: number = 100;
-  contentWidthPadding = 0;
-  contentHeightPadding = 0;
-  overflow: OverflowSettings = "auto";
   direction: Direction = "horizontal";
-  scrollbarOffset: number = 0;
-  scrollbarWidth: number = 20;
   scrollbarBackground: PIXI.Texture | PIXI.ColorSource = 0xaaaaaa;
   scrollbarHandle: PIXI.Texture | PIXI.ColorSource = 0x555555;
+  scrollbarOffset = 0;
+  scrollbarWidth = 20;
   dragScroll: boolean = true;
   dragThreshold: number = 5;
   stopPropagation: boolean = true;
   wheelScroll: boolean = true;
+
+  // The following options are dynamic:
+  boxWidth: DymamicScrollboxOption<number> = 100;
+  boxHeight: DymamicScrollboxOption<number> = 100;
+  contentWidthPadding: DymamicScrollboxOption<number> = 0;
+  contentHeightPadding: DymamicScrollboxOption<number> = 0;
+  overflow: DymamicScrollboxOption<OverflowSettings> = "auto";
 }
 
-// type ScrollboxResolvableContext =
-//   layout.LayoutValueResolvableContext<layout.LayoutOptionsBase>;
+type ScrollboxDynaicOptionsResolver = resolvable.Resolver<
+  ScrollboxOptions,
+  layout.RenderInfo
+>;
 
 /**
  * Based on David Fig's pixi-scrollbox https://github.com/davidfig/pixi-scrollbox/, but adapted to Booyah
@@ -52,9 +64,9 @@ export class Scrollbox extends layout.ContainerBase<
   layout.LayoutOptions,
   ScrollboxOptions
 > {
+  private _dynamicOptionsResolver: ScrollboxDynaicOptionsResolver;
   private _pointerDown?: { type: "drag" | "scrollbar"; last: PIXI.IPointData };
   private _isDragging?: boolean;
-  // private _container: PIXI.Container;
   private _content?: PIXI.Container;
   private _scrollbarAnchor?: PIXI.Container;
   private _scrollbarBackground?: PIXI.NineSlicePlane;
@@ -73,13 +85,18 @@ export class Scrollbox extends layout.ContainerBase<
       new ScrollboxLayoutOptions(),
     );
 
-    // Set the ideal size based on the given box sizes
-    filledOptions.layoutOptions.idealWidth = filledOptions.boxWidth;
-    filledOptions.layoutOptions.idealHeight = filledOptions.boxHeight;
+    const dynamicOptionsResolver = new resolvable.Resolver(filledOptions);
+
+    // // Set the ideal size based on the given box sizes
+    filledOptions.layoutOptions.idealWidth = () =>
+      this._resolveDynamicOption("boxWidth") as number;
+    filledOptions.layoutOptions.idealHeight = () =>
+      this._resolveDynamicOption("boxHeight") as number;
 
     super(filledOptions);
 
-    // this._optionsResolver = new resolvable.Resolver(filledOptions);
+    this._dynamicOptionsResolver =
+      dynamicOptionsResolver as ScrollboxDynaicOptionsResolver;
   }
 
   protected _onActivate() {
@@ -252,6 +269,12 @@ export class Scrollbox extends layout.ContainerBase<
     delete this._pointerDown;
   }
 
+  protected override _updateDynamicProperties(): void {
+    super._updateDynamicProperties();
+
+    this._dynamicOptionsResolver.invalidate();
+  }
+
   protected _onResize(): void {
     // Provide unlimited bounds in the direction of scroll
     const childAbsoluteBounds = new layout.Bounds(
@@ -285,19 +308,22 @@ export class Scrollbox extends layout.ContainerBase<
   }
 
   get contentWidth() {
-    if (!this._content) return this._options.contentWidthPadding;
+    if (!this._content)
+      return this._resolveDynamicOption("contentWidthPadding") as number;
 
     return (
-      this._content!.getLocalBounds().right + this._options.contentWidthPadding
+      this._content!.getLocalBounds().right +
+      (this._resolveDynamicOption("contentWidthPadding") as number)
     );
   }
 
   get contentHeight() {
-    if (!this._content) return this._options.contentHeightPadding;
+    if (!this._content)
+      return this._resolveDynamicOption("contentHeightPadding") as number;
 
     return (
       this._content!.getLocalBounds().bottom +
-      this._options.contentHeightPadding
+      (this._resolveDynamicOption("contentHeightPadding") as number)
     );
   }
 
@@ -319,9 +345,10 @@ export class Scrollbox extends layout.ContainerBase<
       }
     }
 
+    const overflow = this._resolveDynamicOption("overflow");
     if (
-      this._options.overflow === "hidden" ||
-      (this._options.overflow === "auto" && boxSize > contentSize)
+      overflow === "hidden" ||
+      (overflow === "auto" && boxSize > contentSize)
     ) {
       this._scrollbarAnchor!.visible = false;
       return;
@@ -564,7 +591,8 @@ export class Scrollbox extends layout.ContainerBase<
   }
 
   get boxWidth(): number {
-    if (!this._lastResizeInfo) return this._options.boxWidth;
+    if (!this._lastResizeInfo)
+      return this._resolveDynamicOption("boxWidth") as number;
 
     return (
       this._lastResizeInfo.localBounds.width! -
@@ -574,7 +602,8 @@ export class Scrollbox extends layout.ContainerBase<
   }
 
   get boxHeight(): number {
-    if (!this._lastResizeInfo) return this._options.boxWidth;
+    if (!this._lastResizeInfo)
+      return this._resolveDynamicOption("boxHeight") as number;
 
     return (
       this._lastResizeInfo?.localBounds.height! -
@@ -588,6 +617,12 @@ export class Scrollbox extends layout.ContainerBase<
     const parentValue = super.contextModification;
     return Object.assign({}, parentValue, {
       container: this._content,
+    });
+  }
+
+  private _resolveDynamicOption(option: keyof ScrollboxOptions) {
+    return this._dynamicOptionsResolver.resolve(option, {
+      renderSize: this.pixiAppChip.renderSize,
     });
   }
 }
