@@ -747,7 +747,7 @@ export class DisplayObjectChipOptions<
    * Create an intermediate container that can be manipulated
    * relative to the position provided by the layout
    * */
-  makeOffsetContainer = true;
+  makeOffsetContainer = false;
 
   /**
    * The height and width of the display object, when scaled to 1.
