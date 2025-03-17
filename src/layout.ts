@@ -1,5 +1,3 @@
-// import * as booyah from "booyah/dist/booyah";
-// import * as util from "booyah/dist/util";
 import * as PIXI from "pixi.js";
 import * as booyah from "booyah";
 import * as _ from "underscore";
@@ -2088,7 +2086,7 @@ export class DirectionalContainerChip extends ContainerBase<DirectionalContainer
   - frameChange(currentFrame: number) - When frame changes 
 */
 export class AnimatedSpriteChipOptions extends DisplayObjectLeafChipOptions<PIXI.AnimatedSprite> {
-  spritesheet!: PIXI.Spritesheet | string;
+  spritesheet?: PIXI.Spritesheet | string;
   behaviorOnComplete: "loop" | "remove" | "keepLastFrame" = "remove";
   behaviorOnStart: "play" | "stop" = "play";
   animationName?: string;
@@ -2105,10 +2103,10 @@ export class AnimatedSpriteChip extends DisplayObjectLeafChip<
 > {
   // private readonly _options: AnimatedSpriteChipOptions;
 
-  private _animatedSprite?: PIXI.AnimatedSprite;
+  // private _animatedSprite?: PIXI.AnimatedSprite;
   private _wasPlaying?: boolean;
-  private _wasAdded?: boolean;
-  private _propertiesToUpdateOnResize?: Array<keyof PIXI.AnimatedSprite>;
+  // private _wasAdded?: boolean;
+  // private _propertiesToUpdateOnResize?: Array<keyof PIXI.AnimatedSprite>;
 
   constructor(options?: Partial<AnimatedSpriteChipOptions>) {
     const filledOptions = booyah.fillInOptions(
@@ -2116,19 +2114,76 @@ export class AnimatedSpriteChip extends DisplayObjectLeafChip<
       new AnimatedSpriteChipOptions(),
     );
 
-    if (typeof filledOptions.spritesheet === "undefined") {
-      throw new Error("AnimatedSpriteChip requires a spritesheet");
-    }
-    if (typeof filledOptions.spritesheet === "string") {
-      const resolvedSpritesheet = PIXI.Assets.get<PIXI.Spritesheet>(
-        filledOptions.spritesheet,
-      );
-      if (!resolvedSpritesheet)
-        throw new Error(
-          `Cannot find spritesheet for AnimatedSpriteChip "${filledOptions.spritesheet}"`,
-        );
+    if (typeof filledOptions.displayObject === "undefined") {
+      // Create the animated sprite ourselves
 
-      filledOptions.spritesheet = resolvedSpritesheet;
+      if (typeof filledOptions.spritesheet === "undefined") {
+        throw new Error("AnimatedSpriteChip requires a spritesheet");
+      }
+      if (typeof filledOptions.spritesheet === "string") {
+        const resolvedSpritesheet = PIXI.Assets.get<PIXI.Spritesheet>(
+          filledOptions.spritesheet,
+        );
+        if (!resolvedSpritesheet)
+          throw new Error(
+            `Cannot find spritesheet for AnimatedSpriteChip "${filledOptions.spritesheet}"`,
+          );
+
+        filledOptions.spritesheet = resolvedSpritesheet;
+      }
+
+      // This must be a Spritesheet now
+      const spritesheet = filledOptions.spritesheet as PIXI.Spritesheet;
+
+      let textures: PIXI.Texture[];
+      if (filledOptions.animationName) {
+        // Use the specified animation
+        if (!_.has(spritesheet.data.animations, filledOptions.animationName)) {
+          throw new Error(
+            `Can't find animation "${filledOptions.animationName}" in spritesheet`,
+          );
+        }
+
+        if (spritesheet.linkedSheets.length === 0) {
+          // PIXI will have loaded the textures directly into the spritesheet object
+          textures = spritesheet.animations[filledOptions.animationName];
+        } else {
+          // Assemble textures from the linked sheets
+          const allSheets = [spritesheet, ...spritesheet.linkedSheets];
+          textures = spritesheet.data.animations![
+            filledOptions.animationName
+          ].map((imageName) => {
+            // Linear search for the texture
+            for (const sheet of allSheets) {
+              if (imageName in sheet.textures) return sheet.textures[imageName];
+            }
+
+            throw new Error(
+              `Cannot find image "${imageName}" needed for animation "${this._options.animationName}"`,
+            );
+          });
+        }
+      } else {
+        // Take all the textures in the sheet
+        textures = Object.values(spritesheet.textures);
+      }
+
+      // Don't have the sprite auto-update
+      filledOptions.displayObject = new PIXI.AnimatedSprite(textures, false);
+    }
+
+    if (filledOptions.behaviorOnComplete == "loop") {
+      filledOptions.displayObject.loop = true;
+    } else if (filledOptions.behaviorOnComplete == "keepLastFrame") {
+      // PIXI.AnimatedSprite loops by default
+      filledOptions.displayObject.loop = false;
+    } else if (filledOptions.behaviorOnComplete == "remove") {
+      // PIXI.AnimatedSprite loops by default
+      filledOptions.displayObject.loop = false;
+    }
+
+    if (typeof filledOptions.fps !== "undefined") {
+      filledOptions.displayObject.animationSpeed = filledOptions.fps / 1000;
     }
 
     super(filledOptions);
@@ -2139,105 +2194,53 @@ export class AnimatedSpriteChip extends DisplayObjectLeafChip<
 
     this._wasPlaying = false;
 
-    // Any conversion has already been handled in the constructor
-    const spritesheet = this._options.spritesheet as PIXI.Spritesheet;
+    // // If requested, use the PIXI Prepare plugin to make sure the animation is loaded before adding it to the stage
+    // if (this._options.prepare) {
+    //   this._wasAdded = false;
+    //   this._chipContext.pixiApplication.renderer.prepare.upload(
+    //     this._animatedSprite,
+    //     () => {
+    //       if (this.chipState === "inactive") return;
 
-    let textures: PIXI.Texture[];
-    if (this._options.animationName) {
-      // Use the specified animation
-      if (!_.has(spritesheet.data.animations, this._options.animationName)) {
-        throw new Error(
-          `Can't find animation "${this._options.animationName}" in spritesheet`,
-        );
-      }
+    //       this._chipContext.container.addChild(this._animatedSprite);
+    //       this._wasAdded = true;
+    //     },
+    //   );
+    // } else {
+    //   this._chipContext.container.addChild(this._animatedSprite);
+    //   this._wasAdded = true;
+    // }
 
-      if (spritesheet.linkedSheets.length === 0) {
-        // PIXI will have loaded the textures directly into the spritesheet object
-        textures = spritesheet.animations[this._options.animationName];
-      } else {
-        // Assemble textures from the linked sheets
-        const allSheets = [spritesheet, ...spritesheet.linkedSheets];
-        textures = spritesheet.data.animations![
-          this._options.animationName
-        ].map((imageName) => {
-          // Linear search for the texture
-          for (const sheet of allSheets) {
-            if (imageName in sheet.textures) return sheet.textures[imageName];
-          }
-
-          throw new Error(
-            `Cannot find image "${imageName}" needed for animation "${this._options.animationName}"`,
-          );
-        });
-      }
-    } else {
-      // Take all the textures in the sheet
-      textures = Object.values(spritesheet.textures);
-    }
-
-    // Don't have the sprite auto-update
-    this._animatedSprite = new PIXI.AnimatedSprite(textures, false);
-
-    // If requested, use the PIXI Prepare plugin to make sure the animation is loaded before adding it to the stage
-    if (this._options.prepare) {
-      this._wasAdded = false;
-      this._chipContext.pixiApplication.renderer.prepare.upload(
-        this._animatedSprite,
-        () => {
-          if (this.chipState === "inactive") return;
-
-          this._chipContext.container.addChild(this._animatedSprite);
-          this._wasAdded = true;
-        },
-      );
-    } else {
-      this._chipContext.container.addChild(this._animatedSprite);
-      this._wasAdded = true;
-    }
-
-    this._chipContext.container.addChild(this._animatedSprite);
-
-    if (this._options.behaviorOnComplete == "loop") {
-      this._animatedSprite.loop = true;
-    } else if (this._options.behaviorOnComplete == "keepLastFrame") {
-      // PIXI.AnimatedSprite loops by default
-      this._animatedSprite.loop = false;
-    } else if (this._options.behaviorOnComplete == "remove") {
-      // PIXI.AnimatedSprite loops by default
-      this._animatedSprite.loop = false;
-    }
-
-    if (typeof this._options.fps !== "undefined") {
-      this._animatedSprite.animationSpeed = this._options.fps / 1000;
-    }
+    // this._chipContext.container.addChild(this._animatedSprite);
 
     // Setup event handlers
-    this._animatedSprite.onFrameChange = this._onFrameChange.bind(this);
-    this._animatedSprite.onLoop = this._onLoop.bind(this);
-    this._animatedSprite.onComplete = this._onComplete.bind(this);
+    this.displayObject.onFrameChange = this._onFrameChange.bind(this);
+    this.displayObject.onLoop = this._onLoop.bind(this);
+    this.displayObject.onComplete = this._onComplete.bind(this);
 
     this.restart();
   }
 
   _onTick() {
-    this._animatedSprite!.update(this._lastTickInfo.timeSinceLastTick);
+    this.displayObject.update(this._lastTickInfo.timeSinceLastTick);
   }
 
   protected _onPause(): void {
-    this._wasPlaying = this._animatedSprite!.playing;
-    this._animatedSprite!.stop();
+    this._wasPlaying = this.displayObject.playing;
+    this.displayObject.stop();
   }
 
   protected _onResume(): void {
-    if (this._wasPlaying) this._animatedSprite!.play();
+    if (this._wasPlaying) this.displayObject.play();
   }
 
   _onTerminate() {
-    if (this._wasAdded) {
-      this._chipContext.container.removeChild(this._animatedSprite);
-      this._wasAdded = false;
-    }
-    delete this._animatedSprite;
+    // if (this._wasAdded) {
+    //   this._chipContext.container.removeChild(this._animatedSprite);
+    //   this._wasAdded = false;
+    // }
+    //
+    // delete this._animatedSprite;
   }
 
   private _onComplete() {
@@ -2257,7 +2260,7 @@ export class AnimatedSpriteChip extends DisplayObjectLeafChip<
   }
 
   get animatedSprite() {
-    return this._animatedSprite;
+    return this.displayObject;
   }
 
   get pixiAppChip() {
@@ -2269,10 +2272,10 @@ export class AnimatedSpriteChip extends DisplayObjectLeafChip<
    * If the behaviorOnStart is set to play, will do so
    */
   restart() {
-    this._animatedSprite!.gotoAndStop(this._options.startingFrame ?? 0);
+    this.displayObject.gotoAndStop(this._options.startingFrame ?? 0);
 
     if (this._options.behaviorOnStart === "play") {
-      this._animatedSprite!.play();
+      this.displayObject.play();
     }
   }
 }
