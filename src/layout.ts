@@ -761,6 +761,13 @@ export class DisplayObjectChipOptions<
    * If not provided, will be calculated by calling `getLocalBounds()`
    */
   anchorPosition?: PIXI.IPoint;
+
+  /**
+   * Use the PIXI Prepare plugin to make sure the display object is loaded
+   * before adding it.
+   * Mostly useful for animations
+   */
+  prepare = false;
 }
 
 export abstract class DisplayObjectChip<
@@ -779,6 +786,7 @@ export abstract class DisplayObjectChip<
   protected _offsetContainer?: PIXI.Container;
   protected _naturalInnerSize: PIXI.IPointData;
   protected _anchorPosition: PIXI.IPointData;
+  private _wasAdded?: boolean;
 
   constructor(options: OptionsType) {
     super(options);
@@ -826,14 +834,27 @@ export abstract class DisplayObjectChip<
       );
     }
 
-    if (
-      !this._options.hasOwnProperty("addToContainer") ||
-      this._options.addToContainer
-    ) {
+    if (this._options.addToContainer) {
       const containerToAdd = this._options.makeOffsetContainer
         ? this._offsetContainer
         : this._options.displayObject;
-      this._chipContext.container.addChild(containerToAdd);
+
+      if (this._options.prepare) {
+        this._wasAdded = false;
+
+        this._chipContext.pixiApplication.renderer.prepare.upload(
+          this.displayObject,
+          () => {
+            if (this.chipState === "inactive") return;
+
+            this._chipContext.container.addChild(containerToAdd);
+            this._wasAdded = true;
+          },
+        );
+      } else {
+        this._chipContext.container.addChild(containerToAdd);
+        this._wasAdded = true;
+      }
     }
 
     // Optionally participate in the layout
@@ -855,13 +876,11 @@ export abstract class DisplayObjectChip<
       this.parentLayoutItem.removeChildLayoutItem(this);
     }
 
-    if (
-      !this._options.hasOwnProperty("addToContainer") ||
-      this._options.addToContainer
-    ) {
+    if (this._wasAdded) {
       this._chipContext.container.removeChild(
         this._offsetContainer || this._options.displayObject,
       );
+      this._wasAdded = false;
     }
 
     super._onTerminate();
@@ -2093,7 +2112,6 @@ export class AnimatedSpriteChipOptions extends DisplayObjectLeafChipOptions<PIXI
   // If provided, will calculate the animation speed to achieve this number of frames-per-second
   fps?: number;
   startingFrame?: number;
-  prepare?: boolean;
 }
 
 export class AnimatedSpriteChip extends DisplayObjectLeafChip<
@@ -2194,25 +2212,6 @@ export class AnimatedSpriteChip extends DisplayObjectLeafChip<
 
     this._wasPlaying = false;
 
-    // // If requested, use the PIXI Prepare plugin to make sure the animation is loaded before adding it to the stage
-    // if (this._options.prepare) {
-    //   this._wasAdded = false;
-    //   this._chipContext.pixiApplication.renderer.prepare.upload(
-    //     this._animatedSprite,
-    //     () => {
-    //       if (this.chipState === "inactive") return;
-
-    //       this._chipContext.container.addChild(this._animatedSprite);
-    //       this._wasAdded = true;
-    //     },
-    //   );
-    // } else {
-    //   this._chipContext.container.addChild(this._animatedSprite);
-    //   this._wasAdded = true;
-    // }
-
-    // this._chipContext.container.addChild(this._animatedSprite);
-
     // Setup event handlers
     this.displayObject.onFrameChange = this._onFrameChange.bind(this);
     this.displayObject.onLoop = this._onLoop.bind(this);
@@ -2232,15 +2231,6 @@ export class AnimatedSpriteChip extends DisplayObjectLeafChip<
 
   protected _onResume(): void {
     if (this._wasPlaying) this.displayObject.play();
-  }
-
-  _onTerminate() {
-    // if (this._wasAdded) {
-    //   this._chipContext.container.removeChild(this._animatedSprite);
-    //   this._wasAdded = false;
-    // }
-    //
-    // delete this._animatedSprite;
   }
 
   private _onComplete() {
