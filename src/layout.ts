@@ -1169,7 +1169,12 @@ export abstract class DisplayObjectChip<
   /** Recalculate the anchor position based on `getLocalBounds()`  */
   updateAnchorPosition() {
     const pixiLocalBounds = this._options.displayObject.getLocalBounds();
-    this.anchorPosition = new PIXI.Point(pixiLocalBounds.x, pixiLocalBounds.y);
+    const pixiPivot = this._options.displayObject.pivot.clone();
+
+    this.anchorPosition = new PIXI.Point(
+      pixiLocalBounds.x - pixiPivot.x,
+      pixiLocalBounds.y - pixiPivot.y,
+    );
   }
 
   get anchorPosition() {
