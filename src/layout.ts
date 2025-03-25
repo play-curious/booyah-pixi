@@ -51,7 +51,7 @@ export class RootLayoutChip extends booyah.Composite {
   private _resizeNeeded?: boolean;
 
   protected _onActivate(): void {
-    this._stackingContainerChip = new StackingContainerChip({
+    const stackingContainerChip = new StackingContainerChip({
       name: "pixiAppRoot",
       layoutOptions: {
         canShrink: "both",
@@ -59,7 +59,10 @@ export class RootLayoutChip extends booyah.Composite {
       },
     });
 
-    this._activateChildChip(this._stackingContainerChip);
+    this._activateChildChip({
+      chip: stackingContainerChip,
+      attribute: "_stackingContainerChip",
+    });
 
     this._subscribe(this._stackingContainerChip!, "updated", this._onResize);
 
@@ -85,7 +88,9 @@ export class RootLayoutChip extends booyah.Composite {
   }
 
   get contextModification(): booyah.ChipContextResolvable {
-    return { ...this._stackingContainerChip.contextModification };
+    if (this._stackingContainerChip)
+      return { ...this._stackingContainerChip.contextModification };
+    else return {};
   }
 
   private _onResize() {
