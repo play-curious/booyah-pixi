@@ -20,6 +20,7 @@ export class PixiAppChip extends booyah.Composite {
 
   private _pixiApplication?: PIXI.Application;
   private _stackingContainerChip?: layout.StackingContainerChip;
+  private _rootLayoutChip: layout.RootLayoutChip;
   private _resizeNeeded?: boolean;
 
   constructor(options?: Partial<PixiAppChipOptions>) {
@@ -49,6 +50,7 @@ export class PixiAppChip extends booyah.Composite {
     }
 
     if (this._options.addContainerChip) {
+      /*
       const stackingContainerChip = new layout.StackingContainerChip({
         name: "pixiAppRoot",
         layoutOptions: {
@@ -66,9 +68,21 @@ export class PixiAppChip extends booyah.Composite {
       });
 
       this._subscribe(this._stackingContainerChip!, "updated", this._onResize);
+      */
+
+      const rootLayoutChip = new layout.RootLayoutChip();
+      this._activateChildChip(rootLayoutChip, {
+        context: {
+          pixiAppChip: this,
+          pixiApplication: this._pixiApplication,
+          container: this._pixiApplication.stage,
+        },
+        attribute: "_rootLayoutChip",
+      });
     }
 
     // If PIXI handles resizing, listen to that event. Otherwise listen to the window
+    /*
     if (this._pixiApplication.resizeTo) {
       this._subscribe(this._pixiApplication.renderer, "resize", this._onResize);
     } else {
@@ -76,13 +90,16 @@ export class PixiAppChip extends booyah.Composite {
     }
 
     this._handleResize();
+    */
   }
 
   protected _onTick(): void {
+    /*
     if (this._resizeNeeded) {
       this._handleResize();
       this._resizeNeeded = false;
     }
+    */
 
     this._pixiApplication!.render();
   }
@@ -92,11 +109,12 @@ export class PixiAppChip extends booyah.Composite {
   }
 
   get contextModification(): booyah.ChipContextResolvable {
-    if (this._stackingContainerChip) {
+    if (/*this._stackingContainerChip*/ this._rootLayoutChip) {
       return {
         pixiAppChip: this,
         pixiApplication: this._pixiApplication,
-        ...this._stackingContainerChip.contextModification,
+        //...this._stackingContainerChip.contextModification,
+        ...this._rootLayoutChip.contextModification,
       };
     } else {
       return {
