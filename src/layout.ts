@@ -1361,6 +1361,18 @@ export class TextChip extends DisplayObjectLeafChip<PIXI.Text> {
 
     super(filledOptions);
   }
+
+  get text() {
+    return this.displayObject.text;
+  }
+
+  set text(value: string) {
+    if (value === this.displayObject.text) return;
+
+    this.displayObject.text = value;
+    this.updateNaturalInnerSize();
+    this.requestResize();
+  }
 }
 
 export class ContainerLeafChipLayoutOptions extends DisplayObjectLeafChipLayoutOptions {
