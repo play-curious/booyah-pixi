@@ -1242,6 +1242,26 @@ export class SpriteChip extends DisplayObjectLeafChip<PIXI.Sprite> {
 
     super(filledOptions);
   }
+
+  get texture(): PIXI.Texture {
+    return this.displayObject.texture;
+  }
+
+  set texture(value: PIXI.Texture | string) {
+    if (value === this.displayObject.texture) return;
+
+    if (typeof value === "string") {
+      const resolvedTexture = PIXI.Assets.get<PIXI.Texture>(value);
+      if (!resolvedTexture)
+        throw new Error(`Cannot find texture asset "${value}"`);
+
+      this.displayObject.texture = resolvedTexture;
+    } else {
+      this.displayObject.texture = value;
+    }
+
+    this.updateNaturalInnerSize();
+  }
 }
 
 export class NineSliceWidths {
