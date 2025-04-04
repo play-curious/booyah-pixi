@@ -64,7 +64,7 @@ export class RootLayoutChip extends booyah.Parallel {
 
   protected _onActivate(): void {
     const stackingContainerChip = new StackingContainerChip({
-      name: "pixiAppRoot",
+      name: "RootLayoutChip.StackingContainerChip",
       layoutOptions: {
         canShrink: "both",
         canGrow: "both",
@@ -77,17 +77,7 @@ export class RootLayoutChip extends booyah.Parallel {
     });
 
     this._subscribe(this._stackingContainerChip!, "updated", this._onResize);
-
-    // If PIXI handles resizing, listen to that event. Otherwise listen to the window
-    if (this.chipContext.pixiApplication.resizeTo) {
-      this._subscribe(
-        this.chipContext.pixiApplication.renderer,
-        "resize",
-        this._onResize,
-      );
-    } else {
-      this._subscribe(window, "resize", this._onResize);
-    }
+    this._subscribe(this.chipContext.pixiAppChip, "didResize", this._onResize);
 
     this._handleResize();
   }
