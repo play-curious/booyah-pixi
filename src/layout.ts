@@ -46,9 +46,21 @@ export interface RenderInfo {
   renderSize: PIXI.IPointData;
 }
 
-export class RootLayoutChip extends booyah.Composite {
+export class RootLayoutChipOptions {
+  children: LayoutItemChildChipOptions = [];
+}
+
+export class RootLayoutChip extends booyah.Parallel {
   private _stackingContainerChip?: StackingContainerChip;
   private _resizeNeeded?: boolean;
+
+  constructor(options?: Partial<RootLayoutChipOptions>) {
+    const filledOptions = booyah.fillInOptions(
+      options,
+      new RootLayoutChipOptions(),
+    );
+    super(filledOptions.children);
+  }
 
   protected _onActivate(): void {
     const stackingContainerChip = new StackingContainerChip({
@@ -89,7 +101,7 @@ export class RootLayoutChip extends booyah.Composite {
 
   get contextModification(): booyah.ChipContextResolvable {
     if (this._stackingContainerChip)
-      return { ...this._stackingContainerChip.contextModification };
+      return this._stackingContainerChip.contextModification;
     else return {};
   }
 
@@ -191,7 +203,7 @@ export class LayoutOptions {
   /**
    * Scale the horizontal and vertical axes by the same amount?
    *
-   * - `no` - the axes scale seperately
+   * - `none` - the axes scale seperately
    * - `min` - the min value is used, the item is fully within the box, with blank areas
    * - `max - the max vale is used, the item may overflow the box
    * */
@@ -1032,6 +1044,33 @@ export abstract class DisplayObjectChip<
           finalInnerHeight = innerBounds.height!;
         }
       }
+    }
+
+    // Possibly preserve aspect ratio
+    if (
+      (finalInnerWidth !== idealInnerWidth ||
+        finalInnerHeight !== idealInnerHeight) &&
+      this._options.layoutOptions.keepAspectRatio !== "none"
+    ) {
+      let horizontalScale = innerWidth / idealInnerWidth;
+      let verticalScale = innerHeight / idealInnerHeight;
+
+      if (this._options.layoutOptions.keepAspectRatio === "min") {
+        const minScale = Math.min(horizontalScale, verticalScale);
+        horizontalScale = minScale;
+        verticalScale = minScale;
+      } else if (this._options.layoutOptions.keepAspectRatio === "max") {
+        const maxScale = Math.max(horizontalScale, verticalScale);
+        horizontalScale = maxScale;
+        verticalScale = maxScale;
+      } else {
+        throw new Error(
+          `Unknown value for keepAspectRatio: "${this._options.layoutOptions.keepAspectRatio}"`,
+        );
+      }
+
+      finalInnerWidth = horizontalScale * idealInnerWidth;
+      finalInnerHeight = verticalScale * idealInnerHeight;
     }
 
     if (this._parseLayoutProperty("canScale")) {
