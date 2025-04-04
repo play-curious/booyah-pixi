@@ -1218,8 +1218,7 @@ export abstract class DisplayObjectChip<
   get contextModification() {
     if (!this._options.makeOffsetContainer) return super.contextModification;
 
-    const parentValue = super.contextModification;
-    return Object.assign({}, parentValue, {
+    return Object.assign({}, super.contextModification, {
       container: this._offsetContainer,
     });
   }
@@ -1319,6 +1318,12 @@ export class DisplayObjectLeafChip<
       this._parseLayoutPropertyAsOptionalNumber("idealHeight") ??
       this.naturalOuterHeight;
   }
+
+  get contextModification(): booyah.ChipContextResolvable {
+    return Object.assign({}, super.contextModification, {
+      layoutItem: undefined,
+    });
+  }
 }
 
 export class SpriteChipLayoutOptions extends DisplayObjectLeafChipLayoutOptions {
@@ -1364,6 +1369,26 @@ export class SpriteChip extends DisplayObjectLeafChip<PIXI.Sprite> {
     }
 
     super(filledOptions);
+  }
+
+  get texture(): PIXI.Texture {
+    return this.displayObject.texture;
+  }
+
+  set texture(value: PIXI.Texture | string) {
+    if (value === this.displayObject.texture) return;
+
+    if (typeof value === "string") {
+      const resolvedTexture = PIXI.Assets.get<PIXI.Texture>(value);
+      if (!resolvedTexture)
+        throw new Error(`Cannot find texture asset "${value}"`);
+
+      this.displayObject.texture = resolvedTexture;
+    } else {
+      this.displayObject.texture = value;
+    }
+
+    this.updateNaturalInnerSize();
   }
 }
 
@@ -1484,6 +1509,18 @@ export class TextChip extends DisplayObjectLeafChip<PIXI.Text> {
 
     super(filledOptions);
   }
+
+  get text() {
+    return this.displayObject.text;
+  }
+
+  set text(value: string) {
+    if (value === this.displayObject.text) return;
+
+    this.displayObject.text = value;
+    this.updateNaturalInnerSize();
+    this.requestResize();
+  }
 }
 
 export class ContainerLeafChipLayoutOptions extends DisplayObjectLeafChipLayoutOptions {
@@ -1511,9 +1548,9 @@ export class ContainerLeafChip extends DisplayObjectLeafChip<PIXI.Container> {
   }
 
   get contextModification(): booyah.ChipContextResolvable {
-    return {
+    return Object.assign({}, super.contextModification, {
       container: this.displayObject,
-    };
+    });
   }
 }
 
@@ -1715,10 +1752,10 @@ export abstract class ContainerBase<
   }
 
   get contextModification(): booyah.ChipContextResolvable {
-    return {
+    return Object.assign({}, super.contextModification, {
       layoutItem: this,
       container: this._options.displayObject,
-    };
+    });
   }
 
   aggregateChildValues(
@@ -2238,8 +2275,17 @@ export class AnimatedSpriteChip extends DisplayObjectLeafChip<
       new AnimatedSpriteChipOptions(),
     );
 
-    if (typeof filledOptions.displayObject === "undefined") {
-      // Create the animated sprite ourselves
+    if (typeof filledOptions.spritesheet === "undefined") {
+      throw new Error("AnimatedSpriteChip requires a spritesheet");
+    }
+    if (typeof filledOptions.spritesheet === "string") {
+      const resolvedSpritesheet = PIXI.Assets.get<PIXI.Spritesheet>(
+        filledOptions.spritesheet,
+      );
+      if (!resolvedSpritesheet)
+        throw new Error(
+          `Cannot find spritesheet for AnimatedSpriteChip "${filledOptions.spritesheet}"`,
+        );
 
       if (typeof filledOptions.spritesheet === "undefined") {
         throw new Error("AnimatedSpriteChip requires a spritesheet");
