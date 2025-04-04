@@ -1042,8 +1042,8 @@ export abstract class DisplayObjectChip<
         finalInnerHeight !== idealInnerHeight) &&
       this._options.layoutOptions.keepAspectRatio !== "none"
     ) {
-      let horizontalScale = innerWidth / idealInnerWidth;
-      let verticalScale = innerHeight / idealInnerHeight;
+      let horizontalScale = finalInnerWidth / idealInnerWidth;
+      let verticalScale = finalInnerHeight / idealInnerHeight;
 
       if (this._options.layoutOptions.keepAspectRatio === "min") {
         const minScale = Math.min(horizontalScale, verticalScale);
@@ -2275,17 +2275,8 @@ export class AnimatedSpriteChip extends DisplayObjectLeafChip<
       new AnimatedSpriteChipOptions(),
     );
 
-    if (typeof filledOptions.spritesheet === "undefined") {
-      throw new Error("AnimatedSpriteChip requires a spritesheet");
-    }
-    if (typeof filledOptions.spritesheet === "string") {
-      const resolvedSpritesheet = PIXI.Assets.get<PIXI.Spritesheet>(
-        filledOptions.spritesheet,
-      );
-      if (!resolvedSpritesheet)
-        throw new Error(
-          `Cannot find spritesheet for AnimatedSpriteChip "${filledOptions.spritesheet}"`,
-        );
+    if (typeof filledOptions.displayObject === "undefined") {
+      // Create the animated sprite ourselves
 
       if (typeof filledOptions.spritesheet === "undefined") {
         throw new Error("AnimatedSpriteChip requires a spritesheet");
