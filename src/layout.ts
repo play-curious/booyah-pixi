@@ -46,6 +46,80 @@ export interface RenderInfo {
   renderSize: PIXI.IPointData;
 }
 
+export class RootLayoutChipOptions {
+  children: LayoutItemChildChipOptions = [];
+}
+
+export class RootLayoutChip extends booyah.Parallel {
+  private _stackingContainerChip?: StackingContainerChip;
+  private _resizeNeeded?: boolean;
+
+  constructor(options?: Partial<RootLayoutChipOptions>) {
+    const filledOptions = booyah.fillInOptions(
+      options,
+      new RootLayoutChipOptions(),
+    );
+    super(filledOptions.children);
+  }
+
+  protected _onActivate(): void {
+    const stackingContainerChip = new StackingContainerChip({
+      name: "RootLayoutChip.StackingContainerChip",
+      layoutOptions: {
+        canShrink: "both",
+        canGrow: "both",
+      },
+    });
+
+    this._activateChildChip({
+      chip: stackingContainerChip,
+      attribute: "_stackingContainerChip",
+    });
+
+    this._subscribe(this._stackingContainerChip!, "updated", this._onResize);
+    this._subscribe(this.chipContext.pixiAppChip, "didResize", this._onResize);
+
+    this._handleResize();
+  }
+
+  protected _onTick(): void {
+    if (this._resizeNeeded) {
+      this._handleResize();
+      this._resizeNeeded = false;
+    }
+  }
+
+  get contextModification(): booyah.ChipContextResolvable {
+    if (this._stackingContainerChip)
+      return this._stackingContainerChip.contextModification;
+    else return {};
+  }
+
+  private _onResize() {
+    this._resizeNeeded = true;
+  }
+
+  private _handleResize() {
+    this.emit("willResize");
+
+    if (this._stackingContainerChip) {
+      this._stackingContainerChip.prepareResize({
+        renderSize: this.chipContext.pixiAppChip.renderSize,
+      });
+
+      const screenBounds = Bounds.fromRectangle(
+        this.chipContext.pixiApplication!.screen,
+      );
+      this._stackingContainerChip.resize({
+        absoluteBounds: screenBounds,
+        localBounds: screenBounds,
+      });
+    }
+
+    this.emit("didResize");
+  }
+}
+
 export interface LayoutValueResolvableContext<LayoutOptionsType>
   extends RenderInfo {
   layoutOptions: Partial<
@@ -119,7 +193,7 @@ export class LayoutOptions {
   /**
    * Scale the horizontal and vertical axes by the same amount?
    *
-   * - `no` - the axes scale seperately
+   * - `none` - the axes scale seperately
    * - `min` - the min value is used, the item is fully within the box, with blank areas
    * - `max - the max vale is used, the item may overflow the box
    * */
@@ -962,6 +1036,33 @@ export abstract class DisplayObjectChip<
       }
     }
 
+    // Possibly preserve aspect ratio
+    if (
+      (finalInnerWidth !== idealInnerWidth ||
+        finalInnerHeight !== idealInnerHeight) &&
+      this._options.layoutOptions.keepAspectRatio !== "none"
+    ) {
+      let horizontalScale = finalInnerWidth / idealInnerWidth;
+      let verticalScale = finalInnerHeight / idealInnerHeight;
+
+      if (this._options.layoutOptions.keepAspectRatio === "min") {
+        const minScale = Math.min(horizontalScale, verticalScale);
+        horizontalScale = minScale;
+        verticalScale = minScale;
+      } else if (this._options.layoutOptions.keepAspectRatio === "max") {
+        const maxScale = Math.max(horizontalScale, verticalScale);
+        horizontalScale = maxScale;
+        verticalScale = maxScale;
+      } else {
+        throw new Error(
+          `Unknown value for keepAspectRatio: "${this._options.layoutOptions.keepAspectRatio}"`,
+        );
+      }
+
+      finalInnerWidth = horizontalScale * idealInnerWidth;
+      finalInnerHeight = verticalScale * idealInnerHeight;
+    }
+
     if (this._parseLayoutProperty("canScale")) {
       this._setInnerSize(finalInnerWidth, finalInnerHeight);
     }
@@ -1097,7 +1198,12 @@ export abstract class DisplayObjectChip<
   /** Recalculate the anchor position based on `getLocalBounds()`  */
   updateAnchorPosition() {
     const pixiLocalBounds = this._options.displayObject.getLocalBounds();
-    this.anchorPosition = new PIXI.Point(pixiLocalBounds.x, pixiLocalBounds.y);
+    const pixiPivot = this._options.displayObject.pivot.clone();
+
+    this.anchorPosition = new PIXI.Point(
+      pixiLocalBounds.x - pixiPivot.x,
+      pixiLocalBounds.y - pixiPivot.y,
+    );
   }
 
   get anchorPosition() {
@@ -1112,8 +1218,7 @@ export abstract class DisplayObjectChip<
   get contextModification() {
     if (!this._options.makeOffsetContainer) return super.contextModification;
 
-    const parentValue = super.contextModification;
-    return Object.assign({}, parentValue, {
+    return Object.assign({}, super.contextModification, {
       container: this._offsetContainer,
     });
   }
@@ -1213,6 +1318,12 @@ export class DisplayObjectLeafChip<
       this._parseLayoutPropertyAsOptionalNumber("idealHeight") ??
       this.naturalOuterHeight;
   }
+
+  get contextModification(): booyah.ChipContextResolvable {
+    return Object.assign({}, super.contextModification, {
+      layoutItem: undefined,
+    });
+  }
 }
 
 export class SpriteChipLayoutOptions extends DisplayObjectLeafChipLayoutOptions {
@@ -1258,6 +1369,26 @@ export class SpriteChip extends DisplayObjectLeafChip<PIXI.Sprite> {
     }
 
     super(filledOptions);
+  }
+
+  get texture(): PIXI.Texture {
+    return this.displayObject.texture;
+  }
+
+  set texture(value: PIXI.Texture | string) {
+    if (value === this.displayObject.texture) return;
+
+    if (typeof value === "string") {
+      const resolvedTexture = PIXI.Assets.get<PIXI.Texture>(value);
+      if (!resolvedTexture)
+        throw new Error(`Cannot find texture asset "${value}"`);
+
+      this.displayObject.texture = resolvedTexture;
+    } else {
+      this.displayObject.texture = value;
+    }
+
+    this.updateNaturalInnerSize();
   }
 }
 
@@ -1378,6 +1509,18 @@ export class TextChip extends DisplayObjectLeafChip<PIXI.Text> {
 
     super(filledOptions);
   }
+
+  get text() {
+    return this.displayObject.text;
+  }
+
+  set text(value: string) {
+    if (value === this.displayObject.text) return;
+
+    this.displayObject.text = value;
+    this.updateNaturalInnerSize();
+    this.requestResize();
+  }
 }
 
 export class ContainerLeafChipLayoutOptions extends DisplayObjectLeafChipLayoutOptions {
@@ -1405,9 +1548,9 @@ export class ContainerLeafChip extends DisplayObjectLeafChip<PIXI.Container> {
   }
 
   get contextModification(): booyah.ChipContextResolvable {
-    return {
+    return Object.assign({}, super.contextModification, {
       container: this.displayObject,
-    };
+    });
   }
 }
 
@@ -1609,10 +1752,10 @@ export abstract class ContainerBase<
   }
 
   get contextModification(): booyah.ChipContextResolvable {
-    return {
+    return Object.assign({}, super.contextModification, {
       layoutItem: this,
       container: this._options.displayObject,
-    };
+    });
   }
 
   aggregateChildValues(

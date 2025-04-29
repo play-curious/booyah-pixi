@@ -11,15 +11,15 @@ export class PixiAppChipOptions {
 
   appOptions?: Partial<PIXI.IApplicationOptions & PIXI.IRendererOptions>;
 
-  /** If true, set up a container to handle layout */
-  addContainerChip = false;
+  /** If true, set up a root layout */
+  addRootLayout = false;
 }
 
 export class PixiAppChip extends booyah.Composite {
   private readonly _options: PixiAppChipOptions;
 
   private _pixiApplication?: PIXI.Application;
-  private _stackingContainerChip?: layout.StackingContainerChip;
+  private _rootLayoutChip: layout.RootLayoutChip;
   private _resizeNeeded?: boolean;
 
   constructor(options?: Partial<PixiAppChipOptions>) {
@@ -38,6 +38,8 @@ export class PixiAppChip extends booyah.Composite {
     }
 
     this._pixiApplication = new PIXI.Application(appOptions);
+
+    // Optionally setup debugging support for PIXI browser extensions
     if (process.env.NODE_ENV === "development") {
       // @ts-ignore
       globalThis.__PIXI_APP__ = this._pixiApplication;
@@ -48,24 +50,15 @@ export class PixiAppChip extends booyah.Composite {
       parent.appendChild(this._pixiApplication.view as unknown as Node);
     }
 
-    if (this._options.addContainerChip) {
-      const stackingContainerChip = new layout.StackingContainerChip({
-        name: "pixiAppRoot",
-        layoutOptions: {
-          canShrink: "both",
-          canGrow: "both",
-        },
-      });
-      this._activateChildChip(stackingContainerChip, {
+    if (this._options.addRootLayout) {
+      this._activateChildChip(new layout.RootLayoutChip(), {
         context: {
           pixiAppChip: this,
           pixiApplication: this._pixiApplication,
           container: this._pixiApplication.stage,
         },
-        attribute: "_stackingContainerChip",
+        attribute: "_rootLayoutChip",
       });
-
-      this._subscribe(this._stackingContainerChip!, "updated", this._onResize);
     }
 
     // If PIXI handles resizing, listen to that event. Otherwise listen to the window
@@ -74,8 +67,6 @@ export class PixiAppChip extends booyah.Composite {
     } else {
       this._subscribe(window, "resize", this._onResize);
     }
-
-    this._handleResize();
   }
 
   protected _onTick(): void {
@@ -92,11 +83,11 @@ export class PixiAppChip extends booyah.Composite {
   }
 
   get contextModification(): booyah.ChipContextResolvable {
-    if (this._stackingContainerChip) {
+    if (this._rootLayoutChip) {
       return {
         pixiAppChip: this,
         pixiApplication: this._pixiApplication,
-        ...this._stackingContainerChip.contextModification,
+        ...this._rootLayoutChip.contextModification,
       };
     } else {
       return {
@@ -112,22 +103,6 @@ export class PixiAppChip extends booyah.Composite {
   }
 
   private _handleResize() {
-    this.emit("willResize");
-
-    if (this._stackingContainerChip) {
-      this._stackingContainerChip.prepareResize({
-        renderSize: this.renderSize,
-      });
-
-      const screenBounds = layout.Bounds.fromRectangle(
-        this._pixiApplication!.screen,
-      );
-      this._stackingContainerChip.resize({
-        absoluteBounds: screenBounds,
-        localBounds: screenBounds,
-      });
-    }
-
     this.emit("didResize");
   }
 
