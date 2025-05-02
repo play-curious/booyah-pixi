@@ -1927,8 +1927,8 @@ export class DirectionalContainerChip extends ContainerBase<DirectionalContainer
       }
     }
 
-    const innerLocalBounds = this._lastResizeInfo!.localBounds;
-    const innerAbsoluteBounds = this._lastResizeInfo!.absoluteBounds;
+    const innerLocalBounds = this._childResizeInfo!.localBounds;
+    const innerAbsoluteBounds = this._childResizeInfo!.absoluteBounds;
 
     // Do a second pass to bring elements to their ideal lengths
     let availableExtraSpace = innerLocalBounds[lengthProp]! - minUsedSpace;
