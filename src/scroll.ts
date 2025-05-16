@@ -71,6 +71,8 @@ export class Scrollbox extends layout.ContainerBase<
   private _scrollbarAnchor?: PIXI.Container;
   private _scrollbarBackground?: PIXI.NineSlicePlane;
   private _scrollbarHandle?: PIXI.NineSlicePlane;
+  private _dragBackground?: PIXI.Sprite;
+  private _mask?: PIXI.Sprite;
 
   /**
    * Can be provided with an existing container
@@ -88,10 +90,8 @@ export class Scrollbox extends layout.ContainerBase<
     const dynamicOptionsResolver = new resolvable.Resolver(filledOptions);
 
     // // Set the ideal size based on the given box sizes
-    filledOptions.layoutOptions.idealWidth = () =>
-      this._resolveDynamicOption("boxWidth") as number;
-    filledOptions.layoutOptions.idealHeight = () =>
-      this._resolveDynamicOption("boxHeight") as number;
+    filledOptions.layoutOptions.idealWidth = () => this.boxWidth;
+    filledOptions.layoutOptions.idealHeight = () => this.boxHeight;
 
     super(filledOptions);
 
@@ -104,12 +104,6 @@ export class Scrollbox extends layout.ContainerBase<
 
     this._isDragging = false;
 
-    // this._optionsResolver.setResovableCollection(this.resolvableOptions);
-    // this._optionsResolver.resolve({
-    //   renderSize: this.chipContext.pixiAppChip.renderSize,
-    // });
-    // this._options = this._optionsResolver.getResolvedCollection();
-
     this.displayObject.eventMode = "static";
     this._subscribe(this.displayObject, "globalpointermove", this._onMove);
     this._subscribe(this.displayObject, "pointerup", this._onUp);
@@ -120,21 +114,17 @@ export class Scrollbox extends layout.ContainerBase<
     if (this._options.content) this._content.addChild(this._options.content);
 
     if (this._options.dragScroll) {
-      const dragBackground = new PIXI.Sprite(PIXI.Texture.WHITE);
-      dragBackground.eventMode = "static";
-      dragBackground.alpha = 0;
+      this._dragBackground = new PIXI.Sprite(PIXI.Texture.WHITE);
+      this._dragBackground.eventMode = "static";
+      this._dragBackground.alpha = 0;
 
-      this._subscribe(dragBackground, "pointerdown", this._dragDown);
+      this._subscribe(this._dragBackground, "pointerdown", this._dragDown);
       this._subscribe(this._content, "pointerdown", this._dragDown);
       this._content.eventMode = "static";
 
       this._activateChildChip({
         chip: new layout.SpriteChip({
-          displayObject: dragBackground,
-          properties: {
-            width: () => this.boxWidth,
-            height: () => this.boxHeight,
-          },
+          displayObject: this._dragBackground,
           addToParentLayoutItem: false,
         }),
         context: { container: this.displayObject },
@@ -143,15 +133,11 @@ export class Scrollbox extends layout.ContainerBase<
 
     this.displayObject.addChild(this._content);
 
-    const mask = new PIXI.Sprite(PIXI.Texture.WHITE);
-    this._content.mask = mask;
+    this._mask = new PIXI.Sprite(PIXI.Texture.WHITE);
+    this._content.mask = this._mask;
     this._activateChildChip({
       chip: new layout.SpriteChip({
-        displayObject: mask,
-        properties: {
-          width: () => this.boxWidth,
-          height: () => this.boxHeight,
-        },
+        displayObject: this._mask,
         addToParentLayoutItem: false,
       }),
       context: { container: this.displayObject },
@@ -183,7 +169,7 @@ export class Scrollbox extends layout.ContainerBase<
       this._scrollbarHandle.tint = this._options.scrollbarHandle;
     }
 
-    let anchorProperties;
+    // let anchorProperties;
     let backroundProperties;
     let handleProperties;
 
@@ -197,7 +183,7 @@ export class Scrollbox extends layout.ContainerBase<
           height: this._options.scrollbarWidth,
           y: this._options.scrollbarOffset,
         };
-        anchorProperties = { y: () => this.boxHeight };
+        // anchorProperties = { y: () => this.boxHeight };
         break;
       }
       case "vertical": {
@@ -209,7 +195,7 @@ export class Scrollbox extends layout.ContainerBase<
           x: this._options.scrollbarOffset,
           width: this._options.scrollbarWidth,
         };
-        anchorProperties = { x: () => this.boxWidth };
+        // anchorProperties = { x: () => this.boxWidth };
         break;
       }
     }
@@ -217,7 +203,7 @@ export class Scrollbox extends layout.ContainerBase<
     this._activateChildChip({
       chip: new layout.ContainerLeafChip({
         displayObject: this._scrollbarAnchor,
-        properties: anchorProperties,
+        // properties: anchorProperties,
         addToParentLayoutItem: false,
       }),
       context: { container: this.displayObject },
@@ -250,8 +236,8 @@ export class Scrollbox extends layout.ContainerBase<
 
     this.refreshContents();
 
-    // TODO: check that resize event is working
-    this._subscribe(this, "didResize", this.refreshContents);
+    // // TODO: check that resize event is working
+    // this._subscribe(this, "didResize", this.refreshContents);
 
     // this._subscribe(this.chipContext.pixiAppChip, "resize", () => {
     //   this._optionsResolver.setResovableCollection(this.resolvableOptions);
@@ -275,7 +261,7 @@ export class Scrollbox extends layout.ContainerBase<
     this._dynamicOptionsResolver.invalidate();
   }
 
-  protected _onResize(): void {
+  protected _resizeChildren(): void {
     // Provide unlimited bounds in the direction of scroll
     const childAbsoluteBounds = new layout.Bounds(
       this.lastResizeInfo!.absoluteBounds.x,
@@ -296,8 +282,24 @@ export class Scrollbox extends layout.ContainerBase<
       localBounds: this.calculateInnerBounds(childLocalBounds),
     };
     for (const child of this._childLayoutItems!) child.resize(childResizeInfo);
+  }
 
-    super._onResize();
+  protected _onResize(): void {
+    this._dragBackground.width = this.boxWidth;
+    this._dragBackground.height = this.boxHeight;
+    this._mask.width = this.boxWidth;
+    this._mask.height = this.boxHeight;
+
+    if (this._options.direction == "horizontal") {
+      this._scrollbarBackground.y = this.boxHeight;
+      this._scrollbarAnchor.y = this.boxHeight;
+    } else {
+      this._scrollbarBackground.x = this.boxWidth;
+      this._scrollbarAnchor.x = this.boxWidth;
+    }
+
+    this.scrollTo(this.content!.position);
+    this._updateScrollbars();
   }
 
   /** Call when container contents have changed  */
@@ -327,6 +329,7 @@ export class Scrollbox extends layout.ContainerBase<
     );
   }
 
+  /** Update scrollbar sizes, but not position */
   private _updateScrollbars() {
     let boxSize: number;
     let contentSize: number;
