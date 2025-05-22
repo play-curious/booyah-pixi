@@ -71,11 +71,13 @@ export class PixiAppChip extends booyah.Composite {
 
   protected _onTick(): void {
     if (this._resizeNeeded) {
-      this._handleResize();
+      this.emit("resizeNeeded");
       this._resizeNeeded = false;
     }
 
+    this.emit("willRender");
     this._pixiApplication!.render();
+    this.emit("didRender");
   }
 
   protected _onTerminate(): void {
@@ -100,10 +102,6 @@ export class PixiAppChip extends booyah.Composite {
 
   private _onResize() {
     this._resizeNeeded = true;
-  }
-
-  private _handleResize() {
-    this.emit("didResize");
   }
 
   get renderSize() {

@@ -76,17 +76,30 @@ export class RootLayoutChip extends booyah.Parallel {
       attribute: "_stackingContainerChip",
     });
 
-    this._subscribe(this._stackingContainerChip!, "updated", this._onResize);
-    this._subscribe(this.chipContext.pixiAppChip, "didResize", this._onResize);
+    this._subscribe(
+      this._stackingContainerChip!,
+      "updated",
+      this._onResizeNeeded,
+    );
+    this._subscribe(
+      this.chipContext.pixiAppChip,
+      "resizeNeeded",
+      this._onResizeNeeded,
+    );
+    this._subscribe(
+      this.chipContext.pixiAppChip,
+      "willRender",
+      this._onWillRender,
+    );
 
     this._handleResize();
   }
 
-  protected _onTick(): void {
-    if (this._resizeNeeded) {
-      this._handleResize();
-      this._resizeNeeded = false;
-    }
+  protected _onWillRender(): void {
+    if (!this._resizeNeeded) return;
+
+    this._handleResize();
+    this._resizeNeeded = false;
   }
 
   get contextModification(): booyah.ChipContextResolvable {
@@ -95,18 +108,18 @@ export class RootLayoutChip extends booyah.Parallel {
     else return {};
   }
 
-  private _onResize() {
+  private _onResizeNeeded() {
     this._resizeNeeded = true;
   }
 
   private _handleResize() {
-    this.emit("willResize");
+    this._resizeNeeded = false;
 
+    this.emit("willResize");
     if (this._stackingContainerChip) {
       this._stackingContainerChip.prepareResize({
         renderSize: this.chipContext.pixiAppChip.renderSize,
       });
-
       const screenBounds = Bounds.fromRectangle(
         this.chipContext.pixiApplication!.screen,
       );
@@ -115,8 +128,11 @@ export class RootLayoutChip extends booyah.Parallel {
         localBounds: screenBounds,
       });
     }
-
     this.emit("didResize");
+  }
+
+  get resizeNeeded() {
+    return this._resizeNeeded;
   }
 }
 
@@ -939,7 +955,7 @@ export abstract class DisplayObjectChip<
       // Call _updateProperties() directly
       this._subscribe(
         this.pixiAppChip,
-        "didResize",
+        "resizeNeeded",
         this._updateDynamicProperties,
       );
     }
