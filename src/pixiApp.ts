@@ -1,5 +1,5 @@
-import * as PIXI from "pixi.js";
 import * as booyah from "booyah";
+import * as PIXI from "pixi.js";
 import * as _ from "underscore";
 
 import * as layout from "./layout";
@@ -8,7 +8,6 @@ export class PixiAppChipOptions {
   /* Provide either a parent element or a canvas */
   parentElement?: HTMLElement;
   canvas?: PIXI.ICanvas;
-
   appOptions?: Partial<PIXI.IApplicationOptions & PIXI.IRendererOptions>;
 
   /** If true, set up a root layout */
@@ -67,6 +66,8 @@ export class PixiAppChip extends booyah.Composite {
     } else {
       this._subscribe(window, "resize", this._onResize);
     }
+
+    this._handleResize();
   }
 
   protected _onTick(): void {
@@ -75,6 +76,7 @@ export class PixiAppChip extends booyah.Composite {
       this._resizeNeeded = false;
     }
 
+    this._pixiApplication.renderer.reset();
     this._pixiApplication!.render();
   }
 
@@ -103,6 +105,11 @@ export class PixiAppChip extends booyah.Composite {
   }
 
   private _handleResize() {
+    console.log(this._pixiApplication.renderer.width);
+    this._pixiApplication!.renderer.resize(
+      document.getElementById("render-canvas").clientWidth,
+      document.getElementById("render-canvas").clientHeight,
+    );
     this.emit("didResize");
   }
 
