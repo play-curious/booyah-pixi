@@ -37,8 +37,5 @@
     "booyah": ">= 4",
     "pixi.js": ">= 6 < 8"
   },
-  "author": "Jesse Himmelstein",
-  "resolutions": {
-    "booyah": "portal:/Users/playcurious/Samuel Niccoli/playcurious/evasiv/evasiv-repo/booyah"
-  }
+  "author": "Jesse Himmelstein"
 }

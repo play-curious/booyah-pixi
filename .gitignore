@@ -1,5 +1,6 @@
 .DS_Store/
 .idea/
 .vscode/
+.yarn/
 node_modules/
 dist/
