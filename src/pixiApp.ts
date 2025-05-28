@@ -107,8 +107,8 @@ export class PixiAppChip extends booyah.Composite {
   private _handleResize() {
     console.log(this._pixiApplication.renderer.width);
     this._pixiApplication!.renderer.resize(
-      document.getElementById("render-canvas").clientWidth,
-      document.getElementById("render-canvas").clientHeight,
+      this._pixiApplication.view.width,
+      this._pixiApplication.view.height,
     );
     this.emit("didResize");
   }
