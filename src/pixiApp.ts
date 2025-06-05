@@ -10,6 +10,9 @@ export class PixiAppChipOptions {
   canvas?: PIXI.ICanvas;
   appOptions?: Partial<PIXI.IApplicationOptions & PIXI.IRendererOptions>;
 
+  /** If true reset the renderer state after each render */
+  shouldResetRenderer?: boolean;
+
   /** If true, set up a root layout */
   addRootLayout = false;
 }
@@ -76,7 +79,9 @@ export class PixiAppChip extends booyah.Composite {
       this._resizeNeeded = false;
     }
 
-    this._pixiApplication.renderer.reset();
+    if (this._options.shouldResetRenderer) {
+      this._pixiApplication.renderer.reset();
+    }
     this._pixiApplication!.render();
   }
 
