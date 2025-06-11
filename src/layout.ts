@@ -1058,13 +1058,11 @@ export abstract class DisplayObjectChip<
     return this._offsetContainer;
   }
 
-  /** Recalculate the size of the display object based on `getLocalBounds()`  */
+  /** Recalculate the size of the display object based on its current dimensions */
   updateNaturalInnerSize() {
-    const pixiLocalBounds = this._options.displayObject.getLocalBounds();
-
     this.naturalInnerSize = new PIXI.Point(
-      pixiLocalBounds.width,
-      pixiLocalBounds.height
+      this._options.displayObject.width,
+      this._options.displayObject.height
     );
   }
 
@@ -1073,6 +1071,13 @@ export abstract class DisplayObjectChip<
   }
 
   set naturalInnerSize(value: PIXI.IPointData) {
+    if (
+      this._naturalInnerSize &&
+      value.x === this._naturalInnerSize.x &&
+      value.y === this._naturalInnerSize.y
+    )
+      return;
+
     this._naturalInnerSize = value;
     this.requestResize();
   }
@@ -1088,6 +1093,13 @@ export abstract class DisplayObjectChip<
   }
 
   set anchorPosition(value: PIXI.IPointData) {
+    if (
+      this._anchorPosition &&
+      value.x === this._anchorPosition.x &&
+      value.y === this._anchorPosition.y
+    )
+      return;
+
     this._anchorPosition = value;
     this.requestResize();
   }
@@ -1396,7 +1408,6 @@ export class TextChip extends DisplayObjectLeafChip<PIXI.Text> {
 
     this.displayObject.text = value;
     this.updateNaturalInnerSize();
-    this.requestResize();
   }
 }
 
