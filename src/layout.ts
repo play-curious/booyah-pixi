@@ -295,6 +295,8 @@ export abstract class LayoutItemBase<
     this._layoutOptionsResolver.invalidate();
     this._lastRenderInfo = renderInfo;
 
+    this._onBeforePrepareResize();
+
     this._prepareResizeChildren();
     this._cacheLengths();
     this._cacheLengthsChildren();
@@ -427,6 +429,10 @@ export abstract class LayoutItemBase<
   }
 
   protected _prepareResizeChildren() {
+    // no op
+  }
+
+  protected _onBeforePrepareResize() {
     // no op
   }
 
@@ -732,6 +738,7 @@ export class DisplayObjectChipOptions<
   properties?: Partial<
     ResolvablePixiDisplayObject<DisplayObjectType, LayoutOptionsType>
   > = {};
+  onBeforePrepareResize?: (context: ResizeInfo) => unknown;
   onResize?: (
     context: LayoutValueResolvableContext<LayoutOptionsType>
   ) => unknown;
@@ -753,7 +760,7 @@ export class DisplayObjectChipOptions<
 
   /**
    * The height and width of the display object, when scaled to 1.
-   * If not provided, will be calculated by calling `getLocalBounds()`
+   * If not provided, will be calculated by asking PIXI
    * Does not include padding.
    */
   naturalInnerSize?: PIXI.IPointData;
@@ -867,6 +874,12 @@ export abstract class DisplayObjectChip<
     }
 
     super._onTerminate();
+  }
+
+  protected _onPrepareResize(): void {
+    super._onPrepareResize();
+
+    this._options.onBeforePrepareResize?.(this._lastResizeInfo);
   }
 
   protected _determineScaleAndPosition() {
@@ -1061,6 +1074,14 @@ export abstract class DisplayObjectChip<
   /** Recalculate the size of the display object based on its current dimensions */
   updateNaturalInnerSize() {
     this.naturalInnerSize = new PIXI.Point(
+      this._options.displayObject.width,
+      this._options.displayObject.height
+    );
+  }
+
+  /** Update the natural inner size _without_ requesting a resize */
+  protected _updateNaturalInnerSize() {
+    this._naturalInnerSize = new PIXI.Point(
       this._options.displayObject.width,
       this._options.displayObject.height
     );
@@ -1371,17 +1392,25 @@ export class NineSlicePlaneChip extends DisplayObjectLeafChip<PIXI.NineSlicePlan
   }
 }
 
-/** A chip to display a PIXI.Text */
 export class TextChipLayoutOptions extends DisplayObjectLeafChipLayoutOptions {
   keepAspectRatio: KeepAspectRatioValue = "min";
+
+  dynamicStyle?: Partial<PIXI.ITextStyle>;
 }
 
-export class TextChipOptions extends DisplayObjectLeafChipOptions<PIXI.Text> {
+export class TextChipOptions extends DisplayObjectLeafChipOptions<
+  PIXI.Text,
+  TextChipLayoutOptions
+> {
   text?: string;
   style?: Partial<PIXI.ITextStyle> | PIXI.TextStyle;
 }
 
-export class TextChip extends DisplayObjectLeafChip<PIXI.Text> {
+/** A chip to display a PIXI.Text */
+export class TextChip extends DisplayObjectLeafChip<
+  PIXI.Text,
+  TextChipLayoutOptions
+> {
   constructor(options: Partial<TextChipOptions>) {
     const filledOptions = booyah.fillInOptions(options, new TextChipOptions());
     filledOptions.layoutOptions = booyah.fillInOptions(
@@ -1408,6 +1437,28 @@ export class TextChip extends DisplayObjectLeafChip<PIXI.Text> {
 
     this.displayObject.text = value;
     this.updateNaturalInnerSize();
+  }
+
+  protected _onBeforePrepareResize(): void {
+    const resolvableContext: LayoutValueResolvableContext<TextChipLayoutOptions> =
+      {
+        layoutOptions: this.layoutOptions,
+        layoutItem: this,
+        renderSize: this.pixiAppChip.renderSize,
+      };
+
+    const style = this._layoutOptionsResolver.resolve(
+      "dynamicStyle",
+      resolvableContext
+    ) as Partial<PIXI.ITextStyle>;
+    if (style) {
+      this.displayObject.style = style;
+      const metrics = PIXI.TextMetrics.measureText(
+        this.displayObject.text,
+        this.displayObject.style
+      );
+      this._naturalInnerSize = new PIXI.Point(metrics.width, metrics.height);
+    }
   }
 }
 
