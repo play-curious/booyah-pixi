@@ -1,5 +1,5 @@
-import * as PIXI from "pixi.js";
 import * as booyah from "booyah";
+import * as PIXI from "pixi.js";
 import * as _ from "underscore";
 
 import * as pixiApp from "./pixiApp";
@@ -69,6 +69,7 @@ export class RootLayoutChip extends booyah.Parallel {
         canShrink: "both",
         canGrow: "both",
       },
+      addToParentLayoutItem: false,
     });
 
     this._activateChildChip({
