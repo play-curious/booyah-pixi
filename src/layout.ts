@@ -1,5 +1,3 @@
-// import * as booyah from "booyah/dist/booyah";
-// import * as util from "booyah/dist/util";
 import * as PIXI from "pixi.js";
 import * as booyah from "booyah";
 import * as _ from "underscore";
@@ -46,6 +44,96 @@ export type BoundingLayoutProperty = (typeof boundingLayoutProperties)[number];
  * */
 export interface RenderInfo {
   renderSize: PIXI.IPointData;
+}
+
+export class RootLayoutChipOptions {
+  children: LayoutItemChildChipOptions = [];
+}
+
+export class RootLayoutChip extends booyah.Parallel {
+  private _stackingContainerChip?: StackingContainerChip;
+  private _resizeNeeded?: boolean;
+
+  constructor(options?: Partial<RootLayoutChipOptions>) {
+    const filledOptions = booyah.fillInOptions(
+      options,
+      new RootLayoutChipOptions(),
+    );
+    super(filledOptions.children);
+  }
+
+  protected _onActivate(): void {
+    const stackingContainerChip = new StackingContainerChip({
+      name: "RootLayoutChip.StackingContainerChip",
+      layoutOptions: {
+        canShrink: "both",
+        canGrow: "both",
+      },
+    });
+
+    this._activateChildChip({
+      chip: stackingContainerChip,
+      attribute: "_stackingContainerChip",
+    });
+
+    this._subscribe(
+      this._stackingContainerChip!,
+      "updated",
+      this._onResizeNeeded,
+    );
+    this._subscribe(
+      this.chipContext.pixiAppChip,
+      "resizeNeeded",
+      this._onResizeNeeded,
+    );
+    this._subscribe(
+      this.chipContext.pixiAppChip,
+      "willRender",
+      this._onWillRender,
+    );
+
+    this._handleResize();
+  }
+
+  protected _onWillRender(): void {
+    if (!this._resizeNeeded) return;
+
+    this._handleResize();
+    this._resizeNeeded = false;
+  }
+
+  get contextModification(): booyah.ChipContextResolvable {
+    if (this._stackingContainerChip)
+      return this._stackingContainerChip.contextModification;
+    else return {};
+  }
+
+  private _onResizeNeeded() {
+    this._resizeNeeded = true;
+  }
+
+  private _handleResize() {
+    this._resizeNeeded = false;
+
+    this.emit("willResize");
+    if (this._stackingContainerChip) {
+      this._stackingContainerChip.prepareResize({
+        renderSize: this.chipContext.pixiAppChip.renderSize,
+      });
+      const screenBounds = Bounds.fromRectangle(
+        this.chipContext.pixiApplication!.screen,
+      );
+      this._stackingContainerChip.resize({
+        absoluteBounds: screenBounds,
+        localBounds: screenBounds,
+      });
+    }
+    this.emit("didResize");
+  }
+
+  get resizeNeeded() {
+    return this._resizeNeeded;
+  }
 }
 
 export interface LayoutValueResolvableContext<LayoutOptionsType>
@@ -121,7 +209,7 @@ export class LayoutOptions {
   /**
    * Scale the horizontal and vertical axes by the same amount?
    *
-   * - `no` - the axes scale seperately
+   * - `none` - the axes scale seperately
    * - `min` - the min value is used, the item is fully within the box, with blank areas
    * - `max - the max vale is used, the item may overflow the box
    * */
@@ -756,7 +844,7 @@ export class DisplayObjectChipOptions<
    * Create an intermediate container that can be manipulated
    * relative to the position provided by the layout
    * */
-  makeOffsetContainer = true;
+  makeOffsetContainer = false;
 
   /**
    * The height and width of the display object, when scaled to 1.
@@ -770,6 +858,13 @@ export class DisplayObjectChipOptions<
    * If not provided, will be calculated by calling `getLocalBounds()`
    */
   anchorPosition?: PIXI.IPoint;
+
+  /**
+   * Use the PIXI Prepare plugin to make sure the display object is loaded
+   * before adding it.
+   * Mostly useful for animations
+   */
+  prepare = false;
 }
 
 export abstract class DisplayObjectChip<
@@ -788,6 +883,7 @@ export abstract class DisplayObjectChip<
   protected _offsetContainer?: PIXI.Container;
   protected _naturalInnerSize: PIXI.IPointData;
   protected _anchorPosition: PIXI.IPointData;
+  private _wasAdded?: boolean;
 
   constructor(options: OptionsType) {
     super(options);
@@ -835,14 +931,27 @@ export abstract class DisplayObjectChip<
       );
     }
 
-    if (
-      !this._options.hasOwnProperty("addToContainer") ||
-      this._options.addToContainer
-    ) {
+    if (this._options.addToContainer) {
       const containerToAdd = this._options.makeOffsetContainer
         ? this._offsetContainer
         : this._options.displayObject;
-      this._chipContext.container.addChild(containerToAdd);
+
+      if (this._options.prepare) {
+        this._wasAdded = false;
+
+        this._chipContext.pixiApplication.renderer.prepare.upload(
+          this.displayObject,
+          () => {
+            if (this.chipState === "inactive") return;
+
+            this._chipContext.container.addChild(containerToAdd);
+            this._wasAdded = true;
+          },
+        );
+      } else {
+        this._chipContext.container.addChild(containerToAdd);
+        this._wasAdded = true;
+      }
     }
 
     // Optionally participate in the layout
@@ -853,8 +962,8 @@ export abstract class DisplayObjectChip<
       // Call _updateProperties() directly
       this._subscribe(
         this.pixiAppChip,
-        "didResize",
-        this._updateDynamicProperties
+        "resizeNeeded",
+        this._updateDynamicProperties,
       );
     }
   }
@@ -864,13 +973,11 @@ export abstract class DisplayObjectChip<
       this.parentLayoutItem.removeChildLayoutItem(this);
     }
 
-    if (
-      !this._options.hasOwnProperty("addToContainer") ||
-      this._options.addToContainer
-    ) {
+    if (this._wasAdded) {
       this._chipContext.container.removeChild(
         this._offsetContainer || this._options.displayObject
       );
+      this._wasAdded = false;
     }
 
     super._onTerminate();
@@ -956,6 +1063,33 @@ export abstract class DisplayObjectChip<
           finalInnerHeight = innerBounds.height!;
         }
       }
+    }
+
+    // Possibly preserve aspect ratio
+    if (
+      (finalInnerWidth !== idealInnerWidth ||
+        finalInnerHeight !== idealInnerHeight) &&
+      this._options.layoutOptions.keepAspectRatio !== "none"
+    ) {
+      let horizontalScale = finalInnerWidth / idealInnerWidth;
+      let verticalScale = finalInnerHeight / idealInnerHeight;
+
+      if (this._options.layoutOptions.keepAspectRatio === "min") {
+        const minScale = Math.min(horizontalScale, verticalScale);
+        horizontalScale = minScale;
+        verticalScale = minScale;
+      } else if (this._options.layoutOptions.keepAspectRatio === "max") {
+        const maxScale = Math.max(horizontalScale, verticalScale);
+        horizontalScale = maxScale;
+        verticalScale = maxScale;
+      } else {
+        throw new Error(
+          `Unknown value for keepAspectRatio: "${this._options.layoutOptions.keepAspectRatio}"`,
+        );
+      }
+
+      finalInnerWidth = horizontalScale * idealInnerWidth;
+      finalInnerHeight = verticalScale * idealInnerHeight;
     }
 
     if (this._parseLayoutProperty("canScale")) {
@@ -1106,7 +1240,12 @@ export abstract class DisplayObjectChip<
   /** Recalculate the anchor position based on `getLocalBounds()`  */
   updateAnchorPosition() {
     const pixiLocalBounds = this._options.displayObject.getLocalBounds();
-    this.anchorPosition = new PIXI.Point(pixiLocalBounds.x, pixiLocalBounds.y);
+    const pixiPivot = this._options.displayObject.pivot.clone();
+
+    this.anchorPosition = new PIXI.Point(
+      pixiLocalBounds.x - pixiPivot.x,
+      pixiLocalBounds.y - pixiPivot.y,
+    );
   }
 
   get anchorPosition() {
@@ -1299,6 +1438,7 @@ export class SpriteChip extends DisplayObjectLeafChip<PIXI.Sprite> {
     }
 
     this.updateNaturalInnerSize();
+    this.requestResize();
   }
 }
 
@@ -1437,6 +1577,8 @@ export class TextChip extends DisplayObjectLeafChip<
 
     this.displayObject.text = value;
     this.updateNaturalInnerSize();
+        this.requestResize();
+
   }
 
   protected _onBeforePrepareResize(): void {
@@ -2187,14 +2329,13 @@ export class DirectionalContainerChip extends ContainerBase<DirectionalContainer
   - frameChange(currentFrame: number) - When frame changes 
 */
 export class AnimatedSpriteChipOptions extends DisplayObjectLeafChipOptions<PIXI.AnimatedSprite> {
-  spritesheet!: PIXI.Spritesheet | string;
+  spritesheet?: PIXI.Spritesheet | string;
   behaviorOnComplete: "loop" | "remove" | "keepLastFrame" = "remove";
   behaviorOnStart: "play" | "stop" = "play";
   animationName?: string;
   // If provided, will calculate the animation speed to achieve this number of frames-per-second
   fps?: number;
   startingFrame?: number;
-  prepare?: boolean;
 }
 
 export class AnimatedSpriteChip extends DisplayObjectLeafChip<
@@ -2204,10 +2345,10 @@ export class AnimatedSpriteChip extends DisplayObjectLeafChip<
 > {
   // private readonly _options: AnimatedSpriteChipOptions;
 
-  private _animatedSprite?: PIXI.AnimatedSprite;
+  // private _animatedSprite?: PIXI.AnimatedSprite;
   private _wasPlaying?: boolean;
-  private _wasAdded?: boolean;
-  private _propertiesToUpdateOnResize?: Array<keyof PIXI.AnimatedSprite>;
+  // private _wasAdded?: boolean;
+  // private _propertiesToUpdateOnResize?: Array<keyof PIXI.AnimatedSprite>;
 
   constructor(options?: Partial<AnimatedSpriteChipOptions>) {
     const filledOptions = booyah.fillInOptions(
@@ -2248,34 +2389,50 @@ export class AnimatedSpriteChip extends DisplayObjectLeafChip<
         throw new Error(
           `Can't find animation "${this._options.animationName}" in spritesheet`
         );
-      }
-
-      if (spritesheet.linkedSheets.length === 0) {
-        // PIXI will have loaded the textures directly into the spritesheet object
-        textures = spritesheet.animations[this._options.animationName];
-      } else {
-        // Assemble textures from the linked sheets
-        const allSheets = [spritesheet, ...spritesheet.linkedSheets];
-        textures = spritesheet.data.animations![
-          this._options.animationName
-        ].map((imageName) => {
-          // Linear search for the texture
-          for (const sheet of allSheets) {
-            if (imageName in sheet.textures) return sheet.textures[imageName];
-          }
-
+        if (!resolvedSpritesheet)
           throw new Error(
-            `Cannot find image "${imageName}" needed for animation "${this._options.animationName}"`
+            `Cannot find spritesheet for AnimatedSpriteChip "${filledOptions.spritesheet}"`,
           );
-        });
-      }
-    } else {
-      // Take all the textures in the sheet
-      textures = Object.values(spritesheet.textures);
-    }
 
-    // Don't have the sprite auto-update
-    this._animatedSprite = new PIXI.AnimatedSprite(textures, false);
+        filledOptions.spritesheet = resolvedSpritesheet;
+      }
+
+      // This must be a Spritesheet now
+      const spritesheet = filledOptions.spritesheet as PIXI.Spritesheet;
+
+      let textures: PIXI.Texture[];
+      if (filledOptions.animationName) {
+        // Use the specified animation
+        if (!_.has(spritesheet.data.animations, filledOptions.animationName)) {
+          throw new Error(
+
+            `Can't find animation "${filledOptions.animationName}" in spritesheet`,
+          );
+        }
+
+        if (spritesheet.linkedSheets.length === 0) {
+          // PIXI will have loaded the textures directly into the spritesheet object
+          textures = spritesheet.animations[filledOptions.animationName];
+        } else {
+          // Assemble textures from the linked sheets
+          const allSheets = [spritesheet, ...spritesheet.linkedSheets];
+          textures = spritesheet.data.animations![
+            filledOptions.animationName
+          ].map((imageName) => {
+            // Linear search for the texture
+            for (const sheet of allSheets) {
+              if (imageName in sheet.textures) return sheet.textures[imageName];
+            }
+
+            throw new Error(
+              `Cannot find image "${imageName}" needed for animation "${this._options.animationName}"`,
+            );
+          });
+        }
+      } else {
+        // Take all the textures in the sheet
+        textures = Object.values(spritesheet.textures);
+      }
 
     // If requested, use the PIXI Prepare plugin to make sure the animation is loaded before adding it to the stage
     if (this._options.prepare) {
@@ -2292,51 +2449,50 @@ export class AnimatedSpriteChip extends DisplayObjectLeafChip<
     } else {
       this._chipContext.container.addChild(this._animatedSprite);
       this._wasAdded = true;
+
     }
 
-    this._chipContext.container.addChild(this._animatedSprite);
-
-    if (this._options.behaviorOnComplete == "loop") {
-      this._animatedSprite.loop = true;
-    } else if (this._options.behaviorOnComplete == "keepLastFrame") {
+    if (filledOptions.behaviorOnComplete == "loop") {
+      filledOptions.displayObject.loop = true;
+    } else if (filledOptions.behaviorOnComplete == "keepLastFrame") {
       // PIXI.AnimatedSprite loops by default
-      this._animatedSprite.loop = false;
-    } else if (this._options.behaviorOnComplete == "remove") {
+      filledOptions.displayObject.loop = false;
+    } else if (filledOptions.behaviorOnComplete == "remove") {
       // PIXI.AnimatedSprite loops by default
-      this._animatedSprite.loop = false;
+      filledOptions.displayObject.loop = false;
     }
 
-    if (typeof this._options.fps !== "undefined") {
-      this._animatedSprite.animationSpeed = this._options.fps / 1000;
+    if (typeof filledOptions.fps !== "undefined") {
+      filledOptions.displayObject.animationSpeed = filledOptions.fps / 1000;
     }
+
+    super(filledOptions);
+  }
+
+  protected _onActivate(): void {
+    super._onActivate();
+
+    this._wasPlaying = false;
 
     // Setup event handlers
-    this._animatedSprite.onFrameChange = this._onFrameChange.bind(this);
-    this._animatedSprite.onLoop = this._onLoop.bind(this);
-    this._animatedSprite.onComplete = this._onComplete.bind(this);
+    this.displayObject.onFrameChange = this._onFrameChange.bind(this);
+    this.displayObject.onLoop = this._onLoop.bind(this);
+    this.displayObject.onComplete = this._onComplete.bind(this);
 
     this.restart();
   }
 
   _onTick() {
-    this._animatedSprite!.update(this._lastTickInfo.timeSinceLastTick);
+    this.displayObject.update(this._lastTickInfo.timeSinceLastTick);
   }
 
   protected _onPause(): void {
-    this._wasPlaying = this._animatedSprite!.playing;
-    this._animatedSprite!.stop();
+    this._wasPlaying = this.displayObject.playing;
+    this.displayObject.stop();
   }
 
   protected _onResume(): void {
-    if (this._wasPlaying) this._animatedSprite!.play();
-  }
-
-  _onTerminate() {
-    if (this._wasAdded) {
-      this._chipContext.container.removeChild(this._animatedSprite);
-      this._wasAdded = false;
-    }
-    delete this._animatedSprite;
+    if (this._wasPlaying) this.displayObject.play();
   }
 
   private _onComplete() {
@@ -2356,7 +2512,7 @@ export class AnimatedSpriteChip extends DisplayObjectLeafChip<
   }
 
   get animatedSprite() {
-    return this._animatedSprite;
+    return this.displayObject;
   }
 
   get pixiAppChip() {
@@ -2368,10 +2524,10 @@ export class AnimatedSpriteChip extends DisplayObjectLeafChip<
    * If the behaviorOnStart is set to play, will do so
    */
   restart() {
-    this._animatedSprite!.gotoAndStop(this._options.startingFrame ?? 0);
+    this.displayObject.gotoAndStop(this._options.startingFrame ?? 0);
 
     if (this._options.behaviorOnStart === "play") {
-      this._animatedSprite!.play();
+      this.displayObject.play();
     }
   }
 }
