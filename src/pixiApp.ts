@@ -11,15 +11,15 @@ export class PixiAppChipOptions {
 
   appOptions?: Partial<PIXI.IApplicationOptions & PIXI.IRendererOptions>;
 
-  /** If true, set up a root layout */
-  addRootLayout = false;
+  /** If true, set up a container to handle layout */
+  addContainerChip = false;
 }
 
 export class PixiAppChip extends booyah.Composite {
   private readonly _options: PixiAppChipOptions;
 
   private _pixiApplication?: PIXI.Application;
-  private _rootLayoutChip: layout.RootLayoutChip;
+  private _stackingContainerChip?: layout.StackingContainerChip;
   private _resizeNeeded?: boolean;
 
   constructor(options?: Partial<PixiAppChipOptions>) {
@@ -38,8 +38,6 @@ export class PixiAppChip extends booyah.Composite {
     }
 
     this._pixiApplication = new PIXI.Application(appOptions);
-
-    // Optionally setup debugging support for PIXI browser extensions
     if (process.env.NODE_ENV === "development") {
       // @ts-ignore
       globalThis.__PIXI_APP__ = this._pixiApplication;
@@ -50,15 +48,24 @@ export class PixiAppChip extends booyah.Composite {
       parent.appendChild(this._pixiApplication.view as unknown as Node);
     }
 
-    if (this._options.addRootLayout) {
-      this._activateChildChip(new layout.RootLayoutChip(), {
+    if (this._options.addContainerChip) {
+      const stackingContainerChip = new layout.StackingContainerChip({
+        name: "pixiAppRoot",
+        layoutOptions: {
+          canShrink: "both",
+          canGrow: "both",
+        },
+      });
+      this._activateChildChip(stackingContainerChip, {
         context: {
           pixiAppChip: this,
           pixiApplication: this._pixiApplication,
           container: this._pixiApplication.stage,
         },
-        attribute: "_rootLayoutChip",
+        attribute: "_stackingContainerChip",
       });
+
+      this._subscribe(this._stackingContainerChip!, "updated", this._onResize);
     }
 
     // If PIXI handles resizing, listen to that event. Otherwise listen to the window
@@ -67,19 +74,19 @@ export class PixiAppChip extends booyah.Composite {
     } else {
       this._subscribe(window, "resize", this._onResize);
     }
+
+    this._handleResize();
   }
 
   protected _onTick(): void {
     if (this._resizeNeeded) {
-
-      this.emit("resizeNeeded");
+      // Set resize needed to false before calling handleResize(), so
+      // that code in the handleResize() can request a new resize
       this._resizeNeeded = false;
       this._handleResize();
     }
 
-    this.emit("willRender");
     this._pixiApplication!.render();
-    this.emit("didRender");
   }
 
   protected _onTerminate(): void {
@@ -87,11 +94,11 @@ export class PixiAppChip extends booyah.Composite {
   }
 
   get contextModification(): booyah.ChipContextResolvable {
-    if (this._rootLayoutChip) {
+    if (this._stackingContainerChip) {
       return {
         pixiAppChip: this,
         pixiApplication: this._pixiApplication,
-        ...this._rootLayoutChip.contextModification,
+        ...this._stackingContainerChip.contextModification,
       };
     } else {
       return {
@@ -105,6 +112,27 @@ export class PixiAppChip extends booyah.Composite {
   private _onResize() {
     this._resizeNeeded = true;
   }
+
+  private _handleResize() {
+    this.emit("willResize");
+
+    if (this._stackingContainerChip) {
+      this._stackingContainerChip.prepareResize({
+        renderSize: this.renderSize,
+      });
+
+      const screenBounds = layout.Bounds.fromRectangle(
+        this._pixiApplication!.screen
+      );
+      this._stackingContainerChip.resize({
+        absoluteBounds: screenBounds,
+        localBounds: screenBounds,
+      });
+    }
+
+    this.emit("didResize");
+  }
+
   get renderSize() {
     const renderer = this._pixiApplication!.renderer;
     return new PIXI.Point(renderer.width, renderer.height);
