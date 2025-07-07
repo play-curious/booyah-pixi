@@ -236,7 +236,7 @@ export class Bounds {
     public readonly x: number,
     public readonly y: number,
     public readonly width?: number,
-    public readonly height?: number,
+    public readonly height?: number
   ) {}
 
   isBoundedHorizontally() {
@@ -355,11 +355,11 @@ export abstract class LayoutItemBase<
   constructor(options?: Partial<OptionsType>) {
     const filledOptions = booyah.fillInOptions(
       options,
-      new LayoutItemBaseOptions(),
+      new LayoutItemBaseOptions()
     );
     filledOptions.layoutOptions = booyah.fillInOptions(
       filledOptions.layoutOptions,
-      new LayoutOptions() as LayoutOptionsType,
+      new LayoutOptions() as LayoutOptionsType
     );
     super(filledOptions.children, { terminateOnCompletion: false });
 
@@ -382,6 +382,8 @@ export abstract class LayoutItemBase<
   prepareResize(renderInfo: RenderInfo): void {
     this._layoutOptionsResolver.invalidate();
     this._lastRenderInfo = renderInfo;
+
+    this._onBeforePrepareResize();
 
     this._prepareResizeChildren();
     this._cacheLengths();
@@ -518,6 +520,10 @@ export abstract class LayoutItemBase<
     // no op
   }
 
+  protected _onBeforePrepareResize() {
+    // no op
+  }
+
   protected _onPrepareResize() {
     // no op
   }
@@ -545,7 +551,7 @@ export abstract class LayoutItemBase<
         this.minWidth > this.idealWidth
       ) {
         console.error(
-          `Bad widths on layout item. Min width ${this.minWidth} > ideal width ${this.idealWidth}`,
+          `Bad widths on layout item. Min width ${this.minWidth} > ideal width ${this.idealWidth}`
         );
       }
 
@@ -554,7 +560,7 @@ export abstract class LayoutItemBase<
         this.minWidth > this.maxWidth
       ) {
         console.error(
-          `Bad widths on layout item. Min width ${this.minWidth} > max width ${this.maxWidth}`,
+          `Bad widths on layout item. Min width ${this.minWidth} > max width ${this.maxWidth}`
         );
       }
     }
@@ -566,7 +572,7 @@ export abstract class LayoutItemBase<
     ) {
       console.error(
         `Bad widths on layout item. Ideal width ${this.idealHeight} > max width ${this.maxWidth}`,
-        this,
+        this
       );
     }
 
@@ -578,7 +584,7 @@ export abstract class LayoutItemBase<
       ) {
         console.error(
           `Bad heights on layout item. Min height ${this.minHeight} > ideal height ${this.idealHeight}`,
-          this,
+          this
         );
       }
 
@@ -588,7 +594,7 @@ export abstract class LayoutItemBase<
       ) {
         console.error(
           `Bad heights on layout item. Min height ${this.minHeight} > max height ${this.maxHeight}`,
-          this,
+          this
         );
       }
 
@@ -600,7 +606,7 @@ export abstract class LayoutItemBase<
       )
         console.error(
           `Insufficient width to layout item. Bounds.width = ${this._lastResizeInfo.absoluteBounds.width} and minWidth = ${this.minWidth}`,
-          this,
+          this
         );
       if (
         typeof this.minHeight !== "undefined" &&
@@ -609,7 +615,7 @@ export abstract class LayoutItemBase<
       )
         console.error(
           `Insufficient height to layout item. Bounds.height = ${this._lastResizeInfo.absoluteBounds.height} and minHeight = ${this.minHeight}`,
-          this,
+          this
         );
     }
 
@@ -619,7 +625,7 @@ export abstract class LayoutItemBase<
       this.idealHeight > this.maxHeight
     ) {
       console.error(
-        `Bad heights on layout item. Ideal height ${this.idealHeight} > max height ${this.maxHeight}`,
+        `Bad heights on layout item. Ideal height ${this.idealHeight} > max height ${this.maxHeight}`
       );
     }
   }
@@ -649,7 +655,7 @@ export abstract class LayoutItemBase<
         : undefined,
       bounds.isBoundedVertically()
         ? bounds.height! - this.paddingTop - this.paddingBottom
-        : undefined,
+        : undefined
     );
   }
 
@@ -729,19 +735,19 @@ export abstract class LayoutItemBase<
   }
 
   protected _parseLayoutPropertyAsOptionalNumber(
-    prop: keyof OptionsType["layoutOptions"],
+    prop: keyof OptionsType["layoutOptions"]
   ): number | undefined {
     const value = this._parseLayoutProperty(prop);
     if (typeof value !== "number" && typeof value !== "undefined") {
       throw new Error(
-        `Cannot parseLayoutPropertyAsNumber the value "${value}"`,
+        `Cannot parseLayoutPropertyAsNumber the value "${value}"`
       );
     }
     return value;
   }
 
   protected _parseLayoutPropertyAsNumber(
-    prop: keyof OptionsType["layoutOptions"],
+    prop: keyof OptionsType["layoutOptions"]
   ): number {
     return this._parseLayoutPropertyAsOptionalNumber(prop) || 0;
   }
@@ -761,11 +767,11 @@ export class SpacerChip<
   constructor(options?: Partial<LayoutItemBaseOptions<LayoutOptionsType>>) {
     const filledOptions = booyah.fillInOptions(
       options,
-      new LayoutItemBaseOptions<LayoutOptionsType>(),
+      new LayoutItemBaseOptions<LayoutOptionsType>()
     );
     filledOptions.layoutOptions = booyah.fillInOptions(
       filledOptions.layoutOptions,
-      new SpacerLayoutOptions() as LayoutOptionsType,
+      new SpacerLayoutOptions() as LayoutOptionsType
     );
     super(filledOptions as OptionsType);
   }
@@ -820,8 +826,9 @@ export class DisplayObjectChipOptions<
   properties?: Partial<
     ResolvablePixiDisplayObject<DisplayObjectType, LayoutOptionsType>
   > = {};
+  onBeforePrepareResize?: (context: ResizeInfo) => unknown;
   onResize?: (
-    context: LayoutValueResolvableContext<LayoutOptionsType>,
+    context: LayoutValueResolvableContext<LayoutOptionsType>
   ) => unknown;
 
   addToParentLayoutItem = true;
@@ -841,7 +848,7 @@ export class DisplayObjectChipOptions<
 
   /**
    * The height and width of the display object, when scaled to 1.
-   * If not provided, will be calculated by calling `getLocalBounds()`
+   * If not provided, will be calculated by asking PIXI
    * Does not include padding.
    */
   naturalInnerSize?: PIXI.IPointData;
@@ -920,7 +927,7 @@ export abstract class DisplayObjectChip<
       this.updateProperty(
         prop,
         // @ts-ignore
-        this._propertiesResolver.resolve(prop, resolvableContext),
+        this._propertiesResolver.resolve(prop, resolvableContext)
       );
     }
 
@@ -968,7 +975,7 @@ export abstract class DisplayObjectChip<
 
     if (this._wasAdded) {
       this._chipContext.container.removeChild(
-        this._offsetContainer || this._options.displayObject,
+        this._offsetContainer || this._options.displayObject
       );
       this._wasAdded = false;
     }
@@ -976,9 +983,15 @@ export abstract class DisplayObjectChip<
     super._onTerminate();
   }
 
+  protected _onPrepareResize(): void {
+    super._onPrepareResize();
+
+    this._options.onBeforePrepareResize?.(this._lastResizeInfo);
+  }
+
   protected _determineScaleAndPosition() {
     const innerBounds = this.calculateInnerBounds(
-      this.lastResizeInfo!.localBounds,
+      this.lastResizeInfo!.localBounds
     );
 
     // Reason in inner sizes, without padding
@@ -1106,7 +1119,7 @@ export abstract class DisplayObjectChip<
       }
     } else if (this._options.layoutOptions.horizontalAlign !== "left") {
       console.error(
-        `DisplayObjectLeafChip: Within unbounded layout, cannot horizontally align as requested: ${this._options.layoutOptions.horizontalAlign}`,
+        `DisplayObjectLeafChip: Within unbounded layout, cannot horizontally align as requested: ${this._options.layoutOptions.horizontalAlign}`
       );
     }
 
@@ -1125,7 +1138,7 @@ export abstract class DisplayObjectChip<
       }
     } else if (this._options.layoutOptions.verticalAlign !== "top") {
       console.error(
-        `DisplayObjectLeafChip: Within unbounded layout, cannot vertically align as requested: ${this._options.layoutOptions.verticalAlign}`,
+        `DisplayObjectLeafChip: Within unbounded layout, cannot vertically align as requested: ${this._options.layoutOptions.verticalAlign}`
       );
     }
 
@@ -1149,7 +1162,7 @@ export abstract class DisplayObjectChip<
       this.updateProperty(
         prop,
         // @ts-ignore
-        this._propertiesResolver.resolve(prop, resolvableContext),
+        this._propertiesResolver.resolve(prop, resolvableContext)
       );
     }
 
@@ -1170,17 +1183,17 @@ export abstract class DisplayObjectChip<
 
   updateProperty<Property extends keyof DisplayObjectType>(
     property: Property,
-    value: DisplayObjectValueType<DisplayObjectType, Property>,
+    value: DisplayObjectValueType<DisplayObjectType, Property>
   ) {
     if (this.displayObject[property] instanceof PIXI.ObservablePoint) {
       if (typeof value === "number") {
         (this.displayObject[property] as PIXI.ObservablePoint).set(
-          value as number,
+          value as number
         );
       } else {
         // Assume it's a IPointData
         (this.displayObject[property] as PIXI.ObservablePoint).copyFrom(
-          value as PIXI.IPointData,
+          value as PIXI.IPointData
         );
       }
     } else {
@@ -1192,13 +1205,19 @@ export abstract class DisplayObjectChip<
     return this._offsetContainer;
   }
 
-  /** Recalculate the size of the display object based on `getLocalBounds()`  */
+  /** Recalculate the size of the display object based on its current dimensions */
   updateNaturalInnerSize() {
-    const pixiLocalBounds = this._options.displayObject.getLocalBounds();
-
     this.naturalInnerSize = new PIXI.Point(
-      pixiLocalBounds.width,
-      pixiLocalBounds.height,
+      this._options.displayObject.width,
+      this._options.displayObject.height
+    );
+  }
+
+  /** Update the natural inner size _without_ requesting a resize */
+  protected _updateNaturalInnerSize() {
+    this._naturalInnerSize = new PIXI.Point(
+      this._options.displayObject.width,
+      this._options.displayObject.height
     );
   }
 
@@ -1207,6 +1226,13 @@ export abstract class DisplayObjectChip<
   }
 
   set naturalInnerSize(value: PIXI.IPointData) {
+    if (
+      this._naturalInnerSize &&
+      value.x === this._naturalInnerSize.x &&
+      value.y === this._naturalInnerSize.y
+    )
+      return;
+
     this._naturalInnerSize = value;
     this.requestResize();
   }
@@ -1227,6 +1253,13 @@ export abstract class DisplayObjectChip<
   }
 
   set anchorPosition(value: PIXI.IPointData) {
+    if (
+      this._anchorPosition &&
+      value.x === this._anchorPosition.x &&
+      value.y === this._anchorPosition.y
+    )
+      return;
+
     this._anchorPosition = value;
     this.requestResize();
   }
@@ -1243,7 +1276,7 @@ export abstract class DisplayObjectChip<
     if (this.naturalInnerSize.x === 0 || this.naturalInnerSize.y === 0) {
       console.error(
         "DisplayObjectChip: Cannot scale when natural inner size is 0",
-        this.naturalInnerSize,
+        this.naturalInnerSize
       );
     }
 
@@ -1266,7 +1299,7 @@ export abstract class DisplayObjectChip<
   protected _setPosition(
     position: PIXI.IPointData,
     finalInnerWidth: number,
-    finalInnerHeight: number,
+    finalInnerHeight: number
   ) {
     this._options.displayObject.position.copyFrom(position);
   }
@@ -1312,15 +1345,15 @@ export class DisplayObjectLeafChip<
   constructor(
     options?: Partial<
       DisplayObjectLeafChipOptions<DisplayObjectType, LayoutOptionsType>
-    >,
+    >
   ) {
     const filledOptions = booyah.fillInOptions(
       options,
-      new DisplayObjectLeafChipOptions<DisplayObjectType, LayoutOptionsType>(),
+      new DisplayObjectLeafChipOptions<DisplayObjectType, LayoutOptionsType>()
     );
     filledOptions.layoutOptions = booyah.fillInOptions(
       options.layoutOptions,
-      new DisplayObjectLeafChipLayoutOptions() as LayoutOptionsType,
+      new DisplayObjectLeafChipLayoutOptions() as LayoutOptionsType
     );
 
     super(filledOptions as OptionsType);
@@ -1359,11 +1392,11 @@ export class SpriteChip extends DisplayObjectLeafChip<PIXI.Sprite> {
   constructor(options?: Partial<SpriteChipOptions>) {
     const filledOptions = booyah.fillInOptions(
       options,
-      new SpriteChipOptions(),
+      new SpriteChipOptions()
     );
     filledOptions.layoutOptions = booyah.fillInOptions(
       filledOptions.layoutOptions,
-      new SpriteChipLayoutOptions(),
+      new SpriteChipLayoutOptions()
     );
 
     if (!filledOptions.displayObject) {
@@ -1375,7 +1408,7 @@ export class SpriteChip extends DisplayObjectLeafChip<PIXI.Sprite> {
         const resolvedTexture = PIXI.Assets.get<PIXI.Texture>(options.texture);
         if (!resolvedTexture)
           throw new Error(
-            `Cannot find texture asset for SpriteChip "${options.texture}"`,
+            `Cannot find texture asset for SpriteChip "${options.texture}"`
           );
 
         options.texture = resolvedTexture;
@@ -1434,17 +1467,17 @@ export class NineSlicePlaneChip extends DisplayObjectLeafChip<PIXI.NineSlicePlan
   constructor(options: Partial<NineSlicePlaneChipOptions>) {
     const filledOptions = booyah.fillInOptions(
       options,
-      new NineSlicePlaneChipOptions(),
+      new NineSlicePlaneChipOptions()
     );
     filledOptions.layoutOptions = booyah.fillInOptions(
       filledOptions.layoutOptions,
-      new NineSlicePlaneChipLayoutOptions(),
+      new NineSlicePlaneChipLayoutOptions()
     );
 
     if (!filledOptions.displayObject) {
       if (!options.texture) {
         throw new Error(
-          "Missing display object or texture for NineSlicePlaneChip",
+          "Missing display object or texture for NineSlicePlaneChip"
         );
       }
 
@@ -1452,7 +1485,7 @@ export class NineSlicePlaneChip extends DisplayObjectLeafChip<PIXI.NineSlicePlan
         const resolvedTexture = PIXI.Assets.get<PIXI.Texture>(options.texture);
         if (!resolvedTexture)
           throw new Error(
-            `Cannot find texture asset for nine slice plane "${options.texture}"`,
+            `Cannot find texture asset for nine slice plane "${options.texture}"`
           );
 
         options.texture = resolvedTexture;
@@ -1464,7 +1497,7 @@ export class NineSlicePlaneChip extends DisplayObjectLeafChip<PIXI.NineSlicePlan
           options.nineSliceWidths.left,
           options.nineSliceWidths.top,
           options.nineSliceWidths.right,
-          options.nineSliceWidths.bottom,
+          options.nineSliceWidths.bottom
         );
       } else {
         filledOptions.displayObject = new PIXI.NineSlicePlane(options.texture);
@@ -1479,7 +1512,7 @@ export class NineSlicePlaneChip extends DisplayObjectLeafChip<PIXI.NineSlicePlan
       if (this.naturalInnerSize.x === 0 || this.naturalInnerSize.y === 0) {
         console.error(
           "NineSlicePlaneChip: Cannot scale when natural inner size is 0",
-          this.naturalInnerSize,
+          this.naturalInnerSize
         );
       }
 
@@ -1499,28 +1532,36 @@ export class NineSlicePlaneChip extends DisplayObjectLeafChip<PIXI.NineSlicePlan
   }
 }
 
-/** A chip to display a PIXI.Text */
 export class TextChipLayoutOptions extends DisplayObjectLeafChipLayoutOptions {
   keepAspectRatio: KeepAspectRatioValue = "min";
+
+  dynamicStyle?: Partial<PIXI.ITextStyle>;
 }
 
-export class TextChipOptions extends DisplayObjectLeafChipOptions<PIXI.Text> {
+export class TextChipOptions extends DisplayObjectLeafChipOptions<
+  PIXI.Text,
+  TextChipLayoutOptions
+> {
   text?: string;
   style?: Partial<PIXI.ITextStyle> | PIXI.TextStyle;
 }
 
-export class TextChip extends DisplayObjectLeafChip<PIXI.Text> {
+/** A chip to display a PIXI.Text */
+export class TextChip extends DisplayObjectLeafChip<
+  PIXI.Text,
+  TextChipLayoutOptions
+> {
   constructor(options: Partial<TextChipOptions>) {
     const filledOptions = booyah.fillInOptions(options, new TextChipOptions());
     filledOptions.layoutOptions = booyah.fillInOptions(
       filledOptions.layoutOptions,
-      new TextChipLayoutOptions(),
+      new TextChipLayoutOptions()
     );
 
     if (!filledOptions.displayObject) {
       filledOptions.displayObject = new PIXI.Text(
         options.text || "",
-        options.style,
+        options.style
       );
     }
 
@@ -1536,7 +1577,30 @@ export class TextChip extends DisplayObjectLeafChip<PIXI.Text> {
 
     this.displayObject.text = value;
     this.updateNaturalInnerSize();
-    this.requestResize();
+        this.requestResize();
+
+  }
+
+  protected _onBeforePrepareResize(): void {
+    const resolvableContext: LayoutValueResolvableContext<TextChipLayoutOptions> =
+      {
+        layoutOptions: this.layoutOptions,
+        layoutItem: this,
+        renderSize: this.pixiAppChip.renderSize,
+      };
+
+    const style = this._layoutOptionsResolver.resolve(
+      "dynamicStyle",
+      resolvableContext
+    ) as Partial<PIXI.ITextStyle>;
+    if (style) {
+      this.displayObject.style = style;
+      const metrics = PIXI.TextMetrics.measureText(
+        this.displayObject.text,
+        this.displayObject.style
+      );
+      this._naturalInnerSize = new PIXI.Point(metrics.width, metrics.height);
+    }
   }
 }
 
@@ -1551,11 +1615,11 @@ export class ContainerLeafChip extends DisplayObjectLeafChip<PIXI.Container> {
   constructor(options?: Partial<DisplayObjectLeafChipOptions<PIXI.Container>>) {
     const filledOptions = booyah.fillInOptions(
       options,
-      new DisplayObjectLeafChipOptions<PIXI.Container>(),
+      new DisplayObjectLeafChipOptions<PIXI.Container>()
     );
     filledOptions.layoutOptions = booyah.fillInOptions(
       filledOptions.layoutOptions,
-      new ContainerLeafChipLayoutOptions(),
+      new ContainerLeafChipLayoutOptions()
     );
     if (!filledOptions.displayObject) {
       filledOptions.displayObject = new PIXI.Container();
@@ -1587,11 +1651,11 @@ export abstract class ContainerBase<
   constructor(
     options?: Partial<
       DisplayObjectChipOptions<PIXI.Container, LayoutOptionsType>
-    >,
+    >
   ) {
     const filledOptions = booyah.fillInOptions(
       options,
-      new DisplayObjectChipOptions<PIXI.Container, LayoutOptionsType>(),
+      new DisplayObjectChipOptions<PIXI.Container, LayoutOptionsType>()
     ) as OptionsType;
     if (!filledOptions.displayObject) {
       filledOptions.displayObject = new PIXI.Container();
@@ -1727,7 +1791,7 @@ export abstract class ContainerBase<
   protected override _setPosition(
     position: PIXI.IPointData,
     finalInnerWidth: number,
-    finalInnerHeight: number,
+    finalInnerHeight: number
   ) {
     // Validate that the child local bounds makes sense
     if (
@@ -1735,7 +1799,7 @@ export abstract class ContainerBase<
       finalInnerWidth > this._lastResizeInfo.localBounds.width
     ) {
       console.error(
-        `ContainerBase: Bad widths for child bounds. Child width ${finalInnerWidth} > parent width ${this._lastResizeInfo.localBounds.width}`,
+        `ContainerBase: Bad widths for child bounds. Child width ${finalInnerWidth} > parent width ${this._lastResizeInfo.localBounds.width}`
       );
     }
     if (
@@ -1743,7 +1807,7 @@ export abstract class ContainerBase<
       finalInnerHeight > this._lastResizeInfo.localBounds.height
     ) {
       console.error(
-        `ContainerBase: Bad heights for child bounds. Child height ${finalInnerHeight} > parent height ${this._lastResizeInfo.localBounds.height}`,
+        `ContainerBase: Bad heights for child bounds. Child height ${finalInnerHeight} > parent height ${this._lastResizeInfo.localBounds.height}`
       );
     }
 
@@ -1754,7 +1818,7 @@ export abstract class ContainerBase<
       0,
       0,
       finalInnerWidth,
-      finalInnerHeight,
+      finalInnerHeight
     );
 
     this._childResizeInfo = {
@@ -1763,7 +1827,7 @@ export abstract class ContainerBase<
         this._lastResizeInfo.absoluteBounds.x + position.x,
         this._lastResizeInfo.absoluteBounds.y + position.y,
         finalInnerWidth,
-        finalInnerHeight,
+        finalInnerHeight
       ),
     };
   }
@@ -1778,7 +1842,7 @@ export abstract class ContainerBase<
   aggregateChildValues(
     prop: BoundingLayoutProperty,
     operation: "sum" | "max",
-    undefinedHandling: "treatAsZero" | "returnUndefined",
+    undefinedHandling: "treatAsZero" | "returnUndefined"
   ): number | undefined {
     let agg: number | undefined = undefined;
     for (const child of this._childLayoutItems!) {
@@ -1872,11 +1936,11 @@ export class DirectionalContainerChip extends ContainerBase<DirectionalContainer
   constructor(options?: Partial<DirectionalContainerOptions>) {
     const filledOptions = booyah.fillInOptions(
       options,
-      new DirectionalContainerOptions(),
+      new DirectionalContainerOptions()
     );
     filledOptions.layoutOptions = booyah.fillInOptions(
       filledOptions.layoutOptions,
-      new DirectionalContainerLayoutOptions(),
+      new DirectionalContainerLayoutOptions()
     );
     if (!filledOptions.displayObject) {
       filledOptions.displayObject = new PIXI.Container();
@@ -1959,7 +2023,7 @@ export class DirectionalContainerChip extends ContainerBase<DirectionalContainer
         // Expand the element, but not beyond the ideal length
         const spaceToGive = Math.min(
           extraSpacePerChild,
-          childIdealLength - lengths[childIndex],
+          childIdealLength - lengths[childIndex]
         );
         lengths[childIndex] += spaceToGive;
         availableExtraSpace -= spaceToGive;
@@ -2000,7 +2064,7 @@ export class DirectionalContainerChip extends ContainerBase<DirectionalContainer
           // Expand the element, but not beyond the max length
           const spaceToGive = Math.min(
             extraSpacePerChild,
-            child[maxLengthProp] - lengths[childIndex],
+            child[maxLengthProp] - lengths[childIndex]
           );
           lengths[childIndex] += spaceToGive;
           availableExtraSpace -= spaceToGive;
@@ -2044,26 +2108,26 @@ export class DirectionalContainerChip extends ContainerBase<DirectionalContainer
           innerLocalBounds.x,
           innerLocalBounds.y + axisOffset,
           innerLocalBounds.width,
-          lengths[i],
+          lengths[i]
         );
         itemAbsoluteBounds = new Bounds(
           innerAbsoluteBounds.x,
           innerAbsoluteBounds.y + axisOffset,
           innerAbsoluteBounds.width,
-          lengths[i],
+          lengths[i]
         );
       } else {
         itemLocalBounds = new Bounds(
           innerLocalBounds.x + axisOffset,
           innerLocalBounds.y,
           lengths[i],
-          innerLocalBounds.height,
+          innerLocalBounds.height
         );
         itemAbsoluteBounds = new Bounds(
           innerAbsoluteBounds.x + axisOffset,
           innerAbsoluteBounds.y,
           lengths[i],
-          innerAbsoluteBounds.height,
+          innerAbsoluteBounds.height
         );
       }
 
@@ -2090,7 +2154,7 @@ export class DirectionalContainerChip extends ContainerBase<DirectionalContainer
   private _resizeChildrenInUnboundedLayout(): void {
     if (this._options.layoutOptions.distributeSpace !== "atEnd") {
       console.error(
-        `DirectionalContainer: Within unbounded layout, cannot distribute space as requested: ${this._options.layoutOptions.distributeSpace}`,
+        `DirectionalContainer: Within unbounded layout, cannot distribute space as requested: ${this._options.layoutOptions.distributeSpace}`
       );
     }
 
@@ -2102,10 +2166,10 @@ export class DirectionalContainerChip extends ContainerBase<DirectionalContainer
       this._options.layoutOptions.direction === "vertical" ? "height" : "width";
 
     const innerLocalBounds = this.calculateInnerBounds(
-      this._childResizeInfo!.localBounds,
+      this._childResizeInfo!.localBounds
     );
     const innerAbsoluteBounds = this.calculateInnerBounds(
-      this._childResizeInfo!.absoluteBounds,
+      this._childResizeInfo!.absoluteBounds
     );
 
     let axisOffset = 0;
@@ -2123,26 +2187,26 @@ export class DirectionalContainerChip extends ContainerBase<DirectionalContainer
           innerLocalBounds.x,
           innerLocalBounds.y + axisOffset,
           innerLocalBounds.width,
-          childIdealLength,
+          childIdealLength
         );
         itemAbsoluteBounds = new Bounds(
           innerAbsoluteBounds.x,
           innerAbsoluteBounds.y + axisOffset,
           innerAbsoluteBounds.width,
-          childIdealLength,
+          childIdealLength
         );
       } else {
         itemLocalBounds = new Bounds(
           innerLocalBounds.x + axisOffset,
           innerLocalBounds.y,
           childIdealLength,
-          innerLocalBounds.height,
+          innerLocalBounds.height
         );
         itemAbsoluteBounds = new Bounds(
           innerAbsoluteBounds.x + axisOffset,
           innerAbsoluteBounds.y,
           childIdealLength,
-          innerAbsoluteBounds.height,
+          innerAbsoluteBounds.height
         );
       }
 
@@ -2162,7 +2226,7 @@ export class DirectionalContainerChip extends ContainerBase<DirectionalContainer
       const childrenSum = this.aggregateChildValues(
         "minWidth",
         "sum",
-        "treatAsZero",
+        "treatAsZero"
       );
       if (typeof childrenSum === "undefined") return;
 
@@ -2176,7 +2240,7 @@ export class DirectionalContainerChip extends ContainerBase<DirectionalContainer
       const childrenSum = this.aggregateChildValues(
         "minHeight",
         "sum",
-        "treatAsZero",
+        "treatAsZero"
       );
       if (typeof childrenSum === "undefined") return;
 
@@ -2191,7 +2255,7 @@ export class DirectionalContainerChip extends ContainerBase<DirectionalContainer
       const childrenSum = this.aggregateChildValues(
         "idealWidth",
         "sum",
-        "treatAsZero",
+        "treatAsZero"
       );
       if (typeof childrenSum === "undefined") return;
 
@@ -2205,7 +2269,7 @@ export class DirectionalContainerChip extends ContainerBase<DirectionalContainer
       const childrenSum = this.aggregateChildValues(
         "idealHeight",
         "sum",
-        "treatAsZero",
+        "treatAsZero"
       );
       if (typeof childrenSum === "undefined") return;
 
@@ -2220,7 +2284,7 @@ export class DirectionalContainerChip extends ContainerBase<DirectionalContainer
       const childrenSum = this.aggregateChildValues(
         "maxWidth",
         "sum",
-        "returnUndefined",
+        "returnUndefined"
       );
       if (typeof childrenSum === "undefined") return;
 
@@ -2235,7 +2299,7 @@ export class DirectionalContainerChip extends ContainerBase<DirectionalContainer
       const childrenSum = this.aggregateChildValues(
         "maxHeight",
         "sum",
-        "returnUndefined",
+        "returnUndefined"
       );
       if (typeof childrenSum === "undefined") return;
 
@@ -2289,18 +2353,41 @@ export class AnimatedSpriteChip extends DisplayObjectLeafChip<
   constructor(options?: Partial<AnimatedSpriteChipOptions>) {
     const filledOptions = booyah.fillInOptions(
       options,
-      new AnimatedSpriteChipOptions(),
+      new AnimatedSpriteChipOptions()
     );
 
-    if (typeof filledOptions.displayObject === "undefined") {
-      // Create the animated sprite ourselves
+    if (typeof filledOptions.spritesheet === "undefined") {
+      throw new Error("AnimatedSpriteChip requires a spritesheet");
+    }
+    if (typeof filledOptions.spritesheet === "string") {
+      const resolvedSpritesheet = PIXI.Assets.get<PIXI.Spritesheet>(
+        filledOptions.spritesheet
+      );
+      if (!resolvedSpritesheet)
+        throw new Error(
+          `Cannot find spritesheet for AnimatedSpriteChip "${filledOptions.spritesheet}"`
+        );
 
-      if (typeof filledOptions.spritesheet === "undefined") {
-        throw new Error("AnimatedSpriteChip requires a spritesheet");
-      }
-      if (typeof filledOptions.spritesheet === "string") {
-        const resolvedSpritesheet = PIXI.Assets.get<PIXI.Spritesheet>(
-          filledOptions.spritesheet,
+      filledOptions.spritesheet = resolvedSpritesheet;
+    }
+
+    super(filledOptions);
+  }
+
+  protected _onActivate(): void {
+    super._onActivate();
+
+    this._wasPlaying = false;
+
+    // Any conversion has already been handled in the constructor
+    const spritesheet = this._options.spritesheet as PIXI.Spritesheet;
+
+    let textures: PIXI.Texture[];
+    if (this._options.animationName) {
+      // Use the specified animation
+      if (!_.has(spritesheet.data.animations, this._options.animationName)) {
+        throw new Error(
+          `Can't find animation "${this._options.animationName}" in spritesheet`
         );
         if (!resolvedSpritesheet)
           throw new Error(
@@ -2318,6 +2405,7 @@ export class AnimatedSpriteChip extends DisplayObjectLeafChip<
         // Use the specified animation
         if (!_.has(spritesheet.data.animations, filledOptions.animationName)) {
           throw new Error(
+
             `Can't find animation "${filledOptions.animationName}" in spritesheet`,
           );
         }
@@ -2346,8 +2434,22 @@ export class AnimatedSpriteChip extends DisplayObjectLeafChip<
         textures = Object.values(spritesheet.textures);
       }
 
-      // Don't have the sprite auto-update
-      filledOptions.displayObject = new PIXI.AnimatedSprite(textures, false);
+    // If requested, use the PIXI Prepare plugin to make sure the animation is loaded before adding it to the stage
+    if (this._options.prepare) {
+      this._wasAdded = false;
+      this._chipContext.pixiApplication.renderer.prepare.upload(
+        this._animatedSprite,
+        () => {
+          if (this.chipState === "inactive") return;
+
+          this._chipContext.container.addChild(this._animatedSprite);
+          this._wasAdded = true;
+        }
+      );
+    } else {
+      this._chipContext.container.addChild(this._animatedSprite);
+      this._wasAdded = true;
+
     }
 
     if (filledOptions.behaviorOnComplete == "loop") {
@@ -2473,12 +2575,12 @@ export class LayoutTest extends booyah.Composite {
             paddingTop: 10,
             paddingRight: 15,
           },
-        }),
+        })
       );
     }
 
     containerChip.addChildChip(
-      new SpacerChip({ layoutOptions: { minWidth: 10, maxWidth: 10 } }),
+      new SpacerChip({ layoutOptions: { minWidth: 10, maxWidth: 10 } })
     );
 
     {
@@ -2495,7 +2597,7 @@ export class LayoutTest extends booyah.Composite {
             keepAspectRatio: "min",
             // idealWidth: "maxWidth",
           },
-        }),
+        })
       );
     }
 
@@ -2520,7 +2622,7 @@ export class LayoutTest extends booyah.Composite {
         10,
         10,
         10,
-        10,
+        10
       );
 
       containerChip.addChildChip(
@@ -2530,7 +2632,7 @@ export class LayoutTest extends booyah.Composite {
             verticalAlign: "middle",
             maxHeight: 200,
           },
-        }),
+        })
       );
     }
   }
