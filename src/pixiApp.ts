@@ -80,8 +80,10 @@ export class PixiAppChip extends booyah.Composite {
 
   protected _onTick(): void {
     if (this._resizeNeeded) {
-      this._handleResize();
+      // Set resize needed to false before calling handleResize(), so
+      // that code in the handleResize() can request a new resize
       this._resizeNeeded = false;
+      this._handleResize();
     }
 
     this._pixiApplication!.render();
@@ -120,7 +122,7 @@ export class PixiAppChip extends booyah.Composite {
       });
 
       const screenBounds = layout.Bounds.fromRectangle(
-        this._pixiApplication!.screen,
+        this._pixiApplication!.screen
       );
       this._stackingContainerChip.resize({
         absoluteBounds: screenBounds,
