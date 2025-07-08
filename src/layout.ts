@@ -304,6 +304,9 @@ export interface LayoutItem extends booyah.Chip {
    */
   readonly maxHeight?: number;
 
+  /** Directions in which the item can grow */
+  readonly canGrow: Directions;
+
   /**
    * Tells the LayoutItem that `resize()` will be called.
    * The LayoutItem should set its properties (minWidth, ...) at this time.
@@ -700,6 +703,10 @@ export abstract class LayoutItemBase<
   }
   get verticalPadding(): number {
     return this.paddingTop + this.paddingBottom;
+  }
+
+  get canGrow(): Directions {
+    return this._parseLayoutProperty("canGrow") as Directions;
   }
 
   /** Request a new resize cycle */
@@ -1848,9 +1855,11 @@ export class StackingContainerChip extends ContainerBase {
   }
 }
 
+export type DirectionalContainerDirection = "horizontal" | "vertical";
+
 export class DirectionalContainerLayoutOptions extends LayoutOptions {
   /** Layout children along this axis */
-  direction: "horizontal" | "vertical" = "horizontal";
+  direction: DirectionalContainerDirection = "horizontal";
 
   /**
    *  What to do with extra space:
@@ -1915,20 +1924,16 @@ export class DirectionalContainerChip extends ContainerBase<DirectionalContainer
 
   private _resizeChildrenInBoundedLayout(): void {
     // Determine which properties will be used depending on the direction
+    const layoutDirection = this._parseLayoutProperty(
+      "direction",
+    ) as DirectionalContainerDirection;
     const minLengthProp =
-      this._options.layoutOptions.direction === "vertical"
-        ? "minHeight"
-        : "minWidth";
+      layoutDirection === "vertical" ? "minHeight" : "minWidth";
     const idealLengthProp =
-      this._options.layoutOptions.direction === "vertical"
-        ? "idealHeight"
-        : "idealWidth";
+      layoutDirection === "vertical" ? "idealHeight" : "idealWidth";
     const maxLengthProp =
-      this._options.layoutOptions.direction === "vertical"
-        ? "maxHeight"
-        : "maxWidth";
-    const lengthProp =
-      this._options.layoutOptions.direction === "vertical" ? "height" : "width";
+      layoutDirection === "vertical" ? "maxHeight" : "maxWidth";
+    const lengthProp = layoutDirection === "vertical" ? "height" : "width";
     const gap = this._parseLayoutPropertyAsNumber("gap");
 
     // Do a first pass to gather minimum space and element types
@@ -1991,10 +1996,15 @@ export class DirectionalContainerChip extends ContainerBase<DirectionalContainer
 
       for (let i = 0; i < this._childLayoutItems!.length; i++) {
         const child = this._childLayoutItems![i];
-
+        const childCanGrow =
+          child.canGrow === "both" ||
+          (child.canGrow === "horizontally" &&
+            layoutDirection === "horizontal") ||
+          (child.canGrow === "vertically" && layoutDirection === "vertical");
         if (
-          typeof child[maxLengthProp] === "undefined" ||
-          child[maxLengthProp] > lengths[i]
+          childCanGrow &&
+          (typeof child[maxLengthProp] === "undefined" ||
+            child[maxLengthProp] > lengths[i])
         ) {
           childIndexesToGrow.push(i);
         }
@@ -2032,15 +2042,14 @@ export class DirectionalContainerChip extends ContainerBase<DirectionalContainer
     }
 
     // Distribute any extra space around or between elements at the same time as you assign lengths
+    const distributeSpace = this._parseLayoutProperty("distributeSpace");
     let axisOffset = 0;
 
-    if (this._options.layoutOptions.distributeSpace === "atStart") {
+    if (distributeSpace === "atStart") {
       axisOffset += availableExtraSpace;
-    } else if (
-      this._options.layoutOptions.distributeSpace === "atStartAndEnd"
-    ) {
+    } else if (distributeSpace === "atStartAndEnd") {
       axisOffset += availableExtraSpace / 2;
-    } else if (this._options.layoutOptions.distributeSpace === "around") {
+    } else if (distributeSpace === "around") {
       axisOffset += availableExtraSpace / this._childLayoutItems!.length / 2;
     }
 
@@ -2052,7 +2061,7 @@ export class DirectionalContainerChip extends ContainerBase<DirectionalContainer
 
       let itemLocalBounds: Bounds;
       let itemAbsoluteBounds: Bounds;
-      if (this._options.layoutOptions.direction === "vertical") {
+      if (layoutDirection === "vertical") {
         itemLocalBounds = new Bounds(
           innerLocalBounds.x,
           innerLocalBounds.y + axisOffset,
@@ -2090,29 +2099,31 @@ export class DirectionalContainerChip extends ContainerBase<DirectionalContainer
       axisOffset += lengths[i];
 
       // Distribute extra space between items
-      if (this._options.layoutOptions.distributeSpace === "between") {
+      if (distributeSpace === "between") {
         if (this._childLayoutItems!.length > 1)
           axisOffset +=
             availableExtraSpace / (this._childLayoutItems!.length - 1);
-      } else if (this._options.layoutOptions.distributeSpace === "around") {
+      } else if (distributeSpace === "around") {
         axisOffset += availableExtraSpace / this._childLayoutItems!.length;
       }
     }
   }
 
   private _resizeChildrenInUnboundedLayout(): void {
-    if (this._options.layoutOptions.distributeSpace !== "atEnd") {
+    const layoutDirection = this._parseLayoutProperty(
+      "direction",
+    ) as DirectionalContainerDirection;
+    const distributeSpace = this._parseLayoutProperty("distributeSpace");
+
+    if (distributeSpace !== "atEnd") {
       console.error(
         `DirectionalContainer: Within unbounded layout, cannot distribute space as requested: ${this._options.layoutOptions.distributeSpace}`,
       );
     }
 
     const idealLengthProp =
-      this._options.layoutOptions.direction === "vertical"
-        ? "idealHeight"
-        : "idealWidth";
-    const lengthProp =
-      this._options.layoutOptions.direction === "vertical" ? "height" : "width";
+      layoutDirection === "vertical" ? "idealHeight" : "idealWidth";
+    const lengthProp = layoutDirection === "vertical" ? "height" : "width";
 
     const innerLocalBounds = this.calculateInnerBounds(
       this._childResizeInfo!.localBounds,
@@ -2131,7 +2142,7 @@ export class DirectionalContainerChip extends ContainerBase<DirectionalContainer
 
       let itemLocalBounds: Bounds;
       let itemAbsoluteBounds: Bounds;
-      if (this._options.layoutOptions.direction === "vertical") {
+      if (layoutDirection === "vertical") {
         itemLocalBounds = new Bounds(
           innerLocalBounds.x,
           innerLocalBounds.y + axisOffset,
@@ -2171,7 +2182,11 @@ export class DirectionalContainerChip extends ContainerBase<DirectionalContainer
   }
 
   protected override _aggregateMinWidth() {
-    if (this._options.layoutOptions.direction === "horizontal") {
+    const layoutDirection = this._parseLayoutProperty(
+      "direction",
+    ) as DirectionalContainerDirection;
+
+    if (layoutDirection === "horizontal") {
       const childrenSum = this.aggregateChildValues(
         "minWidth",
         "sum",
@@ -2185,7 +2200,11 @@ export class DirectionalContainerChip extends ContainerBase<DirectionalContainer
     }
   }
   protected override _aggregateMinHeight() {
-    if (this._options.layoutOptions.direction === "vertical") {
+    const layoutDirection = this._parseLayoutProperty(
+      "direction",
+    ) as DirectionalContainerDirection;
+
+    if (layoutDirection === "vertical") {
       const childrenSum = this.aggregateChildValues(
         "minHeight",
         "sum",
@@ -2200,7 +2219,11 @@ export class DirectionalContainerChip extends ContainerBase<DirectionalContainer
   }
 
   protected override _aggregateIdealWidth() {
-    if (this._options.layoutOptions.direction === "horizontal") {
+    const layoutDirection = this._parseLayoutProperty(
+      "direction",
+    ) as DirectionalContainerDirection;
+
+    if (layoutDirection === "horizontal") {
       const childrenSum = this.aggregateChildValues(
         "idealWidth",
         "sum",
@@ -2214,7 +2237,11 @@ export class DirectionalContainerChip extends ContainerBase<DirectionalContainer
     }
   }
   protected override _aggregateIdealHeight() {
-    if (this._options.layoutOptions.direction === "vertical") {
+    const layoutDirection = this._parseLayoutProperty(
+      "direction",
+    ) as DirectionalContainerDirection;
+
+    if (layoutDirection === "vertical") {
       const childrenSum = this.aggregateChildValues(
         "idealHeight",
         "sum",
@@ -2229,7 +2256,11 @@ export class DirectionalContainerChip extends ContainerBase<DirectionalContainer
   }
 
   protected override _aggregateMaxWidth() {
-    if (this._options.layoutOptions.direction === "horizontal") {
+    const layoutDirection = this._parseLayoutProperty(
+      "direction",
+    ) as DirectionalContainerDirection;
+
+    if (layoutDirection === "horizontal") {
       const childrenSum = this.aggregateChildValues(
         "maxWidth",
         "sum",
@@ -2244,7 +2275,11 @@ export class DirectionalContainerChip extends ContainerBase<DirectionalContainer
   }
 
   protected override _aggregateMaxHeight() {
-    if (this._options.layoutOptions.direction === "vertical") {
+    const layoutDirection = this._parseLayoutProperty(
+      "direction",
+    ) as DirectionalContainerDirection;
+
+    if (layoutDirection === "vertical") {
       const childrenSum = this.aggregateChildValues(
         "maxHeight",
         "sum",
