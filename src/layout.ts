@@ -1543,7 +1543,7 @@ export class TextChip extends DisplayObjectLeafChip<
       resolvableContext,
     ) as Partial<PIXI.ITextStyle>;
     if (style) {
-      this.displayObject.style = style;
+      Object.assign(this.displayObject.style, style);
       const metrics = PIXI.TextMetrics.measureText(
         this.displayObject.text,
         this.displayObject.style,
