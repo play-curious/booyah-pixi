@@ -1169,19 +1169,21 @@ export abstract class DisplayObjectChip<
   }
 
   /** Recalculate the size of the display object based on its current dimensions */
-  updateNaturalInnerSize() {
-    this.naturalInnerSize = new PIXI.Point(
+  calculateNaturalInnerSize(): PIXI.IPoint {
+    return new PIXI.Point(
       this._options.displayObject.width,
       this._options.displayObject.height,
     );
   }
 
-  /** Update the natural inner size _without_ requesting a resize */
+  /** Updates the natural inner size and requests a refresh if it has changed  */
+  updateNaturalInnerSize() {
+    this.naturalInnerSize = this.calculateNaturalInnerSize();
+  }
+
+  /** Update the natural inner size _without_ requesting a refresh */
   protected _updateNaturalInnerSize() {
-    this._naturalInnerSize = new PIXI.Point(
-      this._options.displayObject.width,
-      this._options.displayObject.height,
-    );
+    this._naturalInnerSize = this.calculateNaturalInnerSize();
   }
 
   get naturalInnerSize() {
@@ -1195,6 +1197,13 @@ export abstract class DisplayObjectChip<
       value.y === this._naturalInnerSize.y
     )
       return;
+
+    if (value.x === 0 || value.y === 0) {
+      console.warn(
+        `Setting natural size to 0 can lead to errors. Value is`,
+        value,
+      );
+    }
 
     this._naturalInnerSize = value;
     this.requestResize();
@@ -1236,6 +1245,7 @@ export abstract class DisplayObjectChip<
         "DisplayObjectChip: Cannot scale when natural inner size is 0",
         this.naturalInnerSize,
       );
+      return;
     }
 
     let horizontalScale = innerWidth / this._naturalInnerSize.x;
@@ -1395,13 +1405,14 @@ export class SpriteChip extends DisplayObjectLeafChip<PIXI.Sprite> {
       this.displayObject.texture = value;
     }
 
-    this._updateNaturalInnerSize();
-    this.requestResize();
+    if (typeof this._options.naturalInnerSize === "undefined") {
+      this.updateNaturalInnerSize();
+    }
   }
 
-  /** A sprite gets its natural innter size from the texture */
-  protected _updateNaturalInnerSize() {
-    this._naturalInnerSize = new PIXI.Point(
+  /** A sprite gets its natural inner size from the texture */
+  calculateNaturalInnerSize() {
+    return new PIXI.Point(
       this.displayObject.texture.width,
       this.displayObject.texture.height,
     );
@@ -1480,6 +1491,7 @@ export class NineSlicePlaneChip extends DisplayObjectLeafChip<PIXI.NineSlicePlan
           "NineSlicePlaneChip: Cannot scale when natural inner size is 0",
           this.naturalInnerSize,
         );
+        return;
       }
 
       let horizontalScale = innerWidth / this._naturalInnerSize.x;
@@ -1542,7 +1554,10 @@ export class TextChip extends DisplayObjectLeafChip<
     if (value === this.displayObject.text) return;
 
     this.displayObject.text = value;
-    this.updateNaturalInnerSize();
+
+    if (typeof this._options.naturalInnerSize === "undefined") {
+      this.updateNaturalInnerSize();
+    }
   }
 
   protected _onBeforePrepareResize(): void {
@@ -1563,7 +1578,10 @@ export class TextChip extends DisplayObjectLeafChip<
         this.displayObject.text,
         this.displayObject.style,
       );
-      this._naturalInnerSize = new PIXI.Point(metrics.width, metrics.height);
+
+      if (typeof this._options.naturalInnerSize === "undefined") {
+        this._naturalInnerSize = new PIXI.Point(metrics.width, metrics.height);
+      }
     }
   }
 }
