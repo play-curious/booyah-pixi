@@ -1560,6 +1560,18 @@ export class TextChip extends DisplayObjectLeafChip<
     }
   }
 
+  get style() {
+    return this.displayObject.style;
+  }
+
+  set style(value: Partial<PIXI.TextStyle>) {
+    this.displayObject.style = value;
+
+    if (typeof this._options.naturalInnerSize === "undefined") {
+      this.updateNaturalInnerSize();
+    }
+  }
+
   protected _onBeforePrepareResize(): void {
     const resolvableContext: LayoutValueResolvableContext<TextChipLayoutOptions> =
       {
