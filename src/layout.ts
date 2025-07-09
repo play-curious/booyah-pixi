@@ -897,7 +897,7 @@ export abstract class DisplayObjectChip<
     }
 
     if (typeof this._options.naturalInnerSize === "undefined") {
-      this.updateNaturalInnerSize();
+      this._updateNaturalInnerSize();
     } else {
       this._naturalInnerSize = this._options.naturalInnerSize;
     }
@@ -1395,8 +1395,16 @@ export class SpriteChip extends DisplayObjectLeafChip<PIXI.Sprite> {
       this.displayObject.texture = value;
     }
 
-    this.updateNaturalInnerSize();
+    this._updateNaturalInnerSize();
     this.requestResize();
+  }
+
+  /** A sprite gets its natural innter size from the texture */
+  protected _updateNaturalInnerSize() {
+    this._naturalInnerSize = new PIXI.Point(
+      this.displayObject.texture.width,
+      this.displayObject.texture.height,
+    );
   }
 }
 
