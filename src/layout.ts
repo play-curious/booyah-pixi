@@ -1057,6 +1057,10 @@ export abstract class DisplayObjectChip<
 
     if (this._parseLayoutProperty("canScale")) {
       this._setInnerSize(finalInnerWidth, finalInnerHeight);
+      finalInnerWidth =
+        this._options.displayObject.scale.x * this._naturalInnerSize.x;
+      finalInnerHeight =
+        this._options.displayObject.scale.y * this._naturalInnerSize.y;
     }
 
     const position = new PIXI.Point(innerBounds.x, innerBounds.y);
