@@ -304,9 +304,6 @@ export interface LayoutItem extends booyah.Chip {
    */
   readonly maxHeight?: number;
 
-  /** Directions in which the item can grow */
-  readonly canGrow: Directions;
-
   /**
    * Tells the LayoutItem that `resize()` will be called.
    * The LayoutItem should set its properties (minWidth, ...) at this time.
@@ -705,9 +702,9 @@ export abstract class LayoutItemBase<
     return this.paddingTop + this.paddingBottom;
   }
 
-  get canGrow(): Directions {
-    return this._parseLayoutProperty("canGrow") as Directions;
-  }
+  // get canGrow(): Directions {
+  //   return this._parseLayoutProperty("canGrow") as Directions;
+  // }
 
   /** Request a new resize cycle */
   requestResize() {
@@ -2038,15 +2035,9 @@ export class DirectionalContainerChip extends ContainerBase<DirectionalContainer
 
       for (let i = 0; i < this._childLayoutItems!.length; i++) {
         const child = this._childLayoutItems![i];
-        const childCanGrow =
-          child.canGrow === "both" ||
-          (child.canGrow === "horizontally" &&
-            layoutDirection === "horizontal") ||
-          (child.canGrow === "vertically" && layoutDirection === "vertical");
         if (
-          childCanGrow &&
-          (typeof child[maxLengthProp] === "undefined" ||
-            child[maxLengthProp] > lengths[i])
+          typeof child[maxLengthProp] === "undefined" ||
+          child[maxLengthProp] > lengths[i]
         ) {
           childIndexesToGrow.push(i);
         }
