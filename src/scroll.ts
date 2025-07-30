@@ -15,6 +15,7 @@ export type Direction = "vertical" | "horizontal";
 
 export class ScrollboxLayoutOptions extends layout.LayoutOptions {
   canGrow: layout.Directions = "both";
+  canShrink: layout.Directions = "both";
 }
 
 export type ScrollboxDynamicOptionsResolvableContext = layout.RenderInfo;
