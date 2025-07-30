@@ -276,10 +276,8 @@ export class Scrollbox extends layout.ContainerBase<
     this._mask.height = this.boxHeight;
 
     if (this._options.direction == "horizontal") {
-      this._scrollbarBackground.y = this.boxHeight;
       this._scrollbarAnchor.y = this.boxHeight;
     } else {
-      this._scrollbarBackground.x = this.boxWidth;
       this._scrollbarAnchor.x = this.boxWidth;
     }
 
