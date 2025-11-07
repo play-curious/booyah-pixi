@@ -1053,7 +1053,9 @@ export abstract class DisplayObjectChip<
     }
 
     if (this._parseLayoutProperty("canScale")) {
-      this._setInnerSize(finalInnerWidth, finalInnerHeight);
+      const newSizes = this._limitInnerSize(finalInnerWidth, finalInnerHeight);
+      finalInnerWidth = newSizes.x;
+      finalInnerHeight = newSizes.y;
     }
 
     const position = new PIXI.Point(innerBounds.x, innerBounds.y);
@@ -1236,13 +1238,16 @@ export abstract class DisplayObjectChip<
     });
   }
 
-  protected _setInnerSize(innerWidth: number, innerHeight: number) {
+  protected _limitInnerSize(
+    innerWidth: number,
+    innerHeight: number,
+  ): PIXI.IPointData {
     if (this.naturalInnerSize.x === 0 || this.naturalInnerSize.y === 0) {
       console.error(
         "DisplayObjectChip: Cannot scale when natural inner size is 0",
         this.naturalInnerSize,
       );
-      return;
+      return new PIXI.Point(innerWidth, innerHeight);
     }
 
     let horizontalScale = innerWidth / this._naturalInnerSize.x;
@@ -1259,6 +1264,11 @@ export abstract class DisplayObjectChip<
     }
 
     this._options.displayObject.scale.set(horizontalScale, verticalScale);
+
+    const newInnerWidth = horizontalScale * this._naturalInnerSize.x;
+    const newInnerHeight = verticalScale * this._naturalInnerSize.y;
+
+    return { x: newInnerWidth, y: newInnerHeight };
   }
 
   protected _setPosition(
@@ -1481,14 +1491,17 @@ export class NineSlicePlaneChip extends DisplayObjectLeafChip<PIXI.NineSlicePlan
     super(filledOptions);
   }
 
-  protected _setInnerSize(innerWidth: number, innerHeight: number) {
+  protected _limitInnerSize(
+    innerWidth: number,
+    innerHeight: number,
+  ): PIXI.IPointData {
     if (this._options.layoutOptions.keepAspectRatio !== "none") {
       if (this.naturalInnerSize.x === 0 || this.naturalInnerSize.y === 0) {
         console.error(
           "NineSlicePlaneChip: Cannot scale when natural inner size is 0",
           this.naturalInnerSize,
         );
-        return;
+        return new PIXI.Point(innerWidth, innerHeight);
       }
 
       let horizontalScale = innerWidth / this._naturalInnerSize.x;
@@ -1504,6 +1517,8 @@ export class NineSlicePlaneChip extends DisplayObjectLeafChip<PIXI.NineSlicePlan
 
     this._options.displayObject.width = innerWidth;
     this._options.displayObject.height = innerHeight;
+
+    return new PIXI.Point(innerWidth, innerHeight);
   }
 }
 
