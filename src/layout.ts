@@ -1067,40 +1067,36 @@ export abstract class DisplayObjectChip<
     }
 
     // Handle horizontal alignment
+    const horizontalAlign = this._parseLayoutProperty("horizontalAlign");
     if (innerBounds.isBoundedHorizontally()) {
-      if (
-        this._options.layoutOptions.horizontalAlign !== "left" &&
-        innerBounds.width! > finalInnerWidth
-      ) {
+      if (horizontalAlign !== "left" && innerBounds.width! > finalInnerWidth) {
         const extraSpace = innerBounds.width! - finalInnerWidth;
-        if (this._options.layoutOptions.horizontalAlign === "right") {
+        if (horizontalAlign === "right") {
           position.x += extraSpace;
-        } else if (this._options.layoutOptions.horizontalAlign === "center") {
+        } else if (horizontalAlign === "center") {
           position.x += extraSpace / 2;
         }
       }
-    } else if (this._options.layoutOptions.horizontalAlign !== "left") {
+    } else if (horizontalAlign !== "left") {
       console.error(
-        `DisplayObjectLeafChip: Within unbounded layout, cannot horizontally align as requested: ${this._options.layoutOptions.horizontalAlign}`,
+        `DisplayObjectLeafChip: Within unbounded layout, cannot horizontally align as requested: ${horizontalAlign}`,
       );
     }
 
     // Handle vertical alignment
+    const verticalAlign = this._parseLayoutProperty("verticalAlign");
     if (innerBounds.isBoundedVertically()) {
-      if (
-        this._options.layoutOptions.verticalAlign !== "top" &&
-        innerBounds.height! > finalInnerHeight
-      ) {
+      if (verticalAlign !== "top" && innerBounds.height! > finalInnerHeight) {
         const extraSpace = innerBounds.height! - finalInnerHeight;
-        if (this._options.layoutOptions.verticalAlign === "bottom") {
+        if (verticalAlign === "bottom") {
           position.y += extraSpace;
-        } else if (this._options.layoutOptions.verticalAlign === "middle") {
+        } else if (verticalAlign === "middle") {
           position.y += extraSpace / 2;
         }
       }
-    } else if (this._options.layoutOptions.verticalAlign !== "top") {
+    } else if (verticalAlign !== "top") {
       console.error(
-        `DisplayObjectLeafChip: Within unbounded layout, cannot vertically align as requested: ${this._options.layoutOptions.verticalAlign}`,
+        `DisplayObjectLeafChip: Within unbounded layout, cannot vertically align as requested: ${verticalAlign}`,
       );
     }
 
