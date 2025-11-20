@@ -324,14 +324,17 @@ export interface LayoutItem extends booyah.Chip {
   removeChildLayoutItem(child: LayoutItem): void;
 }
 
-export class LayoutItemBaseOptions<LayoutOptionsType extends LayoutOptions> {
-  name?: string;
-  layoutOptions?: Partial<
+export type PartialResolvableLayoutOptions<LayoutOptionsType = LayoutOptions> =
+  Partial<
     resolvable.ResolvableObject<
       LayoutOptionsType,
       LayoutValueResolvableContext<LayoutOptionsType>
     >
   >;
+
+export class LayoutItemBaseOptions<LayoutOptionsType extends LayoutOptions> {
+  name?: string;
+  layoutOptions?: PartialResolvableLayoutOptions<LayoutOptionsType>;
   children: LayoutItemChildChipOptions = [];
 }
 
