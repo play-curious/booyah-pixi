@@ -11,7 +11,13 @@ export class PixiAppChipOptions {
   appOptions?: Partial<PIXI.IApplicationOptions & PIXI.IRendererOptions>;
 
   /** If true reset the renderer state after each render */
-  shouldResetRenderer?: boolean;
+  shouldResetRenderer = false;
+
+  /**
+   * If true, call resize() on the PIXI renderer when resize is needed.
+   * Should only need to be done if PIXI is not automatically resizing the canvas.
+   */
+  resizePixiRenderer = false;
 
   /** If true, set up a root layout */
   addRootLayout = false;
@@ -69,20 +75,28 @@ export class PixiAppChip extends booyah.Composite {
     } else {
       this._subscribe(window, "resize", this._onResize);
     }
-
-    this._handleResize();
   }
 
   protected _onTick(): void {
     if (this._resizeNeeded) {
-      this._handleResize();
       this._resizeNeeded = false;
+      this.emit("resizeNeeded");
+
+      if (this._options.resizePixiRenderer) {
+        this._pixiApplication!.renderer.resize(
+          this._pixiApplication.view.width,
+          this._pixiApplication.view.height,
+        );
+      }
     }
 
     if (this._options.shouldResetRenderer) {
       this._pixiApplication.renderer.reset();
     }
+
+    this.emit("willRender");
     this._pixiApplication!.render();
+    this.emit("didRender");
   }
 
   protected _onTerminate(): void {
@@ -107,15 +121,6 @@ export class PixiAppChip extends booyah.Composite {
 
   private _onResize() {
     this._resizeNeeded = true;
-  }
-
-  private _handleResize() {
-    console.log(this._pixiApplication.renderer.width);
-    this._pixiApplication!.renderer.resize(
-      this._pixiApplication.view.width,
-      this._pixiApplication.view.height,
-    );
-    this.emit("didResize");
   }
 
   get renderSize() {

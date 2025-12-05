@@ -15,6 +15,7 @@ export type Direction = "vertical" | "horizontal";
 
 export class ScrollboxLayoutOptions extends layout.LayoutOptions {
   canGrow: layout.Directions = "both";
+  canShrink: layout.Directions = "both";
 }
 
 export type ScrollboxDynamicOptionsResolvableContext = layout.RenderInfo;
@@ -169,7 +170,6 @@ export class Scrollbox extends layout.ContainerBase<
       this._scrollbarHandle.tint = this._options.scrollbarHandle;
     }
 
-    // let anchorProperties;
     let backroundProperties;
     let handleProperties;
 
@@ -183,7 +183,6 @@ export class Scrollbox extends layout.ContainerBase<
           height: this._options.scrollbarWidth,
           y: this._options.scrollbarOffset,
         };
-        // anchorProperties = { y: () => this.boxHeight };
         break;
       }
       case "vertical": {
@@ -195,7 +194,6 @@ export class Scrollbox extends layout.ContainerBase<
           x: this._options.scrollbarOffset,
           width: this._options.scrollbarWidth,
         };
-        // anchorProperties = { x: () => this.boxWidth };
         break;
       }
     }
@@ -203,7 +201,6 @@ export class Scrollbox extends layout.ContainerBase<
     this._activateChildChip({
       chip: new layout.ContainerLeafChip({
         displayObject: this._scrollbarAnchor,
-        // properties: anchorProperties,
         addToParentLayoutItem: false,
       }),
       context: { container: this.displayObject },
@@ -235,18 +232,6 @@ export class Scrollbox extends layout.ContainerBase<
     );
 
     this.refreshContents();
-
-    // // TODO: check that resize event is working
-    // this._subscribe(this, "didResize", this.refreshContents);
-
-    // this._subscribe(this.chipContext.pixiAppChip, "resize", () => {
-    //   this._optionsResolver.setResovableCollection(this.resolvableOptions);
-    //   this._optionsResolver.resolve({
-    //     renderSize: this.chipContext.pixiAppChip.renderSize,
-    //   });
-    //   this._options = this._optionsResolver.getResolvedCollection();
-    //   this.refresh();
-    // });
   }
 
   protected _onTerminate(): void {
@@ -291,10 +276,8 @@ export class Scrollbox extends layout.ContainerBase<
     this._mask.height = this.boxHeight;
 
     if (this._options.direction == "horizontal") {
-      this._scrollbarBackground.y = this.boxHeight;
       this._scrollbarAnchor.y = this.boxHeight;
     } else {
-      this._scrollbarBackground.x = this.boxWidth;
       this._scrollbarAnchor.x = this.boxWidth;
     }
 
