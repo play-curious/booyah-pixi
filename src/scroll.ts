@@ -78,7 +78,7 @@ export class Scrollbox extends layout.ContainerBase<
   /**
    * Can be provided with an existing container
    */
-  constructor(partialOptions: Partial<ScrollboxOptions>) {
+  constructor(partialOptions: Partial<ScrollboxOptions> = {}) {
     const filledOptions = booyah.fillInOptions(
       partialOptions,
       new ScrollboxOptions(),
@@ -101,8 +101,6 @@ export class Scrollbox extends layout.ContainerBase<
   }
 
   protected _onActivate() {
-    super._onActivate();
-
     this._isDragging = false;
 
     this.displayObject.eventMode = "static";
@@ -232,6 +230,8 @@ export class Scrollbox extends layout.ContainerBase<
     );
 
     this.refreshContents();
+
+    super._onActivate();
   }
 
   protected _onTerminate(): void {
