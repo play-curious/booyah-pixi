@@ -1,5 +1,5 @@
-import * as PIXI from "pixi.js";
 import * as booyah from "booyah";
+import * as PIXI from "pixi.js";
 import * as _ from "underscore";
 
 import * as layout from "./layout";
@@ -90,9 +90,13 @@ export class Scrollbox extends layout.ContainerBase<
 
     const dynamicOptionsResolver = new resolvable.Resolver(filledOptions);
 
-    // // Set the ideal size based on the given box sizes
-    filledOptions.layoutOptions.idealWidth = () => this.boxWidth;
-    filledOptions.layoutOptions.idealHeight = () => this.boxHeight;
+    // Set the ideal size based on the given box sizes
+    if (typeof filledOptions.layoutOptions.idealWidth === "undefined") {
+      filledOptions.layoutOptions.idealWidth = () => this.boxWidth;
+    }
+    if (typeof filledOptions.layoutOptions.idealHeight === "undefined") {
+      filledOptions.layoutOptions.idealHeight = () => this.boxHeight;
+    }
 
     super(filledOptions);
 
